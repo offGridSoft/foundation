@@ -1,6 +1,7 @@
 package core
 
 import (
+	"crypto/sha256"
 	"errors"
 	"strings"
 	"testing"
@@ -34,6 +35,10 @@ func TestNanosecondsDurationJSONIsBareNanoseconds(t *testing.T) {
 
 func TestSHA256HexHostileTable(t *testing.T) {
 	t.Parallel()
+	constructed := NewSHA256Hex(sha256.Sum256([]byte("foundation")))
+	if err := constructed.Validate(); err != nil {
+		t.Fatalf("NewSHA256Hex produced invalid digest: %v", err)
+	}
 	for _, tc := range []struct {
 		name    string
 		value   string
@@ -58,6 +63,56 @@ func TestSHA256HexHostileTable(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+func TestHTTPContractsHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, outcome := range []HTTPOutcome{HTTPOutcomeSuccess, HTTPOutcomeRetryable, HTTPOutcomeTerminal} {
+		t.Run(outcome.String(), func(t *testing.T) {
+			t.Parallel()
+			if !outcome.IsValid() {
+				t.Fatalf("%s should be valid", outcome)
+			}
+			data, err := outcome.MarshalJSON()
+			if err != nil {
+				t.Fatal(err)
+			}
+			var roundTrip HTTPOutcome
+			if err := json.Unmarshal(data, &roundTrip); err != nil {
+				t.Fatal(err)
+			}
+			if roundTrip != outcome {
+				t.Fatalf("roundTrip = %s, want %s", roundTrip, outcome)
+			}
+		})
+	}
+	for _, raw := range []string{`"unknown"`, `0`, `""`} {
+		var outcome HTTPOutcome
+		if err := json.Unmarshal([]byte(raw), &outcome); !errors.Is(err, ErrFoundationContract) {
+			t.Fatalf("HTTPOutcome(%s) error = %v, want ErrFoundationContract", raw, err)
+		}
+	}
+}
+
+func TestBackoffPolicyValidateHostileTable(t *testing.T) {
+	t.Parallel()
+	valid := BackoffPolicy{
+		Base:        time.Second,
+		Max:         time.Minute,
+		MaxAttempts: 3,
+	}
+	if err := valid.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, policy := range []BackoffPolicy{
+		{Base: time.Second, Max: time.Minute},
+		{Base: 0, Max: time.Minute, MaxAttempts: 1},
+		{Base: time.Minute, Max: time.Second, MaxAttempts: 1},
+	} {
+		if err := policy.Validate(); !errors.Is(err, ErrFoundationContract) {
+			t.Fatalf("BackoffPolicy.Validate error = %v, want ErrFoundationContract", err)
+		}
 	}
 }
 

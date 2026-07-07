@@ -56,7 +56,7 @@ func (id *SigningKeyID) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*id = parsed
-	return nil
+	return id.Validate()
 }
 
 type SigningPublicKey struct {

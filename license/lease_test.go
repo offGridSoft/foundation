@@ -148,6 +148,17 @@ func TestLeaseBodySchemaMutationRejectsSignedLease(t *testing.T) {
 	}
 }
 
+func TestCheckInDueUsesBodyBoundary(t *testing.T) {
+	t.Parallel()
+	body := testSubscriptionLeaseBody()
+	if CheckInDue(body, body.CheckInAfter().Add(-time.Nanosecond)) {
+		t.Fatalf("CheckInDue before boundary = true")
+	}
+	if !CheckInDue(body, body.CheckInAfter()) {
+		t.Fatalf("CheckInDue at boundary = false")
+	}
+}
+
 func testSubscriptionLeaseBody() SubscriptionLeaseBody {
 	return SubscriptionLeaseBody{
 		PaidUntil:      testTime(1784894400000000000),

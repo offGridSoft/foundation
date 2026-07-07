@@ -54,11 +54,73 @@ func TestPlanAndRefusalHostileTable(t *testing.T) {
 
 func TestPlatformRejectsUnknownAndOrdinal(t *testing.T) {
 	t.Parallel()
+	if platform, err := CurrentPlatform(); err != nil {
+		t.Fatal(err)
+	} else if err := platform.Validate(); err != nil {
+		t.Fatal(err)
+	}
 	for _, raw := range []string{`"linux-riscv64"`, `"darwin"`, `1`, `""`} {
 		var platform Platform
 		if err := json.Unmarshal([]byte(raw), &platform); !errors.Is(err, core.ErrLicenseContract) {
 			t.Fatalf("Unmarshal(%s) error = %v, want ErrLicenseContract", raw, err)
 		}
+	}
+}
+
+func TestAccountTokenWireContract(t *testing.T) {
+	t.Parallel()
+	token, err := ParseAccountToken("acct_123456789")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if token.String() != "acct_123456789" {
+		t.Fatalf("AccountToken.String = %s", token)
+	}
+	data, err := token.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var roundTrip AccountToken
+	if err := roundTrip.UnmarshalJSON(data); err != nil {
+		t.Fatal(err)
+	}
+	if roundTrip != token {
+		t.Fatalf("AccountToken roundTrip = %s, want %s", roundTrip, token)
+	}
+}
+
+func TestAPICallKeyWireContract(t *testing.T) {
+	t.Parallel()
+	key, err := ParseAPICallKey("public-bot-filter")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := key.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var roundTrip APICallKey
+	if err := roundTrip.UnmarshalJSON(data); err != nil {
+		t.Fatal(err)
+	}
+	if roundTrip != key {
+		t.Fatalf("APICallKey roundTrip = %s, want %s", roundTrip, key)
+	}
+}
+
+func TestCheckInEndpointWireContract(t *testing.T) {
+	t.Parallel()
+	endpoint := BugCheckInEndpoint
+	data, err := endpoint.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var roundTrip CheckInEndpoint
+	if err := roundTrip.UnmarshalJSON(data); err != nil {
+		t.Fatal(err)
+	}
+	if roundTrip != endpoint {
+		t.Fatalf("CheckInEndpoint roundTrip = %s, want %s", roundTrip, endpoint)
 	}
 }
 

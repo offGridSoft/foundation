@@ -61,13 +61,69 @@ func (o GateOutcome) Writable() bool {
 	return o == GateAllow || o == GateWarn
 }
 
+type LeaseTrust uint8
+
+const (
+	leaseTrustInvalid LeaseTrust = iota
+	LeaseTrustUntrusted
+	LeaseTrustTrusted
+)
+
+var leaseTrustNames = [...]string{
+	LeaseTrustUntrusted: "untrusted",
+	LeaseTrustTrusted:   "trusted",
+}
+
+func (t LeaseTrust) String() string {
+	if t.IsValid() {
+		return leaseTrustNames[t]
+	}
+	return ""
+}
+
+func (t LeaseTrust) IsValid() bool {
+	return t > leaseTrustInvalid && int(t) < len(leaseTrustNames) && leaseTrustNames[t] != ""
+}
+
+func (t LeaseTrust) Validate() error {
+	if !t.IsValid() {
+		return fmt.Errorf(ErrFmtLeaseTrust, core.ErrLicenseContract)
+	}
+	return nil
+}
+
+func (t LeaseTrust) Trusted() bool {
+	return t == LeaseTrustTrusted
+}
+
+func (t LeaseTrust) MarshalJSON() ([]byte, error) {
+	if err := t.Validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(t.String())
+}
+
+func (t *LeaseTrust) UnmarshalJSON(data []byte) error {
+	var token string
+	if err := json.Unmarshal(data, &token); err != nil {
+		return fmt.Errorf(ErrFmtLeaseTrust, core.ErrLicenseContract)
+	}
+	for trust := LeaseTrustUntrusted; int(trust) < len(leaseTrustNames); trust++ {
+		if leaseTrustNames[trust] == token {
+			*t = trust
+			return nil
+		}
+	}
+	return fmt.Errorf(ErrFmtLeaseTrust, core.ErrLicenseContract)
+}
+
 type GateInput[B Body] struct {
 	Now            core.UnixNanoTime
 	ClockHighWater core.UnixNanoTime
 	Lease          B
 	WarnWindow     time.Duration
+	Trust          LeaseTrust
 	Armed          bool
-	LeaseTrusted   bool
 	TeachingShown  bool
 }
 
@@ -84,7 +140,10 @@ func Gate[B Body](in GateInput[B]) GateDecision {
 	if in.ClockHighWater.After(in.Now) {
 		return GateDecision{Reason: GateReasonClockRollback}
 	}
-	if !in.LeaseTrusted {
+	if !in.Trust.IsValid() {
+		return GateDecision{Reason: GateReasonInvalidTrust}
+	}
+	if !in.Trust.Trusted() {
 		return untrustedLeaseDecision(in.TeachingShown)
 	}
 	return trustedLeaseDecision(in.Now, in.Lease, in.WarnWindow)
@@ -129,6 +188,7 @@ const (
 	gateReasonInvalid GateReason = iota
 	GateReasonDisarmed
 	GateReasonClockRollback
+	GateReasonInvalidTrust
 	GateReasonTeaching
 	GateReasonMissingTrustedLease
 	GateReasonLeaseValid
@@ -140,6 +200,7 @@ const (
 var gateReasonNames = [...]string{
 	GateReasonDisarmed:            "disarmed",
 	GateReasonClockRollback:       "clock_rollback",
+	GateReasonInvalidTrust:        "invalid_trust_resolution",
 	GateReasonTeaching:            "teaching",
 	GateReasonMissingTrustedLease: "missing_trusted_lease",
 	GateReasonLeaseValid:          "lease_valid",
@@ -174,7 +235,7 @@ func (r GateReason) Outcome() GateOutcome {
 		return GateWarn
 	case GateReasonTeaching:
 		return GateTeach
-	case GateReasonClockRollback, GateReasonMissingTrustedLease, GateReasonLeaseExpired:
+	case GateReasonClockRollback, GateReasonInvalidTrust, GateReasonMissingTrustedLease, GateReasonLeaseExpired:
 		return GateRefuse
 	default:
 		return gateOutcomeInvalid

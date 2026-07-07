@@ -44,5 +44,5 @@ func (v *ProductVersion) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*v = parsed
-	return nil
+	return v.Validate()
 }

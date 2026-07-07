@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"strings"
 
 	json "github.com/goccy/go-json"
 )
@@ -16,7 +17,7 @@ const (
 	APICodeTokenConflict           = "conflict"
 	APICodeTokenUnauthorized       = "unauthorized"
 	APICodeTokenForbidden          = "forbidden"
-	APICodeTokenPayloadTooLarge    = "payload_too_large"
+	APICodeTokenPayloadTooLarge    = "payload_too_large" // #nosec G101 -- public API error token, not a credential.
 	APICodeTokenServiceUnavailable = "service_unavailable"
 	APICodeTokenInternal           = "internal"
 
@@ -153,6 +154,9 @@ func (b APIErrorBody) Validate() error {
 	if b.Message == "" {
 		return fmt.Errorf(ErrFmtAPIErrorBody, ErrFoundationContract)
 	}
+	if b.Tip != "" && strings.TrimSpace(b.Tip) == "" {
+		return fmt.Errorf(ErrFmtAPIErrorBody, ErrFoundationContract)
+	}
 	return nil
 }
 
@@ -162,22 +166,43 @@ type APIEnvelope[T any] struct {
 	RequestID APIRequestID  `json:"request_id"`
 }
 
-func (e APIEnvelope[T]) ValidateSuccess() error {
+func (e APIEnvelope[T]) Validate() error {
 	if err := e.RequestID.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtAPIEnvelope, err)
 	}
-	if e.Data == nil || e.Error != nil {
+	switch {
+	case e.Data != nil && e.Error == nil:
+		return nil
+	case e.Data == nil && e.Error != nil:
+		return validateAPIEnvelopeError(e.Error)
+	default:
+		return fmt.Errorf(ErrFmtAPIEnvelope, ErrFoundationContract)
+	}
+}
+
+func (e APIEnvelope[T]) ValidateSuccess() error {
+	if err := e.Validate(); err != nil {
+		return err
+	}
+	if e.Data == nil {
 		return fmt.Errorf(ErrFmtAPIEnvelope, ErrFoundationContract)
 	}
 	return nil
 }
 
 func (e APIEnvelope[T]) ValidateFailure() error {
-	if err := e.RequestID.Validate(); err != nil {
-		return fmt.Errorf(ErrFmtAPIEnvelope, err)
+	if err := e.Validate(); err != nil {
+		return err
 	}
-	if e.Data != nil || e.Error == nil {
+	if e.Error == nil {
 		return fmt.Errorf(ErrFmtAPIEnvelope, ErrFoundationContract)
 	}
-	return e.Error.Validate()
+	return nil
+}
+
+func validateAPIEnvelopeError(body *APIErrorBody) error {
+	if err := body.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtAPIEnvelope, err)
+	}
+	return nil
 }

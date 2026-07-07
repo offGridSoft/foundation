@@ -88,7 +88,7 @@ func TestClientDecodesOffgridEnvelope(t *testing.T) {
 		t.Fatal(err)
 	}
 	if response.Lease == nil {
-		t.Fatal("response lease is nil")
+		t.Fatalf("response.Lease = nil, want signed seat lease")
 	}
 	keyring := core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
 	if err := response.Lease.Verify(keyring); err != nil {

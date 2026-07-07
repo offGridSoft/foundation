@@ -55,6 +55,78 @@ func TestStorageScalarsRejectHostileInputs(t *testing.T) {
 	}
 }
 
+func TestUploadMethodWireContract(t *testing.T) {
+	t.Parallel()
+	method := UploadMethodSignedPUT
+	if !method.IsValid() || method.String() != "signed_put" {
+		t.Fatalf("UploadMethod = %q valid=%v", method.String(), method.IsValid())
+	}
+	if err := method.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := method.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var roundTrip UploadMethod
+	if err := roundTrip.UnmarshalJSON(data); err != nil {
+		t.Fatal(err)
+	}
+	if roundTrip != method {
+		t.Fatalf("UploadMethod roundTrip = %s, want %s", roundTrip, method)
+	}
+	for _, raw := range []string{`"copy"`, `0`, `""`} {
+		var parsed UploadMethod
+		if err := parsed.UnmarshalJSON([]byte(raw)); !errors.Is(err, core.ErrCustodyContract) {
+			t.Fatalf("UploadMethod(%s) error = %v, want ErrCustodyContract", raw, err)
+		}
+	}
+}
+
+func TestSessionOpenResponseAndUploadTargetContracts(t *testing.T) {
+	t.Parallel()
+	target := validUploadTarget(t)
+	if err := target.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	response := SessionOpenResponse{
+		Schema:    SchemaSessionOpenResponse,
+		Session:   mustSessionID(t),
+		Targets:   []UploadTarget{target},
+		Retention: mustRetention(),
+		ExpiresAt: core.UnixNanoTimeFromInt64(1782302400000000000),
+	}
+	if err := response.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	target.Headers[0].Name = "bad\nheader"
+	if err := target.Validate(); !errors.Is(err, core.ErrCustodyContract) {
+		t.Fatalf("UploadTarget invalid header error = %v, want ErrCustodyContract", err)
+	}
+}
+
+func TestSignedUploadURLWireContract(t *testing.T) {
+	t.Parallel()
+	signedURL := mustSignedUploadURL(t)
+	if signedURL.String() == "" {
+		t.Fatalf("SignedUploadURL.String empty")
+	}
+	if err := signedURL.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := signedURL.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var roundTrip SignedUploadURL
+	if err := roundTrip.UnmarshalJSON(data); err != nil {
+		t.Fatal(err)
+	}
+	if roundTrip != signedURL {
+		t.Fatalf("SignedUploadURL roundTrip = %s, want %s", roundTrip, signedURL)
+	}
+}
+
 func TestReceiptCanonicalWireForm(t *testing.T) {
 	t.Parallel()
 	body := validReceipt(t)
@@ -169,6 +241,39 @@ func mustUploadedObject(t *testing.T) UploadedObject {
 		SHA256:     mustSHA256(t, "c"),
 		BLAKE3:     mustBLAKE3(t, "d"),
 	}
+}
+
+func validUploadTarget(t *testing.T) UploadTarget {
+	t.Helper()
+	return UploadTarget{
+		Artifact: mustArtifactNameValue("bundle.tar"),
+		Object:   mustObjectPath(t),
+		URL:      mustSignedUploadURL(t),
+		Headers: []UploadHeader{{
+			Name:  core.HTTPHeaderContentType,
+			Value: core.HTTPContentTypeJSON,
+		}},
+		Provider: StorageProviderGCS,
+		Method:   UploadMethodSignedPUT,
+	}
+}
+
+func mustObjectPath(t *testing.T) ObjectPath {
+	t.Helper()
+	object, err := ParseObjectPath("customers/01HZZZZZZZZZZZZZZZZZZZZZZZ/witness/2026/07/07/01J00000000000000000000000/bundle.tar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return object
+}
+
+func mustSignedUploadURL(t *testing.T) SignedUploadURL {
+	t.Helper()
+	signedURL, err := ParseSignedUploadURL("https://storage.googleapis.com/offgrid-custody/bundle.tar?signature=abc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return signedURL
 }
 
 func mustGeneration(t *testing.T) Generation {

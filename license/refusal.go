@@ -10,10 +10,10 @@ import (
 const (
 	RefusalTokenNone             = "none"
 	RefusalTokenKeyRevoked       = "key_revoked"
-	RefusalTokenSeatLimit        = "seat_limit_exceeded"
+	RefusalTokenSeatLimit        = "seat_limit_exceeded" // #nosec G101 -- public refusal token, not a credential.
 	RefusalTokenPaymentRequired  = "payment_required"
-	RefusalTokenUnsupportedBuild = "unsupported_build"
-	RefusalTokenDeviceLimit      = "device_limit_exceeded"
+	RefusalTokenUnsupportedBuild = "unsupported_build"     // #nosec G101 -- public refusal token, not a credential.
+	RefusalTokenDeviceLimit      = "device_limit_exceeded" // #nosec G101 -- public refusal token, not a credential.
 	RefusalTokenUnknownKey       = "unknown_key"
 )
 

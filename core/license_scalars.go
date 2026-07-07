@@ -54,7 +54,7 @@ func (f *DeviceFingerprint) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*f = parsed
-	return nil
+	return f.Validate()
 }
 
 type LeaseID struct {
@@ -90,6 +90,7 @@ func (id LeaseID) MarshalJSON() ([]byte, error) {
 	return json.Marshal(id.value)
 }
 
+//validate:unmarshal_ignore reason="LeaseID is nullable on first check-in; owning structs validate requiredness."
 func (id *LeaseID) UnmarshalJSON(data []byte) error {
 	var value string
 	if err := json.Unmarshal(data, &value); err != nil {
@@ -104,5 +105,5 @@ func (id *LeaseID) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*id = parsed
-	return nil
+	return id.Validate()
 }
