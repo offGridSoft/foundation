@@ -1,0 +1,27 @@
+package core
+
+import "errors"
+
+var (
+	ErrFoundationContract = errors.New("foundation contract violation")
+	ErrLicenseContract    = errors.New("license contract violation")
+	ErrJSONContract       = errors.New("json contract violation")
+)
+
+const (
+	ErrFmtProductVersion      = "core.ProductVersion: %w"
+	ErrFmtEndpoint            = "core.Endpoint: %w"
+	ErrFmtSHA256              = "core.SHA256Hex: %w"
+	ErrFmtBLAKE3              = "core.BLAKE3Hex: %w"
+	ErrFmtEd25519PublicKey    = "core.Ed25519PublicKeyHex: %w"
+	ErrFmtHTTPOutcome         = "core.HTTPOutcome: %w"
+	ErrFmtBackoffAttempts     = "core.BackoffPolicy.MaxAttempts: %w"
+	ErrFmtBackoffWindow       = "core.BackoffPolicy.Window: %w"
+	ErrFmtUnixNanoTime        = "core.UnixNanoTime: %w"
+	ErrFmtNanosecondsDuration = "core.NanosecondsDuration: %w"
+	ErrFmtJSONTrailingValue   = "core.JSON.TrailingValue: %w"
+	ErrFmtJSONDuplicateField  = "core.JSON.DuplicateField: %w"
+	ErrFmtJSONUnexpectedField = "core.JSON.UnexpectedField: %w"
+	ErrFmtJSONUnexpectedDelim = "core.JSON.UnexpectedDelimiter: %w"
+	ErrFmtJSONDecode          = "core.JSON.Decode: %w"
+)
