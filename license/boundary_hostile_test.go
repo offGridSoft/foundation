@@ -11,6 +11,16 @@ import (
 
 func TestDeveloperKeyHostileTable(t *testing.T) {
 	t.Parallel()
+	valid, err := ParseDeveloperKey("OGS-DEV-123456789012")
+	if err != nil {
+		t.Fatalf("ParseDeveloperKey(valid) error = %v", err)
+	}
+	if got := valid.Preview(); got != "OGS-DEV-1234..." {
+		t.Fatalf("DeveloperKey.Preview() = %q, want masked prefix", got)
+	}
+	if got := (DeveloperKey{}).Preview(); got != "" {
+		t.Fatalf("zero DeveloperKey.Preview() = %q, want empty", got)
+	}
 	for _, tc := range []struct {
 		name  string
 		value string

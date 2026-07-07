@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	DeveloperKeyPrefix   = "OGS-DEV-"
-	DeveloperKeyMinRunes = 20
+	DeveloperKeyPrefix       = "OGS-DEV-"
+	DeveloperKeyMinRunes     = 20
+	DeveloperKeyPreviewRunes = 12
 )
 
 type DeveloperKey struct {
@@ -31,9 +32,21 @@ func (k DeveloperKey) String() string {
 	return k.value
 }
 
+func (k DeveloperKey) IsZero() bool {
+	return k.value == ""
+}
+
 func (k DeveloperKey) Validate() error {
 	_, err := ParseDeveloperKey(k.value)
 	return err
+}
+
+func (k DeveloperKey) Preview() string {
+	if err := k.Validate(); err != nil {
+		return ""
+	}
+	runes := []rune(k.value)
+	return string(runes[:DeveloperKeyPreviewRunes]) + "..."
 }
 
 func (k DeveloperKey) MarshalJSON() ([]byte, error) {
