@@ -7,6 +7,7 @@ const (
 	ErrFmtArtifactName   = "custody.ArtifactName: %w"
 	ErrFmtArtifact       = "custody.ArtifactDescriptor: %w"
 	ErrFmtObjectPath     = "custody.ObjectPath: %w"
+	ErrFmtGeneration     = "custody.Generation: %w"
 	ErrFmtSignedURL      = "custody.SignedUploadURL: %w"
 	ErrFmtUploadHeader   = "custody.UploadHeader: %w"
 	ErrFmtStorage        = "custody.Storage: %w"

@@ -1,10 +1,14 @@
 package license
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	json "github.com/goccy/go-json"
 	"github.com/offGridSoft/foundation/core"
 )
 
@@ -21,9 +25,9 @@ func testDeveloperKeyID(t *testing.T) DeveloperKeyID {
 	return id
 }
 
-func testDeviceFingerprint(t *testing.T) DeviceFingerprint {
+func testDeviceFingerprint(t *testing.T) core.DeviceFingerprint {
 	t.Helper()
-	fp, err := ParseDeviceFingerprint(DeviceFingerprintPrefixSHA256 + strings.Repeat("a", 64))
+	fp, err := core.ParseDeviceFingerprint(core.DeviceFingerprintPrefixSHA256 + strings.Repeat("a", 64))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,5 +95,67 @@ func TestSubscriptionLeaseRejectsDeviceFingerprintField(t *testing.T) {
 
 	if _, err := core.DecodeStrictJSON[SubscriptionLeaseBody](raw); err == nil {
 		t.Fatalf("SubscriptionLeaseBody accepted device_fingerprint")
+	}
+}
+
+func TestCrossProductLeaseBodiesRejectEachOther(t *testing.T) {
+	t.Parallel()
+	seatRaw, err := json.Marshal(testSeatLeaseBody(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := core.DecodeStrictJSON[SubscriptionLeaseBody](seatRaw); !errors.Is(err, core.ErrJSONContract) {
+		t.Fatalf("seat decoded as subscription error = %v, want ErrJSONContract", err)
+	}
+
+	subRaw, err := json.Marshal(testSubscriptionLeaseBody())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := core.DecodeStrictJSON[SeatLeaseBody](subRaw); !errors.Is(err, core.ErrJSONContract) {
+		t.Fatalf("subscription decoded as seat error = %v, want ErrJSONContract", err)
+	}
+}
+
+func TestLeaseBodySchemaMutationRejectsSignedLease(t *testing.T) {
+	t.Parallel()
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyID, err := core.ParseSigningKeyID("server-key-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicKey, err := core.NewEd25519PublicKeyHex(public)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := testSeatLeaseBody(t)
+	message, err := body.Canonical(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body.Schema = SchemaWitnessSubscription
+	signed := core.Signed[SeatLeaseBody]{
+		KeyID:     keyID,
+		Signature: ed25519.Sign(private, message),
+		Body:      body,
+	}
+	keyring := core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
+	if err := signed.Verify(keyring); !errors.Is(err, core.ErrLicenseContract) {
+		t.Fatalf("Verify schema mutation error = %v, want ErrLicenseContract", err)
+	}
+}
+
+func testSubscriptionLeaseBody() SubscriptionLeaseBody {
+	return SubscriptionLeaseBody{
+		PaidUntil:      testTime(1784894400000000000),
+		TokenExpiresAt: testTime(1784030400000000000),
+		CheckInAfterAt: testTime(1783252800000000000),
+		CheckInByAt:    testTime(1784030400000000000),
+		Schema:         SchemaWitnessSubscription,
+		Plan:           SubscriptionPlanSilver,
+		BillingPeriod:  BillingPeriodMonthly,
 	}
 }

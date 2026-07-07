@@ -73,17 +73,16 @@ type GateInput[B Body] struct {
 
 type GateDecision struct {
 	Remaining time.Duration
-	Outcome   GateOutcome
 	Reason    GateReason
 	State     LeaseState
 }
 
 func Gate[B Body](in GateInput[B]) GateDecision {
 	if !in.Armed {
-		return GateDecision{Outcome: GateAllow, Reason: GateReasonDisarmed}
+		return GateDecision{Reason: GateReasonDisarmed}
 	}
 	if in.ClockHighWater.After(in.Now) {
-		return GateDecision{Outcome: GateRefuse, Reason: GateReasonClockRollback}
+		return GateDecision{Reason: GateReasonClockRollback}
 	}
 	if !in.LeaseTrusted {
 		return untrustedLeaseDecision(in.TeachingShown)
@@ -93,9 +92,9 @@ func Gate[B Body](in GateInput[B]) GateDecision {
 
 func untrustedLeaseDecision(teachingShown bool) GateDecision {
 	if !teachingShown {
-		return GateDecision{Outcome: GateTeach, Reason: GateReasonTeaching}
+		return GateDecision{Reason: GateReasonTeaching}
 	}
-	return GateDecision{Outcome: GateRefuse, Reason: GateReasonMissingTrustedLease}
+	return GateDecision{Reason: GateReasonMissingTrustedLease}
 }
 
 func trustedLeaseDecision[B Body](
@@ -106,23 +105,21 @@ func trustedLeaseDecision[B Body](
 	state := Status(lease, now, warnWindow)
 	switch state {
 	case LeaseValid:
-		return GateDecision{Outcome: GateAllow, Reason: GateReasonLeaseValid, State: state}
+		return GateDecision{Reason: GateReasonLeaseValid, State: state}
 	case LeaseWarning:
 		return GateDecision{
 			Remaining: lease.ExpiresAt().Sub(now),
-			Outcome:   GateWarn,
 			Reason:    GateReasonLeaseWarning,
 			State:     state,
 		}
 	case LeaseGrace:
 		return GateDecision{
 			Remaining: lease.WriteGraceUntil().Sub(now),
-			Outcome:   GateWarn,
 			Reason:    GateReasonLeaseGrace,
 			State:     state,
 		}
 	default:
-		return GateDecision{Outcome: GateRefuse, Reason: GateReasonLeaseExpired, State: state}
+		return GateDecision{Reason: GateReasonLeaseExpired, State: state}
 	}
 }
 
@@ -167,6 +164,21 @@ func (r GateReason) Validate() error {
 		return fmt.Errorf(ErrFmtGateReason, core.ErrLicenseContract)
 	}
 	return nil
+}
+
+func (r GateReason) Outcome() GateOutcome {
+	switch r {
+	case GateReasonDisarmed, GateReasonLeaseValid:
+		return GateAllow
+	case GateReasonLeaseWarning, GateReasonLeaseGrace:
+		return GateWarn
+	case GateReasonTeaching:
+		return GateTeach
+	case GateReasonClockRollback, GateReasonMissingTrustedLease, GateReasonLeaseExpired:
+		return GateRefuse
+	default:
+		return gateOutcomeInvalid
+	}
 }
 
 func (r GateReason) MarshalJSON() ([]byte, error) {

@@ -7,7 +7,6 @@ import (
 
 	json "github.com/goccy/go-json"
 	"github.com/offGridSoft/foundation/core"
-	"github.com/offGridSoft/foundation/license"
 )
 
 const (
@@ -25,7 +24,7 @@ type CustomerID struct {
 
 func ParseCustomerID(value string) (CustomerID, error) {
 	if !validULIDText(value) {
-		return CustomerID{}, fmt.Errorf(ErrFmtULID, core.ErrFoundationContract)
+		return CustomerID{}, fmt.Errorf(ErrFmtULID, core.ErrCustodyContract)
 	}
 	return CustomerID{value: value}, nil
 }
@@ -49,7 +48,7 @@ func (id CustomerID) MarshalJSON() ([]byte, error) {
 func (id *CustomerID) UnmarshalJSON(data []byte) error {
 	var value string
 	if err := json.Unmarshal(data, &value); err != nil {
-		return fmt.Errorf(ErrFmtULID, core.ErrFoundationContract)
+		return fmt.Errorf(ErrFmtULID, core.ErrCustodyContract)
 	}
 	parsed, err := ParseCustomerID(value)
 	if err != nil {
@@ -65,7 +64,7 @@ type SessionID struct {
 
 func ParseSessionID(value string) (SessionID, error) {
 	if !validULIDText(value) {
-		return SessionID{}, fmt.Errorf(ErrFmtULID, core.ErrFoundationContract)
+		return SessionID{}, fmt.Errorf(ErrFmtULID, core.ErrCustodyContract)
 	}
 	return SessionID{value: value}, nil
 }
@@ -89,7 +88,7 @@ func (id SessionID) MarshalJSON() ([]byte, error) {
 func (id *SessionID) UnmarshalJSON(data []byte) error {
 	var value string
 	if err := json.Unmarshal(data, &value); err != nil {
-		return fmt.Errorf(ErrFmtULID, core.ErrFoundationContract)
+		return fmt.Errorf(ErrFmtULID, core.ErrCustodyContract)
 	}
 	parsed, err := ParseSessionID(value)
 	if err != nil {
@@ -121,7 +120,7 @@ type ArtifactName struct {
 
 func ParseArtifactName(value string) (ArtifactName, error) {
 	if strings.TrimSpace(value) == "" || strings.ContainsAny(value, `/\`) {
-		return ArtifactName{}, fmt.Errorf(ErrFmtArtifactName, core.ErrFoundationContract)
+		return ArtifactName{}, fmt.Errorf(ErrFmtArtifactName, core.ErrCustodyContract)
 	}
 	return ArtifactName{value: value}, nil
 }
@@ -145,7 +144,7 @@ func (n ArtifactName) MarshalJSON() ([]byte, error) {
 func (n *ArtifactName) UnmarshalJSON(data []byte) error {
 	var value string
 	if err := json.Unmarshal(data, &value); err != nil {
-		return fmt.Errorf(ErrFmtArtifactName, core.ErrFoundationContract)
+		return fmt.Errorf(ErrFmtArtifactName, core.ErrCustodyContract)
 	}
 	parsed, err := ParseArtifactName(value)
 	if err != nil {
@@ -161,10 +160,10 @@ type ObjectPath struct {
 
 func ParseObjectPath(value string) (ObjectPath, error) {
 	if strings.TrimSpace(value) == "" || strings.HasPrefix(value, "/") {
-		return ObjectPath{}, fmt.Errorf(ErrFmtObjectPath, core.ErrFoundationContract)
+		return ObjectPath{}, fmt.Errorf(ErrFmtObjectPath, core.ErrCustodyContract)
 	}
 	if strings.Contains(value, "../") || strings.Contains(value, "//") {
-		return ObjectPath{}, fmt.Errorf(ErrFmtObjectPath, core.ErrFoundationContract)
+		return ObjectPath{}, fmt.Errorf(ErrFmtObjectPath, core.ErrCustodyContract)
 	}
 	return ObjectPath{value: value}, nil
 }
@@ -188,7 +187,7 @@ func (p ObjectPath) MarshalJSON() ([]byte, error) {
 func (p *ObjectPath) UnmarshalJSON(data []byte) error {
 	var value string
 	if err := json.Unmarshal(data, &value); err != nil {
-		return fmt.Errorf(ErrFmtObjectPath, core.ErrFoundationContract)
+		return fmt.Errorf(ErrFmtObjectPath, core.ErrCustodyContract)
 	}
 	parsed, err := ParseObjectPath(value)
 	if err != nil {
@@ -208,7 +207,7 @@ func ParseSignedUploadURL(value string) (SignedUploadURL, error) {
 		return SignedUploadURL{}, fmt.Errorf(ErrFmtSignedURL, err)
 	}
 	if parsed.Scheme != "https" || parsed.Host == "" {
-		return SignedUploadURL{}, fmt.Errorf(ErrFmtSignedURL, core.ErrFoundationContract)
+		return SignedUploadURL{}, fmt.Errorf(ErrFmtSignedURL, core.ErrCustodyContract)
 	}
 	return SignedUploadURL{value: value}, nil
 }
@@ -232,7 +231,7 @@ func (u SignedUploadURL) MarshalJSON() ([]byte, error) {
 func (u *SignedUploadURL) UnmarshalJSON(data []byte) error {
 	var value string
 	if err := json.Unmarshal(data, &value); err != nil {
-		return fmt.Errorf(ErrFmtSignedURL, core.ErrFoundationContract)
+		return fmt.Errorf(ErrFmtSignedURL, core.ErrCustodyContract)
 	}
 	parsed, err := ParseSignedUploadURL(value)
 	if err != nil {
@@ -266,8 +265,8 @@ type BuildCommit struct {
 }
 
 func ParseBuildCommit(value string) (BuildCommit, error) {
-	if !validLowerHex(value) {
-		return BuildCommit{}, fmt.Errorf(ErrFmtRelease, core.ErrFoundationContract)
+	if !validBuildCommitHex(value) {
+		return BuildCommit{}, fmt.Errorf(ErrFmtRelease, core.ErrCustodyContract)
 	}
 	return BuildCommit{value: value}, nil
 }
@@ -291,7 +290,7 @@ func (c BuildCommit) MarshalJSON() ([]byte, error) {
 func (c *BuildCommit) UnmarshalJSON(data []byte) error {
 	var value string
 	if err := json.Unmarshal(data, &value); err != nil {
-		return fmt.Errorf(ErrFmtRelease, core.ErrFoundationContract)
+		return fmt.Errorf(ErrFmtRelease, core.ErrCustodyContract)
 	}
 	parsed, err := ParseBuildCommit(value)
 	if err != nil {
@@ -301,31 +300,61 @@ func (c *BuildCommit) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func validLowerHex(value string) bool {
+func validBuildCommitHex(value string) bool {
 	if len(value) != 40 && len(value) != 64 {
 		return false
 	}
-	for _, r := range value {
-		switch {
-		case r >= '0' && r <= '9':
-		case r >= 'a' && r <= 'f':
-		default:
-			return false
-		}
-	}
-	return true
+	return core.IsLowerHex(value)
 }
 
 type OpenLeaseRef struct {
-	LeaseID           license.LeaseID           `json:"lease_id"`
-	DeviceFingerprint license.DeviceFingerprint `json:"device_fingerprint"`
+	LeaseID           core.LeaseID           `json:"lease_id"`
+	DeviceFingerprint core.DeviceFingerprint `json:"device_fingerprint"`
 }
 
 func (r OpenLeaseRef) Validate() error {
-	if !r.LeaseID.IsZero() {
-		if err := r.LeaseID.Validate(); err != nil {
-			return err
-		}
+	if err := r.LeaseID.Validate(); err != nil {
+		return err
 	}
 	return r.DeviceFingerprint.Validate()
+}
+
+type Generation struct {
+	value string
+}
+
+func ParseGeneration(value string) (Generation, error) {
+	if strings.TrimSpace(value) == "" {
+		return Generation{}, fmt.Errorf(ErrFmtGeneration, core.ErrCustodyContract)
+	}
+	return Generation{value: value}, nil
+}
+
+func (g Generation) String() string {
+	return g.value
+}
+
+func (g Generation) Validate() error {
+	_, err := ParseGeneration(g.value)
+	return err
+}
+
+func (g Generation) MarshalJSON() ([]byte, error) {
+	if err := g.Validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(g.value)
+}
+
+func (g *Generation) UnmarshalJSON(data []byte) error {
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return fmt.Errorf(ErrFmtGeneration, core.ErrCustodyContract)
+	}
+	parsed, err := ParseGeneration(value)
+	if err != nil {
+		return err
+	}
+	*g = parsed
+	return nil
 }

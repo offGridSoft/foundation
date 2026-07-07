@@ -6,8 +6,6 @@ const (
 	ErrFmtBillingPeriod      = "license.BillingPeriod: %w"
 	ErrFmtDeveloperKey       = "license.DeveloperKey: %w"
 	ErrFmtDeveloperKeyID     = "license.DeveloperKeyID: %w"
-	ErrFmtDeviceFingerprint  = "license.DeviceFingerprint: %w"
-	ErrFmtLeaseID            = "license.LeaseID: %w"
 	ErrFmtAPICallKey         = "license.APICallKey: %w"
 	ErrFmtLeaseWindow        = "license.Lease.Window: %w"
 	ErrFmtLeaseCheckInWindow = "license.Lease.CheckInWindow: %w"

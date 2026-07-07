@@ -118,7 +118,7 @@ func TestGateHostileTable(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			got := Gate(tc.input)
-			if got.Outcome != tc.wantOutcome || got.Reason != tc.wantReason || got.State != tc.wantState {
+			if got.Reason.Outcome() != tc.wantOutcome || got.Reason != tc.wantReason || got.State != tc.wantState {
 				t.Fatalf("Gate = %+v, want outcome=%s reason=%s state=%s", got, tc.wantOutcome, tc.wantReason, tc.wantState)
 			}
 			if got.Remaining != tc.wantRemaining {
@@ -150,8 +150,8 @@ func mustDeveloperKeyID() DeveloperKeyID {
 	return id
 }
 
-func mustDeviceFingerprint() DeviceFingerprint {
-	id, err := ParseDeviceFingerprint(DeviceFingerprintPrefixSHA256 + strings.Repeat("a", 64))
+func mustDeviceFingerprint() core.DeviceFingerprint {
+	id, err := core.ParseDeviceFingerprint(core.DeviceFingerprintPrefixSHA256 + strings.Repeat("a", 64))
 	if err != nil {
 		panic(err)
 	}

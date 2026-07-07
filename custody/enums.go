@@ -33,7 +33,7 @@ func (p StorageProvider) IsValid() bool {
 
 func (p StorageProvider) Validate() error {
 	if !p.IsValid() {
-		return fmt.Errorf(ErrFmtStorage, core.ErrFoundationContract)
+		return fmt.Errorf(ErrFmtStorage, core.ErrCustodyContract)
 	}
 	return nil
 }
@@ -48,7 +48,7 @@ func (p StorageProvider) MarshalJSON() ([]byte, error) {
 func (p *StorageProvider) UnmarshalJSON(data []byte) error {
 	var token string
 	if err := json.Unmarshal(data, &token); err != nil {
-		return fmt.Errorf(ErrFmtStorage, core.ErrFoundationContract)
+		return fmt.Errorf(ErrFmtStorage, core.ErrCustodyContract)
 	}
 	for provider := StorageProviderGCS; int(provider) < len(storageProviderNames); provider++ {
 		if storageProviderNames[provider] == token {
@@ -56,7 +56,7 @@ func (p *StorageProvider) UnmarshalJSON(data []byte) error {
 			return nil
 		}
 	}
-	return fmt.Errorf(ErrFmtStorage, core.ErrFoundationContract)
+	return fmt.Errorf(ErrFmtStorage, core.ErrCustodyContract)
 }
 
 type UploadMethod uint8
@@ -85,7 +85,7 @@ func (m UploadMethod) IsValid() bool {
 
 func (m UploadMethod) Validate() error {
 	if !m.IsValid() {
-		return fmt.Errorf(ErrFmtStorage, core.ErrFoundationContract)
+		return fmt.Errorf(ErrFmtStorage, core.ErrCustodyContract)
 	}
 	return nil
 }
@@ -100,7 +100,7 @@ func (m UploadMethod) MarshalJSON() ([]byte, error) {
 func (m *UploadMethod) UnmarshalJSON(data []byte) error {
 	var token string
 	if err := json.Unmarshal(data, &token); err != nil {
-		return fmt.Errorf(ErrFmtStorage, core.ErrFoundationContract)
+		return fmt.Errorf(ErrFmtStorage, core.ErrCustodyContract)
 	}
 	for method := UploadMethodSignedPUT; int(method) < len(uploadMethodNames); method++ {
 		if uploadMethodNames[method] == token {
@@ -108,7 +108,7 @@ func (m *UploadMethod) UnmarshalJSON(data []byte) error {
 			return nil
 		}
 	}
-	return fmt.Errorf(ErrFmtStorage, core.ErrFoundationContract)
+	return fmt.Errorf(ErrFmtStorage, core.ErrCustodyContract)
 }
 
 type RetentionClass uint8
@@ -137,7 +137,7 @@ func (c RetentionClass) IsValid() bool {
 
 func (c RetentionClass) Validate() error {
 	if !c.IsValid() {
-		return fmt.Errorf(ErrFmtRetention, core.ErrFoundationContract)
+		return fmt.Errorf(ErrFmtRetention, core.ErrCustodyContract)
 	}
 	return nil
 }
@@ -152,7 +152,7 @@ func (c RetentionClass) MarshalJSON() ([]byte, error) {
 func (c *RetentionClass) UnmarshalJSON(data []byte) error {
 	var token string
 	if err := json.Unmarshal(data, &token); err != nil {
-		return fmt.Errorf(ErrFmtRetention, core.ErrFoundationContract)
+		return fmt.Errorf(ErrFmtRetention, core.ErrCustodyContract)
 	}
 	for class := RetentionClassConditional; int(class) < len(retentionClassNames); class++ {
 		if retentionClassNames[class] == token {
@@ -160,5 +160,5 @@ func (c *RetentionClass) UnmarshalJSON(data []byte) error {
 			return nil
 		}
 	}
-	return fmt.Errorf(ErrFmtRetention, core.ErrFoundationContract)
+	return fmt.Errorf(ErrFmtRetention, core.ErrCustodyContract)
 }

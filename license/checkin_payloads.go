@@ -1,6 +1,7 @@
 package license
 
 import (
+	"errors"
 	"fmt"
 	"runtime"
 	"strings"
@@ -129,15 +130,15 @@ func (u BugUsage) Validate() error {
 }
 
 type BugCheckIn struct {
-	Schema            string              `json:"schema"`
-	DeveloperKey      DeveloperKey        `json:"developer_key"`
-	DeviceFingerprint DeviceFingerprint   `json:"device_fingerprint"`
-	DeviceLabel       string              `json:"device_label"`
-	BinaryVersion     core.ProductVersion `json:"binary_version"`
-	BinarySHA256      core.SHA256Hex      `json:"binary_sha256"`
-	LeaseID           LeaseID             `json:"lease_id"`
-	Usage             BugUsage            `json:"usage"`
-	Platform          Platform            `json:"platform"`
+	Schema            string                 `json:"schema"`
+	DeveloperKey      DeveloperKey           `json:"developer_key"`
+	DeviceFingerprint core.DeviceFingerprint `json:"device_fingerprint"`
+	DeviceLabel       string                 `json:"device_label"`
+	BinaryVersion     core.ProductVersion    `json:"binary_version"`
+	BinarySHA256      core.SHA256Hex         `json:"binary_sha256"`
+	LeaseID           core.LeaseID           `json:"lease_id"`
+	Usage             BugUsage               `json:"usage"`
+	Platform          Platform               `json:"platform"`
 }
 
 func (c BugCheckIn) Validate() error {
@@ -148,13 +149,13 @@ func (c BugCheckIn) Validate() error {
 		return err
 	}
 	if err := c.DeviceFingerprint.Validate(); err != nil {
-		return err
+		return checkInPayloadError(err)
 	}
 	if err := c.BinaryVersion.Validate(); err != nil {
-		return err
+		return checkInPayloadError(err)
 	}
 	if err := c.BinarySHA256.Validate(); err != nil {
-		return err
+		return checkInPayloadError(err)
 	}
 	if err := c.Platform.Validate(); err != nil {
 		return err
@@ -163,13 +164,13 @@ func (c BugCheckIn) Validate() error {
 }
 
 type WitnessCheckIn struct {
-	Schema            string              `json:"schema"`
-	DeviceFingerprint DeviceFingerprint   `json:"device_fingerprint"`
-	BinaryVersion     core.ProductVersion `json:"binary_version"`
-	BinarySHA256      core.SHA256Hex      `json:"binary_sha256"`
-	LeaseID           LeaseID             `json:"lease_id"`
-	AccountToken      AccountToken        `json:"account_token"`
-	Platform          Platform            `json:"platform"`
+	Schema            string                 `json:"schema"`
+	DeviceFingerprint core.DeviceFingerprint `json:"device_fingerprint"`
+	BinaryVersion     core.ProductVersion    `json:"binary_version"`
+	BinarySHA256      core.SHA256Hex         `json:"binary_sha256"`
+	LeaseID           core.LeaseID           `json:"lease_id"`
+	AccountToken      AccountToken           `json:"account_token"`
+	Platform          Platform               `json:"platform"`
 }
 
 func (c WitnessCheckIn) Validate() error {
@@ -177,18 +178,22 @@ func (c WitnessCheckIn) Validate() error {
 		return fmt.Errorf(ErrFmtSchema, core.ErrLicenseContract)
 	}
 	if err := c.DeviceFingerprint.Validate(); err != nil {
-		return err
+		return checkInPayloadError(err)
 	}
 	if err := c.BinaryVersion.Validate(); err != nil {
-		return err
+		return checkInPayloadError(err)
 	}
 	if err := c.BinarySHA256.Validate(); err != nil {
-		return err
+		return checkInPayloadError(err)
 	}
 	if err := c.Platform.Validate(); err != nil {
 		return err
 	}
 	return c.AccountToken.Validate()
+}
+
+func checkInPayloadError(err error) error {
+	return fmt.Errorf(ErrFmtCheckInPayload, errors.Join(core.ErrLicenseContract, err))
 }
 
 type AccountToken struct {

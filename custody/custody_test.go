@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/offGridSoft/foundation/core"
-	"github.com/offGridSoft/foundation/license"
 )
 
 func TestSessionOpenRequestHostileTable(t *testing.T) {
@@ -27,8 +26,8 @@ func TestSessionOpenRequestHostileTable(t *testing.T) {
 			t.Parallel()
 			req := validOpenRequest(t)
 			tc.mutate(&req)
-			if err := req.Validate(); !errors.Is(err, core.ErrFoundationContract) {
-				t.Fatalf("Validate error = %v, want ErrFoundationContract", err)
+			if err := req.Validate(); !errors.Is(err, core.ErrCustodyContract) {
+				t.Fatalf("Validate error = %v, want ErrCustodyContract", err)
 			}
 		})
 	}
@@ -49,8 +48,8 @@ func TestStorageScalarsRejectHostileInputs(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if err := tc.run(); !errors.Is(err, core.ErrFoundationContract) {
-				t.Fatalf("%s error = %v, want ErrFoundationContract", tc.name, err)
+			if err := tc.run(); !errors.Is(err, core.ErrCustodyContract) {
+				t.Fatalf("%s error = %v, want ErrCustodyContract", tc.name, err)
 			}
 		})
 	}
@@ -82,8 +81,8 @@ func TestFinalizeRejectsEmptyObjects(t *testing.T) {
 		Schema:  SchemaFinalizeRequest,
 		Session: mustSessionID(t),
 	}
-	if err := req.Validate(); !errors.Is(err, core.ErrFoundationContract) {
-		t.Fatalf("FinalizeRequest error = %v, want ErrFoundationContract", err)
+	if err := req.Validate(); !errors.Is(err, core.ErrCustodyContract) {
+		t.Fatalf("FinalizeRequest error = %v, want ErrCustodyContract", err)
 	}
 }
 
@@ -111,18 +110,18 @@ func validReceipt(t *testing.T) ReceiptBody {
 		Retention: mustRetention(),
 		Provider:  StorageProviderGCS,
 		LedgerSeq: 7,
-		ChainHash: mustBLAKE3(t, "e"),
+		ChainHash: mustSHA256(t, "e"),
 		IssuedAt:  core.UnixNanoTimeFromInt64(1782302400000000000),
 	}
 }
 
 func mustOpenLeaseRef(t *testing.T) OpenLeaseRef {
 	t.Helper()
-	leaseID, err := license.ParseLeaseID("lease-1")
+	leaseID, err := core.ParseLeaseID("lease-1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	fp, err := license.ParseDeviceFingerprint(license.DeviceFingerprintPrefixSHA256 + strings.Repeat("a", 64))
+	fp, err := core.ParseDeviceFingerprint(core.DeviceFingerprintPrefixSHA256 + strings.Repeat("a", 64))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,11 +164,20 @@ func mustUploadedObject(t *testing.T) UploadedObject {
 	return UploadedObject{
 		Artifact:   mustArtifactNameValue("bundle.tar"),
 		Object:     object,
-		Generation: "1710000000000000",
+		Generation: mustGeneration(t),
 		Size:       core.NewByteCount(12),
 		SHA256:     mustSHA256(t, "c"),
 		BLAKE3:     mustBLAKE3(t, "d"),
 	}
+}
+
+func mustGeneration(t *testing.T) Generation {
+	t.Helper()
+	generation, err := ParseGeneration("1710000000000000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return generation
 }
 
 func mustRetention() RetentionPolicy {

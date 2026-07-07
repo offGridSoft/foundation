@@ -193,13 +193,20 @@ func validateFixedHex(value string, byteLen int) error {
 	if len(value) != byteLen*2 {
 		return fmt.Errorf("%w: hex length", ErrFoundationContract)
 	}
+	if !IsLowerHex(value) {
+		return fmt.Errorf("%w: hex alphabet", ErrFoundationContract)
+	}
+	return nil
+}
+
+func IsLowerHex(value string) bool {
 	for _, r := range value {
 		switch {
 		case r >= '0' && r <= '9':
 		case r >= 'a' && r <= 'f':
 		default:
-			return fmt.Errorf("%w: hex alphabet", ErrFoundationContract)
+			return false
 		}
 	}
-	return nil
+	return true
 }

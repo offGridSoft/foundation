@@ -5,6 +5,7 @@ import "errors"
 var (
 	ErrFoundationContract = errors.New("foundation contract violation")
 	ErrLicenseContract    = errors.New("license contract violation")
+	ErrCustodyContract    = errors.New("custody contract violation")
 	ErrJSONContract       = errors.New("json contract violation")
 )
 

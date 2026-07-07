@@ -42,7 +42,7 @@ type SessionOpenRequest struct {
 
 func (r SessionOpenRequest) Validate() error {
 	if r.Schema != SchemaSessionOpenRequest {
-		return fmt.Errorf(ErrFmtOpenRequest, core.ErrFoundationContract)
+		return fmt.Errorf(ErrFmtOpenRequest, core.ErrCustodyContract)
 	}
 	if err := r.Customer.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtOpenRequest, err)
@@ -63,7 +63,7 @@ func validateArtifactSet(
 	errFmt string,
 ) error {
 	if count == 0 || int(count) != len(artifacts) {
-		return fmt.Errorf(errFmt, core.ErrFoundationContract)
+		return fmt.Errorf(errFmt, core.ErrCustodyContract)
 	}
 	var sum uint64
 	for _, artifact := range artifacts {
@@ -76,7 +76,7 @@ func validateArtifactSet(
 		return fmt.Errorf(errFmt, err)
 	}
 	if sum != total.Uint64() {
-		return fmt.Errorf(errFmt, core.ErrFoundationContract)
+		return fmt.Errorf(errFmt, core.ErrCustodyContract)
 	}
 	return nil
 }
@@ -91,13 +91,13 @@ type SessionOpenResponse struct {
 
 func (r SessionOpenResponse) Validate() error {
 	if r.Schema != SchemaSessionOpenResponse {
-		return fmt.Errorf(ErrFmtOpenResponse, core.ErrFoundationContract)
+		return fmt.Errorf(ErrFmtOpenResponse, core.ErrCustodyContract)
 	}
 	if err := r.Session.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtOpenResponse, err)
 	}
 	if len(r.Targets) == 0 {
-		return fmt.Errorf(ErrFmtOpenResponse, core.ErrFoundationContract)
+		return fmt.Errorf(ErrFmtOpenResponse, core.ErrCustodyContract)
 	}
 	for _, target := range r.Targets {
 		if err := target.Validate(); err != nil {
@@ -108,7 +108,7 @@ func (r SessionOpenResponse) Validate() error {
 		return fmt.Errorf(ErrFmtOpenResponse, err)
 	}
 	if r.ExpiresAt.IsZero() {
-		return fmt.Errorf(ErrFmtOpenResponse, core.ErrFoundationContract)
+		return fmt.Errorf(ErrFmtOpenResponse, core.ErrCustodyContract)
 	}
 	return nil
 }
@@ -153,10 +153,10 @@ type UploadHeader struct {
 
 func (h UploadHeader) Validate() error {
 	if strings.TrimSpace(h.Name) == "" {
-		return fmt.Errorf(ErrFmtUploadHeader, core.ErrFoundationContract)
+		return fmt.Errorf(ErrFmtUploadHeader, core.ErrCustodyContract)
 	}
 	if strings.ContainsAny(h.Name, "\r\n") || strings.ContainsAny(h.Value, "\r\n") {
-		return fmt.Errorf(ErrFmtUploadHeader, core.ErrFoundationContract)
+		return fmt.Errorf(ErrFmtUploadHeader, core.ErrCustodyContract)
 	}
 	return nil
 }
@@ -171,7 +171,7 @@ func (p RetentionPolicy) Validate() error {
 		return err
 	}
 	if p.RetainUntil.IsZero() {
-		return fmt.Errorf(ErrFmtRetention, core.ErrFoundationContract)
+		return fmt.Errorf(ErrFmtRetention, core.ErrCustodyContract)
 	}
 	return nil
 }
@@ -179,7 +179,7 @@ func (p RetentionPolicy) Validate() error {
 type UploadedObject struct {
 	Artifact   ArtifactName   `json:"artifact"`
 	Object     ObjectPath     `json:"object"`
-	Generation string         `json:"generation"`
+	Generation Generation     `json:"generation"`
 	SHA256     core.SHA256Hex `json:"sha256"`
 	BLAKE3     core.BLAKE3Hex `json:"blake3"`
 	Size       core.ByteCount `json:"size_bytes"`
@@ -192,8 +192,8 @@ func (o UploadedObject) Validate() error {
 	if err := o.Object.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtUploadedObject, err)
 	}
-	if strings.TrimSpace(o.Generation) == "" {
-		return fmt.Errorf(ErrFmtUploadedObject, core.ErrFoundationContract)
+	if err := o.Generation.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtUploadedObject, err)
 	}
 	if err := o.Size.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtUploadedObject, err)
@@ -215,13 +215,13 @@ type FinalizeRequest struct {
 
 func (r FinalizeRequest) Validate() error {
 	if r.Schema != SchemaFinalizeRequest {
-		return fmt.Errorf(ErrFmtFinalize, core.ErrFoundationContract)
+		return fmt.Errorf(ErrFmtFinalize, core.ErrCustodyContract)
 	}
 	if err := r.Session.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtFinalize, err)
 	}
 	if len(r.Objects) == 0 {
-		return fmt.Errorf(ErrFmtFinalize, core.ErrFoundationContract)
+		return fmt.Errorf(ErrFmtFinalize, core.ErrCustodyContract)
 	}
 	for _, object := range r.Objects {
 		if err := object.Validate(); err != nil {
@@ -238,15 +238,15 @@ type ReceiptBody struct {
 	Schema    string            `json:"schema"`
 	Customer  CustomerID        `json:"customer_id"`
 	Session   SessionID         `json:"session_id"`
-	ChainHash core.BLAKE3Hex    `json:"chain_hash"`
+	ChainHash core.SHA256Hex    `json:"chain_hash"`
 	Objects   []UploadedObject  `json:"objects"`
-	LedgerSeq uint64            `json:"ledger_seq"`
+	LedgerSeq int64             `json:"ledger_seq"`
 	Provider  StorageProvider   `json:"provider"`
 }
 
 func (b ReceiptBody) Validate() error {
 	if b.Schema != SchemaReceipt {
-		return fmt.Errorf(ErrFmtReceipt, core.ErrFoundationContract)
+		return fmt.Errorf(ErrFmtReceipt, core.ErrCustodyContract)
 	}
 	return validateReceiptFields(b)
 }
@@ -279,7 +279,7 @@ func validateReceiptIdentity(b ReceiptBody) error {
 
 func validateReceiptObjects(objects []UploadedObject) error {
 	if len(objects) == 0 {
-		return fmt.Errorf(ErrFmtReceipt, core.ErrFoundationContract)
+		return fmt.Errorf(ErrFmtReceipt, core.ErrCustodyContract)
 	}
 	for _, object := range objects {
 		if err := object.Validate(); err != nil {
@@ -301,7 +301,7 @@ func validateReceiptStorage(b ReceiptBody) error {
 
 func validateReceiptLedger(b ReceiptBody) error {
 	if b.LedgerSeq == 0 || b.IssuedAt.IsZero() {
-		return fmt.Errorf(ErrFmtReceipt, core.ErrFoundationContract)
+		return fmt.Errorf(ErrFmtReceipt, core.ErrCustodyContract)
 	}
 	if err := b.ChainHash.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtReceipt, err)

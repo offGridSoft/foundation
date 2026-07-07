@@ -24,7 +24,7 @@ type SeatLeaseBody struct {
 	CheckInByAt        core.UnixNanoTime        `json:"check_in_by"`
 	Schema             string                   `json:"schema"`
 	DeveloperKeyID     DeveloperKeyID           `json:"developer_key_id"`
-	DeviceFingerprint  DeviceFingerprint        `json:"device_fingerprint"`
+	DeviceFingerprint  core.DeviceFingerprint   `json:"device_fingerprint"`
 	WriteGraceDuration core.NanosecondsDuration `json:"write_grace_ns"`
 	Plan               SeatPlan                 `json:"plan"`
 }

@@ -1,0 +1,191 @@
+package license
+
+import (
+	"errors"
+	"strings"
+	"testing"
+
+	json "github.com/goccy/go-json"
+	"github.com/offGridSoft/foundation/core"
+)
+
+func TestDeveloperKeyHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		value string
+	}{
+		{name: "blank", value: ""},
+		{name: "wrong prefix", value: "BAD-DEV-123456789012"},
+		{name: "too short", value: "OGS-DEV-short"},
+		{name: "contains space", value: "OGS-DEV-123456 789012"},
+		{name: "contains newline", value: "OGS-DEV-123456789012\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := ParseDeveloperKey(tc.value)
+			if !errors.Is(err, core.ErrLicenseContract) {
+				t.Fatalf("ParseDeveloperKey error = %v, want ErrLicenseContract", err)
+			}
+		})
+	}
+}
+
+func TestPlanAndRefusalHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		run  func() error
+		name string
+	}{
+		{name: "seat plan rejects foreign token", run: func() error { _, err := ParseSeatPlan("trial"); return err }},
+		{name: "subscription plan rejects seat token", run: func() error { _, err := ParseSubscriptionPlan("enterprise"); return err }},
+		{name: "billing period rejects annual", run: func() error { _, err := ParseBillingPeriod("annual"); return err }},
+		{name: "refusal rejects empty", run: func() error { _, err := ParseRefusal(""); return err }},
+		{name: "refusal rejects unknown", run: func() error { _, err := ParseRefusal("denied"); return err }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if err := tc.run(); !errors.Is(err, core.ErrLicenseContract) {
+				t.Fatalf("%s error = %v, want ErrLicenseContract", tc.name, err)
+			}
+		})
+	}
+}
+
+func TestPlatformRejectsUnknownAndOrdinal(t *testing.T) {
+	t.Parallel()
+	for _, raw := range []string{`"linux-riscv64"`, `"darwin"`, `1`, `""`} {
+		var platform Platform
+		if err := json.Unmarshal([]byte(raw), &platform); !errors.Is(err, core.ErrLicenseContract) {
+			t.Fatalf("Unmarshal(%s) error = %v, want ErrLicenseContract", raw, err)
+		}
+	}
+}
+
+func TestCoreDeviceFingerprintHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		value string
+	}{
+		{name: "missing prefix", value: strings.Repeat("a", 64)},
+		{name: "uppercase digest", value: core.DeviceFingerprintPrefixSHA256 + strings.Repeat("A", 64)},
+		{name: "short digest", value: core.DeviceFingerprintPrefixSHA256 + strings.Repeat("a", 63)},
+		{name: "non hex digest", value: core.DeviceFingerprintPrefixSHA256 + strings.Repeat("g", 64)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := core.ParseDeviceFingerprint(tc.value)
+			if !errors.Is(err, core.ErrFoundationContract) {
+				t.Fatalf("ParseDeviceFingerprint error = %v, want ErrFoundationContract", err)
+			}
+		})
+	}
+}
+
+func TestBugUsageHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		mutate func(*BugUsage)
+		name   string
+	}{
+		{name: "bad schema", mutate: func(u *BugUsage) { u.Schema = "bug-usage-v0" }},
+		{name: "zero start", mutate: func(u *BugUsage) { u.WindowStart = core.UnixNanoTime{} }},
+		{name: "end before start", mutate: func(u *BugUsage) { u.WindowEnd = u.WindowStart.Add(-1) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			usage := goodBugUsage()
+			tc.mutate(&usage)
+			if err := usage.Validate(); !errors.Is(err, core.ErrLicenseContract) {
+				t.Fatalf("BugUsage.Validate error = %v, want ErrLicenseContract", err)
+			}
+		})
+	}
+}
+
+func TestBugCheckInHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		mutate func(*BugCheckIn)
+		name   string
+	}{
+		{name: "bad schema", mutate: func(c *BugCheckIn) { c.Schema = SchemaWitnessCheckIn }},
+		{name: "bad developer key", mutate: func(c *BugCheckIn) { c.DeveloperKey = DeveloperKey{} }},
+		{name: "bad device fingerprint", mutate: func(c *BugCheckIn) { c.DeviceFingerprint = core.DeviceFingerprint{} }},
+		{name: "bad version", mutate: func(c *BugCheckIn) { c.BinaryVersion = core.ProductVersion{} }},
+		{name: "bad sha", mutate: func(c *BugCheckIn) { c.BinarySHA256 = core.SHA256Hex{} }},
+		{name: "bad platform", mutate: func(c *BugCheckIn) { c.Platform = platformInvalid }},
+		{name: "bad usage", mutate: func(c *BugCheckIn) { c.Usage.Schema = "bad" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			payload := goodBugCheckIn(t)
+			tc.mutate(&payload)
+			if err := payload.Validate(); !errors.Is(err, core.ErrLicenseContract) {
+				t.Fatalf("BugCheckIn.Validate error = %v, want ErrLicenseContract", err)
+			}
+		})
+	}
+}
+
+func TestWitnessCheckInHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		mutate func(*WitnessCheckIn)
+		name   string
+	}{
+		{name: "bad schema", mutate: func(c *WitnessCheckIn) { c.Schema = SchemaBugCheckIn }},
+		{name: "bad device fingerprint", mutate: func(c *WitnessCheckIn) { c.DeviceFingerprint = core.DeviceFingerprint{} }},
+		{name: "bad version", mutate: func(c *WitnessCheckIn) { c.BinaryVersion = core.ProductVersion{} }},
+		{name: "bad sha", mutate: func(c *WitnessCheckIn) { c.BinarySHA256 = core.SHA256Hex{} }},
+		{name: "bad platform", mutate: func(c *WitnessCheckIn) { c.Platform = platformInvalid }},
+		{name: "blank account token", mutate: func(c *WitnessCheckIn) { c.AccountToken = AccountToken{} }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			payload := goodWitnessCheckIn(t)
+			tc.mutate(&payload)
+			if err := payload.Validate(); !errors.Is(err, core.ErrLicenseContract) {
+				t.Fatalf("WitnessCheckIn.Validate error = %v, want ErrLicenseContract", err)
+			}
+		})
+	}
+}
+
+func goodBugCheckIn(t *testing.T) BugCheckIn {
+	t.Helper()
+	return BugCheckIn{
+		Schema:            SchemaBugCheckIn,
+		DeveloperKey:      testDeveloperKey(t),
+		DeviceFingerprint: testDeviceFingerprint(t),
+		BinaryVersion:     testProductVersion(t),
+		BinarySHA256:      testSHA256(t),
+		Platform:          PlatformDarwinARM64,
+		Usage:             goodBugUsage(),
+	}
+}
+
+func goodWitnessCheckIn(t *testing.T) WitnessCheckIn {
+	t.Helper()
+	token, err := ParseAccountToken("acct_123456789")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return WitnessCheckIn{
+		Schema:            SchemaWitnessCheckIn,
+		DeviceFingerprint: testDeviceFingerprint(t),
+		BinaryVersion:     testProductVersion(t),
+		BinarySHA256:      testSHA256(t),
+		Platform:          PlatformDarwinARM64,
+		AccountToken:      token,
+	}
+}
+
+func goodBugUsage() BugUsage {
+	return BugUsage{
+		Schema:      SchemaBugUsage,
+		WindowStart: testTime(1782302400000000000),
+		WindowEnd:   testTime(1782302401000000000),
+	}
+}

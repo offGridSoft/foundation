@@ -15,11 +15,10 @@ const (
 	SchemaWitnessCheckIn      = "witness-subscription-check-in-v1"
 	SchemaWitnessSubscription = "witness-subscription-lease-v1"
 
-	OffgridAPIBaseURL             = "https://api.offgridsoftware.ca"
-	OffgridBugCheckInPath         = "/v1/bug/check_in"
-	OffgridWitnessCheckInPath     = "/v1/witness/check_in"
-	OffgridAPICallKeyHeader       = "X-Offgrid-Api-Key"
-	DeviceFingerprintPrefixSHA256 = "sha256:"
+	OffgridAPIBaseURL         = "https://api.offgridsoftware.ca"
+	OffgridBugCheckInPath     = "/v1/bug/check_in"
+	OffgridWitnessCheckInPath = "/v1/witness/check_in"
+	OffgridAPICallKeyHeader   = "X-Offgrid-Api-Key"
 )
 
 type CheckInEndpoint struct {
