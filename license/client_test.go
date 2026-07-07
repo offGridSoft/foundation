@@ -41,6 +41,15 @@ func testDeveloperKey(t *testing.T) DeveloperKey {
 	return key
 }
 
+func testDeviceLabel(t *testing.T) DeviceLabel {
+	t.Helper()
+	label, err := ParseDeviceLabel("developer laptop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return label
+}
+
 func testAPICallKey(t *testing.T) APICallKey {
 	t.Helper()
 	key, err := ParseAPICallKey("public-call-key")
@@ -121,6 +130,28 @@ func TestClientRejectsRawResponseWithoutEnvelope(t *testing.T) {
 	}
 }
 
+func TestRetryAfterClampedToBackoffMax(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, time.July, 7, 12, 0, 0, 0, time.UTC)
+	for _, header := range []string{
+		"8640000",
+		"9223372036854775807",
+		now.Add(24 * time.Hour).Format(http.TimeFormat),
+	} {
+		if got := parseRetryAfter(header, now); got != CheckInBackoff.Max {
+			t.Fatalf("parseRetryAfter(%q) = %s, want %s", header, got, CheckInBackoff.Max)
+		}
+	}
+	for _, header := range []string{
+		"-1",
+		now.Add(-time.Hour).Format(http.TimeFormat),
+	} {
+		if got := parseRetryAfter(header, now); got != 0 {
+			t.Fatalf("parseRetryAfter(%q) = %s, want 0", header, got)
+		}
+	}
+}
+
 func signedSeatLeaseParts(t *testing.T) (core.SigningKeyID, core.Ed25519PublicKeyHex, []byte) {
 	t.Helper()
 	public, private, err := ed25519.GenerateKey(rand.Reader)
@@ -163,6 +194,7 @@ func testBugCheckIn(t *testing.T) BugCheckIn {
 		Schema:            SchemaBugCheckIn,
 		DeveloperKey:      testDeveloperKey(t),
 		DeviceFingerprint: testDeviceFingerprint(t),
+		DeviceLabel:       testDeviceLabel(t),
 		BinaryVersion:     testProductVersion(t),
 		BinarySHA256:      testSHA256(t),
 		Platform:          PlatformDarwinARM64,

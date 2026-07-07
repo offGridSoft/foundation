@@ -3,6 +3,7 @@ package license
 import (
 	"fmt"
 	"strings"
+	"unicode"
 
 	json "github.com/goccy/go-json"
 	"github.com/offGridSoft/foundation/core"
@@ -12,6 +13,7 @@ const (
 	DeveloperKeyPrefix       = "OGS-DEV-"
 	DeveloperKeyMinRunes     = 20
 	DeveloperKeyPreviewRunes = 12
+	DeviceLabelMaxRunes      = 80
 )
 
 type DeveloperKey struct {
@@ -107,6 +109,56 @@ func (id *DeveloperKeyID) UnmarshalJSON(data []byte) error {
 	}
 	*id = parsed
 	return nil
+}
+
+type DeviceLabel struct {
+	value string
+}
+
+func ParseDeviceLabel(value string) (DeviceLabel, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" || len([]rune(trimmed)) > DeviceLabelMaxRunes || containsControlRune(trimmed) {
+		return DeviceLabel{}, fmt.Errorf(ErrFmtDeviceLabel, core.ErrLicenseContract)
+	}
+	return DeviceLabel{value: trimmed}, nil
+}
+
+func (l DeviceLabel) String() string {
+	return l.value
+}
+
+func (l DeviceLabel) Validate() error {
+	_, err := ParseDeviceLabel(l.value)
+	return err
+}
+
+func (l DeviceLabel) MarshalJSON() ([]byte, error) {
+	if err := l.Validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(l.value)
+}
+
+func (l *DeviceLabel) UnmarshalJSON(data []byte) error {
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return fmt.Errorf(ErrFmtDeviceLabel, core.ErrLicenseContract)
+	}
+	parsed, err := ParseDeviceLabel(value)
+	if err != nil {
+		return err
+	}
+	*l = parsed
+	return nil
+}
+
+func containsControlRune(value string) bool {
+	for _, r := range value {
+		if unicode.IsControl(r) {
+			return true
+		}
+	}
+	return false
 }
 
 type APICallKey struct {

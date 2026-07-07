@@ -2,6 +2,7 @@ package custody
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/offGridSoft/foundation/core"
@@ -66,11 +67,21 @@ func validateArtifactSet(
 		return fmt.Errorf(errFmt, core.ErrCustodyContract)
 	}
 	var sum uint64
+	names := make(map[string]struct{}, len(artifacts))
 	for _, artifact := range artifacts {
 		if err := artifact.Validate(); err != nil {
 			return fmt.Errorf(errFmt, err)
 		}
-		sum += artifact.Size.Uint64()
+		name := artifact.Name.String()
+		if _, exists := names[name]; exists {
+			return fmt.Errorf(errFmt, core.ErrCustodyContract)
+		}
+		names[name] = struct{}{}
+		size := artifact.Size.Uint64()
+		if size > math.MaxUint64-sum {
+			return fmt.Errorf(errFmt, core.ErrCustodyContract)
+		}
+		sum += size
 	}
 	if err := total.Validate(); err != nil {
 		return fmt.Errorf(errFmt, err)
@@ -300,7 +311,7 @@ func validateReceiptStorage(b ReceiptBody) error {
 }
 
 func validateReceiptLedger(b ReceiptBody) error {
-	if b.LedgerSeq == 0 || b.IssuedAt.IsZero() {
+	if b.LedgerSeq < 1 || b.IssuedAt.IsZero() {
 		return fmt.Errorf(ErrFmtReceipt, core.ErrCustodyContract)
 	}
 	if err := b.ChainHash.Validate(); err != nil {

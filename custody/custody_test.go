@@ -2,6 +2,7 @@ package custody
 
 import (
 	"errors"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -12,20 +13,33 @@ import (
 func TestSessionOpenRequestHostileTable(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		mutate func(*SessionOpenRequest)
+		mutate func(*testing.T, *SessionOpenRequest)
 		name   string
 	}{
-		{name: "schema mismatch", mutate: func(r *SessionOpenRequest) { r.Schema = SchemaFinalizeRequest }},
-		{name: "artifact count mismatch", mutate: func(r *SessionOpenRequest) { r.ArtifactCount++ }},
-		{name: "total byte mismatch", mutate: func(r *SessionOpenRequest) { r.TotalBytes = core.NewByteCount(99) }},
-		{name: "artifact with path separator", mutate: func(r *SessionOpenRequest) {
+		{name: "schema mismatch", mutate: func(_ *testing.T, r *SessionOpenRequest) { r.Schema = SchemaFinalizeRequest }},
+		{name: "artifact count mismatch", mutate: func(_ *testing.T, r *SessionOpenRequest) { r.ArtifactCount++ }},
+		{name: "total byte mismatch", mutate: func(_ *testing.T, r *SessionOpenRequest) { r.TotalBytes = core.NewByteCount(99) }},
+		{name: "duplicate artifact name", mutate: func(_ *testing.T, r *SessionOpenRequest) {
+			r.Artifacts = append(r.Artifacts, r.Artifacts[0])
+			r.ArtifactCount = 2
+			r.TotalBytes = core.NewByteCount(24)
+		}},
+		{name: "artifact size overflow", mutate: func(t *testing.T, r *SessionOpenRequest) {
+			r.Artifacts = []ArtifactDescriptor{
+				artifactWithNameAndSize(t, "bundle.tar", math.MaxUint64),
+				artifactWithNameAndSize(t, "bundle-2.tar", 2),
+			}
+			r.ArtifactCount = 2
+			r.TotalBytes = core.NewByteCount(1)
+		}},
+		{name: "artifact with path separator", mutate: func(_ *testing.T, r *SessionOpenRequest) {
 			r.Artifacts[0].Name = ArtifactName{}
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			req := validOpenRequest(t)
-			tc.mutate(&req)
+			tc.mutate(t, &req)
 			if err := req.Validate(); !errors.Is(err, core.ErrCustodyContract) {
 				t.Fatalf("Validate error = %v, want ErrCustodyContract", err)
 			}
@@ -41,7 +55,12 @@ func TestStorageScalarsRejectHostileInputs(t *testing.T) {
 	}{
 		{name: "object path absolute", run: func() error { _, err := ParseObjectPath("/customer/x"); return err }},
 		{name: "object path traversal", run: func() error { _, err := ParseObjectPath("customer/../x"); return err }},
+		{name: "object path lone traversal", run: func() error { _, err := ParseObjectPath(".."); return err }},
+		{name: "object path trailing traversal", run: func() error { _, err := ParseObjectPath("customer/.."); return err }},
+		{name: "object path current directory", run: func() error { _, err := ParseObjectPath("customer/./x"); return err }},
 		{name: "object path empty segment", run: func() error { _, err := ParseObjectPath("customer//x"); return err }},
+		{name: "object path trailing slash", run: func() error { _, err := ParseObjectPath("customer/x/"); return err }},
+		{name: "object path backslash traversal", run: func() error { _, err := ParseObjectPath(`customer\..\x`); return err }},
 		{name: "signed url http", run: func() error { _, err := ParseSignedUploadURL("http://storage.example/upload"); return err }},
 		{name: "customer id lowercase", run: func() error { _, err := ParseCustomerID(strings.Repeat("a", ULIDTextLen)); return err }},
 		{name: "customer id illegal rune", run: func() error { _, err := ParseCustomerID("01HZZZZZZZZZZZZZZZZZZZZZZI"); return err }},
@@ -147,6 +166,15 @@ func TestReceiptCanonicalWireForm(t *testing.T) {
 	}
 }
 
+func TestReceiptRejectsNegativeLedgerSeq(t *testing.T) {
+	t.Parallel()
+	body := validReceipt(t)
+	body.LedgerSeq = -7
+	if err := body.Validate(); !errors.Is(err, core.ErrCustodyContract) {
+		t.Fatalf("ReceiptBody.Validate error = %v, want ErrCustodyContract", err)
+	}
+}
+
 func TestFinalizeRejectsEmptyObjects(t *testing.T) {
 	t.Parallel()
 	req := FinalizeRequest{
@@ -219,9 +247,14 @@ func mustRelease(t *testing.T) ReleaseIdentity {
 
 func mustArtifact(t *testing.T) ArtifactDescriptor {
 	t.Helper()
+	return artifactWithNameAndSize(t, "bundle.tar", 12)
+}
+
+func artifactWithNameAndSize(t *testing.T, name string, size uint64) ArtifactDescriptor {
+	t.Helper()
 	return ArtifactDescriptor{
-		Name:   mustArtifactNameValue("bundle.tar"),
-		Size:   core.NewByteCount(12),
+		Name:   mustArtifactNameValue(name),
+		Size:   core.NewByteCount(size),
 		SHA256: mustSHA256(t, "c"),
 		BLAKE3: mustBLAKE3(t, "d"),
 	}

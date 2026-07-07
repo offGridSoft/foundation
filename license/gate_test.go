@@ -126,6 +126,19 @@ func TestGateHostileTable(t *testing.T) {
 			wantReason:  GateReasonLeaseExpired,
 			wantState:   LeaseExpired,
 		},
+		{
+			name: "trusted negative warning window refuses expired lease",
+			input: GateInput[SeatLeaseBody]{
+				Now:        lease.WriteGraceUntil().Add(time.Hour),
+				Lease:      lease,
+				WarnWindow: -30 * 24 * time.Hour,
+				Armed:      true,
+				Trust:      LeaseTrustTrusted,
+			},
+			wantOutcome: GateRefuse,
+			wantReason:  GateReasonLeaseExpired,
+			wantState:   LeaseExpired,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

@@ -87,6 +87,8 @@ func (c Client[P, B]) Do(ctx context.Context, in P) (CheckInResponse[B], error) 
 	if err := in.Validate(); err != nil {
 		return CheckInResponse[B]{}, err
 	}
+	ctx, cancel := context.WithTimeout(ctx, CheckInBudget)
+	defer cancel()
 	body, err := json.Marshal(in)
 	if err != nil {
 		return CheckInResponse[B]{}, fmt.Errorf(ErrFmtCheckInTransport, err)
@@ -232,12 +234,32 @@ func parseRetryAfter(header string, now time.Time) time.Duration {
 	if header == "" {
 		return 0
 	}
-	if seconds, err := strconv.Atoi(header); err == nil && seconds >= 0 {
-		return time.Duration(seconds) * time.Second
+	if seconds, err := strconv.ParseInt(header, 10, 64); err == nil {
+		return retryAfterSeconds(seconds)
+	}
+	if _, err := strconv.ParseUint(header, 10, 64); err == nil {
+		return CheckInBackoff.Max
 	}
 	when, err := http.ParseTime(header)
 	if err != nil || !when.After(now) {
 		return 0
 	}
-	return when.Sub(now)
+	return clampRetryAfter(when.Sub(now))
+}
+
+func clampRetryAfter(d time.Duration) time.Duration {
+	if d > CheckInBackoff.Max {
+		return CheckInBackoff.Max
+	}
+	return d
+}
+
+func retryAfterSeconds(seconds int64) time.Duration {
+	if seconds <= 0 {
+		return 0
+	}
+	if seconds > int64(CheckInBackoff.Max/time.Second) {
+		return CheckInBackoff.Max
+	}
+	return time.Duration(seconds) * time.Second
 }

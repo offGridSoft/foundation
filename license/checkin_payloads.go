@@ -133,7 +133,7 @@ type BugCheckIn struct {
 	Schema            string                 `json:"schema"`
 	DeveloperKey      DeveloperKey           `json:"developer_key"`
 	DeviceFingerprint core.DeviceFingerprint `json:"device_fingerprint"`
-	DeviceLabel       string                 `json:"device_label"`
+	DeviceLabel       DeviceLabel            `json:"device_label"`
 	BinaryVersion     core.ProductVersion    `json:"binary_version"`
 	BinarySHA256      core.SHA256Hex         `json:"binary_sha256"`
 	LeaseID           core.LeaseID           `json:"lease_id"`
@@ -150,6 +150,9 @@ func (c BugCheckIn) Validate() error {
 	}
 	if err := c.DeviceFingerprint.Validate(); err != nil {
 		return checkInPayloadError(err)
+	}
+	if err := c.DeviceLabel.Validate(); err != nil {
+		return err
 	}
 	if err := c.BinaryVersion.Validate(); err != nil {
 		return checkInPayloadError(err)

@@ -159,11 +159,13 @@ type ObjectPath struct {
 }
 
 func ParseObjectPath(value string) (ObjectPath, error) {
-	if strings.TrimSpace(value) == "" || strings.HasPrefix(value, "/") {
+	if strings.TrimSpace(value) == "" || strings.HasPrefix(value, "/") || strings.Contains(value, `\`) {
 		return ObjectPath{}, fmt.Errorf(ErrFmtObjectPath, core.ErrCustodyContract)
 	}
-	if strings.Contains(value, "../") || strings.Contains(value, "//") {
-		return ObjectPath{}, fmt.Errorf(ErrFmtObjectPath, core.ErrCustodyContract)
+	for segment := range strings.SplitSeq(value, "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			return ObjectPath{}, fmt.Errorf(ErrFmtObjectPath, core.ErrCustodyContract)
+		}
 	}
 	return ObjectPath{value: value}, nil
 }

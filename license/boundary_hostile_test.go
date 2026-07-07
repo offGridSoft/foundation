@@ -118,6 +118,33 @@ func TestAPICallKeyWireContract(t *testing.T) {
 	}
 }
 
+func TestDeviceLabelWireContract(t *testing.T) {
+	t.Parallel()
+	label, err := ParseDeviceLabel(" developer laptop ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if label.String() != "developer laptop" {
+		t.Fatalf("DeviceLabel.String = %q, want trimmed label", label.String())
+	}
+	data, err := label.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var roundTrip DeviceLabel
+	if err := roundTrip.UnmarshalJSON(data); err != nil {
+		t.Fatal(err)
+	}
+	if roundTrip != label {
+		t.Fatalf("DeviceLabel roundTrip = %s, want %s", roundTrip, label)
+	}
+	for _, raw := range []string{"", " \t ", "dev\nlaptop", strings.Repeat("a", DeviceLabelMaxRunes+1)} {
+		if _, err := ParseDeviceLabel(raw); !errors.Is(err, core.ErrLicenseContract) {
+			t.Fatalf("ParseDeviceLabel error = %v, want ErrLicenseContract", err)
+		}
+	}
+}
+
 func TestCheckInEndpointWireContract(t *testing.T) {
 	t.Parallel()
 	endpoint := BugCheckInEndpoint
@@ -185,6 +212,7 @@ func TestBugCheckInHostileTable(t *testing.T) {
 		{name: "bad schema", mutate: func(c *BugCheckIn) { c.Schema = SchemaWitnessCheckIn }},
 		{name: "bad developer key", mutate: func(c *BugCheckIn) { c.DeveloperKey = DeveloperKey{} }},
 		{name: "bad device fingerprint", mutate: func(c *BugCheckIn) { c.DeviceFingerprint = core.DeviceFingerprint{} }},
+		{name: "bad device label", mutate: func(c *BugCheckIn) { c.DeviceLabel = DeviceLabel{} }},
 		{name: "bad version", mutate: func(c *BugCheckIn) { c.BinaryVersion = core.ProductVersion{} }},
 		{name: "bad sha", mutate: func(c *BugCheckIn) { c.BinarySHA256 = core.SHA256Hex{} }},
 		{name: "bad platform", mutate: func(c *BugCheckIn) { c.Platform = platformInvalid }},
@@ -231,6 +259,7 @@ func goodBugCheckIn(t *testing.T) BugCheckIn {
 		Schema:            SchemaBugCheckIn,
 		DeveloperKey:      testDeveloperKey(t),
 		DeviceFingerprint: testDeviceFingerprint(t),
+		DeviceLabel:       testDeviceLabel(t),
 		BinaryVersion:     testProductVersion(t),
 		BinarySHA256:      testSHA256(t),
 		Platform:          PlatformDarwinARM64,

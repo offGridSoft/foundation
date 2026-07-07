@@ -196,6 +196,9 @@ func (s LeaseState) Writable() bool {
 }
 
 func Status[B Body](body B, now core.UnixNanoTime, warnWindow time.Duration) LeaseState {
+	if warnWindow < 0 {
+		warnWindow = 0
+	}
 	switch {
 	case now.Before(body.ExpiresAt().Add(-warnWindow)):
 		return LeaseValid
