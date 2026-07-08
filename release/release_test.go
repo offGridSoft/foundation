@@ -1,6 +1,7 @@
 package release
 
 import (
+	"crypto/ed25519"
 	"encoding/json"
 	"errors"
 	"math"
@@ -427,6 +428,56 @@ func validArchiveLayout(t *testing.T) ArchiveLayout {
 		MaxEntryBytes: core.NewByteCount(ArchiveMaxEntryBytes),
 		MaxTotalBytes: core.NewByteCount(ArchiveMaxTotalBytes),
 	}
+}
+
+func TestReleaseSignerHostileTable(t *testing.T) {
+	t.Parallel()
+
+	validSignature, err := core.NewEd25519SignatureHex(make([]byte, ed25519.SignatureSize))
+	if err != nil {
+		t.Fatalf("NewEd25519SignatureHex(valid) error = %v", err)
+	}
+	signerErr := errors.New("release signer failed")
+	var _ ReleaseSigner = testReleaseSigner{}
+
+	for _, tc := range []struct {
+		signer  ReleaseSigner
+		wantErr error
+		name    string
+		payload []byte
+	}{
+		{name: "valid signer returns typed signature", signer: testReleaseSigner{signature: validSignature}, payload: []byte("manifest"), wantErr: nil},
+		{name: "nil signer rejected", payload: []byte("manifest"), wantErr: core.ErrReleaseContract},
+		{name: "empty payload rejected", signer: testReleaseSigner{signature: validSignature}, payload: nil, wantErr: core.ErrReleaseContract},
+		{name: "signer error preserved", signer: testReleaseSigner{err: signerErr}, payload: []byte("manifest"), wantErr: signerErr},
+		{name: "zero signature rejected", signer: testReleaseSigner{}, payload: []byte("manifest"), wantErr: core.ErrFoundationContract},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := SignReleasePayload(tc.signer, tc.payload)
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("SignReleasePayload() error = %v, want %v", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("SignReleasePayload() error = %v", err)
+			}
+			if got != validSignature {
+				t.Fatalf("SignReleasePayload() = %q, want %q", got.String(), validSignature.String())
+			}
+		})
+	}
+}
+
+type testReleaseSigner struct {
+	err       error
+	signature core.Ed25519SignatureHex
+}
+
+func (s testReleaseSigner) SignRelease([]byte) (core.Ed25519SignatureHex, error) {
+	return s.signature, s.err
 }
 
 func validManifest(t *testing.T) Manifest {

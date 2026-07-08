@@ -1,6 +1,7 @@
 package core
 
 import (
+	"crypto/ed25519"
 	"crypto/sha256"
 	"errors"
 	"math"
@@ -201,6 +202,68 @@ func TestSHA256HexHostileTable(t *testing.T) {
 			}
 			if err != nil {
 				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestEd25519SignatureHexHostileTable(t *testing.T) {
+	t.Parallel()
+
+	constructed, err := NewEd25519SignatureHex(make([]byte, ed25519.SignatureSize))
+	if err != nil {
+		t.Fatalf("NewEd25519SignatureHex(valid) error = %v", err)
+	}
+	if err := constructed.Validate(); err != nil {
+		t.Fatalf("NewEd25519SignatureHex(valid).Validate() error = %v", err)
+	}
+	raw, err := constructed.Bytes()
+	if err != nil {
+		t.Fatalf("Ed25519SignatureHex.Bytes() error = %v", err)
+	}
+	if len(raw) != ed25519.SignatureSize {
+		t.Fatalf("Ed25519SignatureHex.Bytes() len = %d, want %d", len(raw), ed25519.SignatureSize)
+	}
+	if _, err := NewEd25519SignatureHex(make([]byte, ed25519.SignatureSize-1)); !errors.Is(err, ErrFoundationContract) {
+		t.Fatalf("NewEd25519SignatureHex(short) error = %v, want ErrFoundationContract", err)
+	}
+
+	for _, tc := range []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{name: "lowercase fixed hex accepted", value: strings.Repeat("a", ed25519.SignatureSize*2)},
+		{name: "uppercase rejected", value: strings.Repeat("A", ed25519.SignatureSize*2), wantErr: true},
+		{name: "short rejected", value: strings.Repeat("a", ed25519.SignatureSize*2-1), wantErr: true},
+		{name: "long rejected", value: strings.Repeat("a", ed25519.SignatureSize*2+1), wantErr: true},
+		{name: "non hex rejected", value: strings.Repeat("g", ed25519.SignatureSize*2), wantErr: true},
+		{name: "empty rejected", value: "", wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := ParseEd25519SignatureHex(tc.value)
+			if tc.wantErr {
+				if !errors.Is(err, ErrFoundationContract) {
+					t.Fatalf("ParseEd25519SignatureHex(%q) error = %v, want ErrFoundationContract", tc.value, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ParseEd25519SignatureHex(%q) error = %v", tc.value, err)
+			}
+		})
+	}
+
+	for _, rawJSON := range []string{`1`, `true`, `null`, `{}`, `[]`, `"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"`} {
+		t.Run("json "+rawJSON, func(t *testing.T) {
+			t.Parallel()
+			value := constructed
+			if err := value.UnmarshalJSON([]byte(rawJSON)); !errors.Is(err, ErrFoundationContract) {
+				t.Fatalf("Ed25519SignatureHex.UnmarshalJSON(%s) error = %v, want ErrFoundationContract", rawJSON, err)
+			}
+			if value != constructed {
+				t.Fatalf("failed unmarshal mutated signature = %q, want %q", value.String(), constructed.String())
 			}
 		})
 	}

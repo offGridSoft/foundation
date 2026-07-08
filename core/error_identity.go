@@ -30,6 +30,7 @@ const (
 	ErrFmtSHA256              = "core.SHA256Hex: %w"
 	ErrFmtBLAKE3              = "core.BLAKE3Hex: %w"
 	ErrFmtEd25519PublicKey    = "core.Ed25519PublicKeyHex: %w"
+	ErrFmtEd25519Signature    = "core.Ed25519SignatureHex: %w"
 	ErrFmtHTTPOutcome         = "core.HTTPOutcome: %w"
 	ErrFmtHTTPHeaderName      = "core.HTTPHeaderName: %w"
 	ErrFmtHTTPHeaderValue     = "core.HTTPHeaderValue: %w"

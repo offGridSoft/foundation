@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
@@ -182,6 +183,75 @@ func (h *Ed25519PublicKeyHex) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 	parsed, err := ParseEd25519PublicKeyHex(value)
+	if err != nil {
+		return err
+	}
+	*h = parsed
+	return h.Validate()
+}
+
+type Ed25519SignatureHex struct {
+	value string
+}
+
+func NewEd25519SignatureHex(signature []byte) (Ed25519SignatureHex, error) {
+	if len(signature) != ed25519.SignatureSize {
+		return Ed25519SignatureHex{}, fmt.Errorf(ErrFmtEd25519Signature, ErrFoundationContract)
+	}
+	return Ed25519SignatureHex{value: hex.EncodeToString(signature)}, nil
+}
+
+func ParseEd25519SignatureHex(value string) (Ed25519SignatureHex, error) {
+	if err := validateFixedHex(value, ed25519.SignatureSize); err != nil {
+		return Ed25519SignatureHex{}, fmt.Errorf(ErrFmtEd25519Signature, ErrFoundationContract)
+	}
+	return Ed25519SignatureHex{value: value}, nil
+}
+
+func (h Ed25519SignatureHex) Bytes() ([]byte, error) {
+	if err := h.Validate(); err != nil {
+		return nil, err
+	}
+	return hex.DecodeString(h.value)
+}
+
+func (h Ed25519SignatureHex) String() string {
+	return h.value
+}
+
+func (h Ed25519SignatureHex) IsZero() bool {
+	return h.value == ""
+}
+
+func (h Ed25519SignatureHex) Validate() error {
+	if h.IsZero() {
+		return fmt.Errorf(ErrFmtEd25519Signature, ErrFoundationContract)
+	}
+	return validateFixedHex(h.value, ed25519.SignatureSize)
+}
+
+func (h Ed25519SignatureHex) MarshalJSON() ([]byte, error) {
+	if !h.IsZero() {
+		if err := h.Validate(); err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(h.String())
+}
+
+func (h *Ed25519SignatureHex) UnmarshalJSON(data []byte) error {
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		return fmt.Errorf(ErrFmtEd25519Signature, ErrFoundationContract)
+	}
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return fmt.Errorf(ErrFmtEd25519Signature, ErrFoundationContract)
+	}
+	if value == "" {
+		*h = Ed25519SignatureHex{}
+		return nil
+	}
+	parsed, err := ParseEd25519SignatureHex(value)
 	if err != nil {
 		return err
 	}
