@@ -17,14 +17,15 @@ type Body interface {
 	CheckInBy() core.UnixNanoTime
 }
 
+// Field order is signature-load-bearing: Canonical uses Go struct field order.
 type SeatLeaseBody struct {
+	Schema             string                   `json:"schema"`
+	DeveloperKeyID     DeveloperKeyID           `json:"developer_key_id"`
+	DeviceFingerprint  core.DeviceFingerprint   `json:"device_fingerprint"`
 	IssuedAt           core.UnixNanoTime        `json:"issued_at"`
 	TokenExpiresAt     core.UnixNanoTime        `json:"expires_at"`
 	CheckInAfterAt     core.UnixNanoTime        `json:"check_in_after"`
 	CheckInByAt        core.UnixNanoTime        `json:"check_in_by"`
-	Schema             string                   `json:"schema"`
-	DeveloperKeyID     DeveloperKeyID           `json:"developer_key_id"`
-	DeviceFingerprint  core.DeviceFingerprint   `json:"device_fingerprint"`
 	WriteGraceDuration core.NanosecondsDuration `json:"write_grace_ns"`
 	Plan               SeatPlan                 `json:"plan"`
 }
@@ -90,12 +91,13 @@ func validCheckInWindow[B Body](b B) bool {
 	return !b.CheckInBy().After(b.ExpiresAt())
 }
 
+// Field order is signature-load-bearing: Canonical uses Go struct field order.
 type SubscriptionLeaseBody struct {
+	Schema         string            `json:"schema"`
 	PaidUntil      core.UnixNanoTime `json:"paid_until"`
 	TokenExpiresAt core.UnixNanoTime `json:"lease_not_after"`
 	CheckInAfterAt core.UnixNanoTime `json:"check_in_after"`
 	CheckInByAt    core.UnixNanoTime `json:"check_in_by"`
-	Schema         string            `json:"schema"`
 	Plan           SubscriptionPlan  `json:"plan"`
 	BillingPeriod  BillingPeriod     `json:"billing_period"`
 }

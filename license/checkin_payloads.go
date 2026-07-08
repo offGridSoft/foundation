@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"unicode"
 
 	json "github.com/goccy/go-json"
 	"github.com/offGridSoft/foundation/core"
@@ -94,15 +95,15 @@ func (p *Platform) UnmarshalJSON(data []byte) error {
 }
 
 type BugUsage struct {
+	Schema       string            `json:"schema"`
 	WindowStart  core.UnixNanoTime `json:"window_start"`
 	WindowEnd    core.UnixNanoTime `json:"window_end"`
-	Schema       string            `json:"schema"`
-	Green        uint32            `json:"green"`
+	Audit        uint32            `json:"audit"`
 	Start        uint32            `json:"start"`
 	Show         uint32            `json:"show"`
 	List         uint32            `json:"list"`
 	Red          uint32            `json:"red"`
-	Audit        uint32            `json:"audit"`
+	Green        uint32            `json:"green"`
 	Verify       uint32            `json:"verify"`
 	Dupe         uint32            `json:"dupe"`
 	Init         uint32            `json:"init"`
@@ -146,13 +147,13 @@ func (c BugCheckIn) Validate() error {
 		return fmt.Errorf(ErrFmtSchema, core.ErrLicenseContract)
 	}
 	if err := c.DeveloperKey.Validate(); err != nil {
-		return err
+		return checkInPayloadError(err)
 	}
 	if err := c.DeviceFingerprint.Validate(); err != nil {
 		return checkInPayloadError(err)
 	}
 	if err := c.DeviceLabel.Validate(); err != nil {
-		return err
+		return checkInPayloadError(err)
 	}
 	if err := c.BinaryVersion.Validate(); err != nil {
 		return checkInPayloadError(err)
@@ -161,9 +162,12 @@ func (c BugCheckIn) Validate() error {
 		return checkInPayloadError(err)
 	}
 	if err := c.Platform.Validate(); err != nil {
-		return err
+		return checkInPayloadError(err)
 	}
-	return c.Usage.Validate()
+	if err := c.Usage.Validate(); err != nil {
+		return checkInPayloadError(err)
+	}
+	return nil
 }
 
 type WitnessCheckIn struct {
@@ -190,9 +194,12 @@ func (c WitnessCheckIn) Validate() error {
 		return checkInPayloadError(err)
 	}
 	if err := c.Platform.Validate(); err != nil {
-		return err
+		return checkInPayloadError(err)
 	}
-	return c.AccountToken.Validate()
+	if err := c.AccountToken.Validate(); err != nil {
+		return checkInPayloadError(err)
+	}
+	return nil
 }
 
 func checkInPayloadError(err error) error {
@@ -204,7 +211,10 @@ type AccountToken struct {
 }
 
 func ParseAccountToken(value string) (AccountToken, error) {
-	if strings.TrimSpace(value) == "" || strings.ContainsAny(value, " \t\r\n") {
+	if err := core.ValidateOpaqueToken(value, core.OpaqueTokenDefaultMaxRunes); err != nil {
+		return AccountToken{}, fmt.Errorf(ErrFmtCheckInPayload, core.ErrLicenseContract)
+	}
+	if strings.ContainsFunc(value, unicode.IsSpace) {
 		return AccountToken{}, fmt.Errorf(ErrFmtCheckInPayload, core.ErrLicenseContract)
 	}
 	return AccountToken{value: value}, nil

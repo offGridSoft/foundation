@@ -16,6 +16,8 @@ const (
 	SchemaReceipt              = "witness-custody-receipt-v1"
 	ULIDTextLen                = 26
 	ULIDUpperCrockfordAlphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+	ArtifactNameMaxRunes       = 256
+	ObjectPathMaxRunes         = 1024
 )
 
 type CustomerID struct {
@@ -119,7 +121,10 @@ type ArtifactName struct {
 }
 
 func ParseArtifactName(value string) (ArtifactName, error) {
-	if strings.TrimSpace(value) == "" || strings.ContainsAny(value, `/\`) {
+	if err := core.ValidateOpaqueToken(value, ArtifactNameMaxRunes); err != nil {
+		return ArtifactName{}, fmt.Errorf(ErrFmtArtifactName, core.ErrCustodyContract)
+	}
+	if strings.ContainsAny(value, `/\`) {
 		return ArtifactName{}, fmt.Errorf(ErrFmtArtifactName, core.ErrCustodyContract)
 	}
 	return ArtifactName{value: value}, nil
@@ -159,7 +164,10 @@ type ObjectPath struct {
 }
 
 func ParseObjectPath(value string) (ObjectPath, error) {
-	if strings.TrimSpace(value) == "" || strings.HasPrefix(value, "/") || strings.Contains(value, `\`) {
+	if err := core.ValidateOpaqueToken(value, ObjectPathMaxRunes); err != nil {
+		return ObjectPath{}, fmt.Errorf(ErrFmtObjectPath, core.ErrCustodyContract)
+	}
+	if strings.HasPrefix(value, "/") || strings.Contains(value, `\`) {
 		return ObjectPath{}, fmt.Errorf(ErrFmtObjectPath, core.ErrCustodyContract)
 	}
 	for segment := range strings.SplitSeq(value, "/") {
@@ -326,7 +334,7 @@ type Generation struct {
 }
 
 func ParseGeneration(value string) (Generation, error) {
-	if strings.TrimSpace(value) == "" {
+	if err := core.ValidateOpaqueToken(value, core.OpaqueTokenDefaultMaxRunes); err != nil {
 		return Generation{}, fmt.Errorf(ErrFmtGeneration, core.ErrCustodyContract)
 	}
 	return Generation{value: value}, nil

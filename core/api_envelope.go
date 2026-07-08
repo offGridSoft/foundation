@@ -47,7 +47,7 @@ func (id APIRequestID) String() string {
 }
 
 func (id APIRequestID) Validate() error {
-	if id.value == "" || len([]rune(id.value)) > APIRequestIDMaxRunes {
+	if err := ValidateOpaqueToken(id.value, APIRequestIDMaxRunes); err != nil {
 		return fmt.Errorf(ErrFmtAPIRequestID, ErrFoundationContract)
 	}
 	return nil

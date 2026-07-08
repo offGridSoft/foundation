@@ -12,6 +12,7 @@ import (
 const (
 	DeveloperKeyPrefix       = "OGS-DEV-"
 	DeveloperKeyMinRunes     = 20
+	DeveloperKeyMaxRunes     = 128
 	DeveloperKeyPreviewRunes = 12
 	DeviceLabelMaxRunes      = 80
 )
@@ -21,10 +22,13 @@ type DeveloperKey struct {
 }
 
 func ParseDeveloperKey(value string) (DeveloperKey, error) {
+	if err := core.ValidateOpaqueToken(value, DeveloperKeyMaxRunes); err != nil {
+		return DeveloperKey{}, fmt.Errorf(ErrFmtDeveloperKey, core.ErrLicenseContract)
+	}
 	if !strings.HasPrefix(value, DeveloperKeyPrefix) || len([]rune(value)) < DeveloperKeyMinRunes {
 		return DeveloperKey{}, fmt.Errorf(ErrFmtDeveloperKey, core.ErrLicenseContract)
 	}
-	if strings.ContainsAny(value, " \t\r\n") {
+	if strings.ContainsFunc(value, unicode.IsSpace) {
 		return DeveloperKey{}, fmt.Errorf(ErrFmtDeveloperKey, core.ErrLicenseContract)
 	}
 	return DeveloperKey{value: value}, nil
@@ -76,7 +80,7 @@ type DeveloperKeyID struct {
 }
 
 func ParseDeveloperKeyID(value string) (DeveloperKeyID, error) {
-	if strings.TrimSpace(value) == "" {
+	if err := core.ValidateOpaqueToken(value, core.OpaqueTokenDefaultMaxRunes); err != nil {
 		return DeveloperKeyID{}, fmt.Errorf(ErrFmtDeveloperKeyID, core.ErrLicenseContract)
 	}
 	return DeveloperKeyID{value: value}, nil
@@ -170,7 +174,7 @@ type APICallKey struct {
 // that is not even presenting itself as an Offgrid tool before JSON decode or
 // store work.
 func ParseAPICallKey(value string) (APICallKey, error) {
-	if strings.TrimSpace(value) == "" {
+	if err := core.ValidateOpaqueToken(value, core.OpaqueTokenDefaultMaxRunes); err != nil {
 		return APICallKey{}, fmt.Errorf(ErrFmtAPICallKey, core.ErrLicenseContract)
 	}
 	return APICallKey{value: value}, nil

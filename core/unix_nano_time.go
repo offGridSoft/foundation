@@ -1,57 +1,49 @@
 package core
 
-import (
-	"fmt"
-	"time"
-
-	json "github.com/goccy/go-json"
-)
+import "time"
 
 type UnixNanoTime struct {
-	value time.Time
+	nanos int64
 }
 
 func NewUnixNanoTime(t time.Time) UnixNanoTime {
 	if t.IsZero() {
 		return UnixNanoTime{}
 	}
-	return UnixNanoTime{value: t.UTC()}
+	return UnixNanoTime{nanos: t.UTC().UnixNano()}
 }
 
 func UnixNanoTimeFromInt64(nanos int64) UnixNanoTime {
-	if nanos == 0 {
-		return UnixNanoTime{}
-	}
-	return UnixNanoTime{value: time.Unix(0, nanos).UTC()}
+	return UnixNanoTime{nanos: nanos}
 }
 
 func (t UnixNanoTime) Validate() error {
+	if t.nanos < 0 {
+		return wrapFoundationContract(ErrFmtUnixNanoTime)
+	}
 	return nil
 }
 
 func (t UnixNanoTime) IsZero() bool {
-	return t.value.IsZero()
+	return t.nanos == 0
 }
 
 func (t UnixNanoTime) Time() time.Time {
-	if t.value.IsZero() {
+	if t.IsZero() {
 		return time.Time{}
 	}
-	return t.value.UTC()
+	return time.Unix(0, t.nanos).UTC()
 }
 
 func (t UnixNanoTime) UnixNano() int64 {
-	if t.IsZero() {
-		return 0
-	}
-	return t.value.UnixNano()
+	return t.nanos
 }
 
 func (t UnixNanoTime) Add(d time.Duration) UnixNanoTime {
 	if t.IsZero() {
 		return UnixNanoTime{}
 	}
-	return NewUnixNanoTime(t.value.Add(d))
+	return NewUnixNanoTime(t.Time().Add(d))
 }
 
 func (t UnixNanoTime) Sub(other UnixNanoTime) time.Duration {
@@ -75,14 +67,21 @@ func (t UnixNanoTime) Format(layout string) string {
 }
 
 func (t UnixNanoTime) MarshalJSON() ([]byte, error) {
-	return json.Marshal(t.UnixNano())
+	if err := t.Validate(); err != nil {
+		return nil, err
+	}
+	return appendInt64JSON(t.nanos), nil
 }
 
 func (t *UnixNanoTime) UnmarshalJSON(data []byte) error {
-	var nanos int64
-	if err := json.Unmarshal(data, &nanos); err != nil {
-		return fmt.Errorf(ErrFmtUnixNanoTime, ErrFoundationContract)
+	nanos, err := parseStrictInt64JSON(data)
+	if err != nil {
+		return wrapFoundationContract(ErrFmtUnixNanoTime)
 	}
-	*t = UnixNanoTimeFromInt64(nanos)
+	decoded := UnixNanoTimeFromInt64(nanos)
+	if err := decoded.Validate(); err != nil {
+		return err
+	}
+	*t = decoded
 	return t.Validate()
 }

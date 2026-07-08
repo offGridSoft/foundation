@@ -30,6 +30,8 @@ func TestDeveloperKeyHostileTable(t *testing.T) {
 		{name: "too short", value: "OGS-DEV-short"},
 		{name: "contains space", value: "OGS-DEV-123456 789012"},
 		{name: "contains newline", value: "OGS-DEV-123456789012\n"},
+		{name: "contains nul", value: "OGS-DEV-123456\x00789012"},
+		{name: "too long", value: DeveloperKeyPrefix + strings.Repeat("a", DeveloperKeyMaxRunes+1)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -97,6 +99,11 @@ func TestAccountTokenWireContract(t *testing.T) {
 	if roundTrip != token {
 		t.Fatalf("AccountToken roundTrip = %s, want %s", roundTrip, token)
 	}
+	for _, raw := range []string{"", " acct", "acct 123", "acct\n123", strings.Repeat("a", core.OpaqueTokenDefaultMaxRunes+1)} {
+		if _, err := ParseAccountToken(raw); !errors.Is(err, core.ErrLicenseContract) {
+			t.Fatalf("ParseAccountToken(%q) error = %v, want ErrLicenseContract", raw, err)
+		}
+	}
 }
 
 func TestAPICallKeyWireContract(t *testing.T) {
@@ -115,6 +122,11 @@ func TestAPICallKeyWireContract(t *testing.T) {
 	}
 	if roundTrip != key {
 		t.Fatalf("APICallKey roundTrip = %s, want %s", roundTrip, key)
+	}
+	for _, raw := range []string{"", " key", "key\n1", strings.Repeat("a", core.OpaqueTokenDefaultMaxRunes+1)} {
+		if _, err := ParseAPICallKey(raw); !errors.Is(err, core.ErrLicenseContract) {
+			t.Fatalf("ParseAPICallKey(%q) error = %v, want ErrLicenseContract", raw, err)
+		}
 	}
 }
 
@@ -141,6 +153,15 @@ func TestDeviceLabelWireContract(t *testing.T) {
 	for _, raw := range []string{"", " \t ", "dev\nlaptop", strings.Repeat("a", DeviceLabelMaxRunes+1)} {
 		if _, err := ParseDeviceLabel(raw); !errors.Is(err, core.ErrLicenseContract) {
 			t.Fatalf("ParseDeviceLabel error = %v, want ErrLicenseContract", err)
+		}
+	}
+}
+
+func TestDeveloperKeyIDRejectsControlToken(t *testing.T) {
+	t.Parallel()
+	for _, raw := range []string{"", " key", "key\x00id", "key\nid", strings.Repeat("a", core.OpaqueTokenDefaultMaxRunes+1)} {
+		if _, err := ParseDeveloperKeyID(raw); !errors.Is(err, core.ErrLicenseContract) {
+			t.Fatalf("ParseDeveloperKeyID(%q) error = %v, want ErrLicenseContract", raw, err)
 		}
 	}
 }

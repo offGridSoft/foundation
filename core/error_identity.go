@@ -1,6 +1,9 @@
 package core
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 var (
 	ErrFoundationContract = errors.New("foundation contract violation")
@@ -9,6 +12,10 @@ var (
 	ErrJSONContract       = errors.New("json contract violation")
 )
 
+func wrapFoundationContract(format string) error {
+	return fmt.Errorf(format, ErrFoundationContract)
+}
+
 const (
 	ErrFmtProductVersion      = "core.ProductVersion: %w"
 	ErrFmtEndpoint            = "core.Endpoint: %w"
@@ -16,10 +23,13 @@ const (
 	ErrFmtBLAKE3              = "core.BLAKE3Hex: %w"
 	ErrFmtEd25519PublicKey    = "core.Ed25519PublicKeyHex: %w"
 	ErrFmtHTTPOutcome         = "core.HTTPOutcome: %w"
+	ErrFmtHTTPHeaderName      = "core.HTTPHeaderName: %w"
+	ErrFmtHTTPHeaderValue     = "core.HTTPHeaderValue: %w"
 	ErrFmtBackoffAttempts     = "core.BackoffPolicy.MaxAttempts: %w"
 	ErrFmtBackoffWindow       = "core.BackoffPolicy.Window: %w"
 	ErrFmtUnixNanoTime        = "core.UnixNanoTime: %w"
 	ErrFmtNanosecondsDuration = "core.NanosecondsDuration: %w"
+	ErrFmtMoneyPennies        = "core.MoneyPennies: %w"
 	ErrFmtJSONTrailingValue   = "core.JSON.TrailingValue: %w"
 	ErrFmtJSONDuplicateField  = "core.JSON.DuplicateField: %w"
 	ErrFmtJSONUnexpectedField = "core.JSON.UnexpectedField: %w"

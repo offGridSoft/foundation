@@ -1,6 +1,6 @@
 package core
 
-import json "github.com/goccy/go-json"
+import "encoding/json"
 
 type CanonicalJSONContract interface {
 	Validate() error

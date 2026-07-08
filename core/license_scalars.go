@@ -62,7 +62,7 @@ type LeaseID struct {
 }
 
 func ParseLeaseID(value string) (LeaseID, error) {
-	if strings.TrimSpace(value) == "" {
+	if err := ValidateOpaqueToken(value, OpaqueTokenDefaultMaxRunes); err != nil {
 		return LeaseID{}, fmt.Errorf(ErrFmtLeaseID, ErrFoundationContract)
 	}
 	return LeaseID{value: value}, nil

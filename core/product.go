@@ -2,7 +2,6 @@ package core
 
 import (
 	"fmt"
-	"strings"
 
 	json "github.com/goccy/go-json"
 )
@@ -12,7 +11,7 @@ type ProductVersion struct {
 }
 
 func ParseProductVersion(value string) (ProductVersion, error) {
-	if strings.TrimSpace(value) == "" {
+	if err := ValidateOpaqueToken(value, OpaqueTokenDefaultMaxRunes); err != nil {
 		return ProductVersion{}, fmt.Errorf(ErrFmtProductVersion, ErrFoundationContract)
 	}
 	return ProductVersion{value: value}, nil

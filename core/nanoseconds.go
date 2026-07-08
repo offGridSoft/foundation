@@ -1,49 +1,56 @@
 package core
 
 import (
-	"fmt"
 	"time"
-
-	json "github.com/goccy/go-json"
 )
 
 type NanosecondsDuration struct {
-	value time.Duration
+	nanos int64
 }
 
 func NewNanosecondsDuration(value time.Duration) NanosecondsDuration {
-	return NanosecondsDuration{value: value}
+	return NanosecondsDuration{nanos: value.Nanoseconds()}
 }
 
 func NanosecondsDurationFromInt64(nanos int64) NanosecondsDuration {
-	return NanosecondsDuration{value: time.Duration(nanos)}
+	return NanosecondsDuration{nanos: nanos}
 }
 
 func (d NanosecondsDuration) Duration() time.Duration {
-	return d.value
+	return time.Duration(d.nanos)
 }
 
 func (d NanosecondsDuration) Nanoseconds() int64 {
-	return d.value.Nanoseconds()
+	return d.nanos
 }
 
 func (d NanosecondsDuration) IsZero() bool {
-	return d.value == 0
+	return d.nanos == 0
 }
 
 func (d NanosecondsDuration) Validate() error {
+	if d.nanos < 0 {
+		return wrapFoundationContract(ErrFmtNanosecondsDuration)
+	}
 	return nil
 }
 
 func (d NanosecondsDuration) MarshalJSON() ([]byte, error) {
-	return json.Marshal(d.Nanoseconds())
+	if err := d.Validate(); err != nil {
+		return nil, err
+	}
+	return appendInt64JSON(d.nanos), nil
 }
 
 func (d *NanosecondsDuration) UnmarshalJSON(data []byte) error {
-	var nanos int64
-	if err := json.Unmarshal(data, &nanos); err != nil {
-		return fmt.Errorf(ErrFmtNanosecondsDuration, ErrFoundationContract)
+	nanos, err := parseStrictInt64JSON(data)
+	if err != nil {
+		return wrapFoundationContract(ErrFmtNanosecondsDuration)
 	}
-	*d = NanosecondsDurationFromInt64(nanos)
+	decoded := NanosecondsDurationFromInt64(nanos)
+	if err := decoded.Validate(); err != nil {
+		return err
+	}
+	*d = decoded
 	return d.Validate()
 }

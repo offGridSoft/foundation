@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -130,26 +131,191 @@ func TestClientRejectsRawResponseWithoutEnvelope(t *testing.T) {
 	}
 }
 
-func TestRetryAfterClampedToBackoffMax(t *testing.T) {
+func TestClientDecodesTerminalErrorEnvelope(t *testing.T) {
 	t.Parallel()
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[SeatLeaseBody]]{
+			RequestID: core.NewAPIRequestID("req-denied"),
+			Error: &core.APIErrorBody{
+				Code:    core.APICodeForbidden,
+				Message: "payment required",
+				Tip:     "update billing",
+			},
+		})
+	}))
+	defer server.Close()
+	endpoint, err := ParseCheckInEndpoint(server.URL + OffgridBugCheckInPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := Client[BugCheckIn, SeatLeaseBody]{
+		HTTP:     server.Client(),
+		Endpoint: endpoint,
+	}
+
+	_, err = client.Do(context.Background(), testBugCheckIn(t))
+	var apiErr CheckInAPIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("client.Do error = %v, want CheckInAPIError", err)
+	}
+	if apiErr.StatusCode != http.StatusForbidden || apiErr.Body.Code != core.APICodeForbidden || apiErr.Body.Message != "payment required" {
+		t.Fatalf("CheckInAPIError = %+v, want decoded status/code/message", apiErr)
+	}
+	if !errors.Is(err, core.ErrLicenseContract) {
+		t.Fatalf("CheckInAPIError errors.Is ErrLicenseContract = false: %v", err)
+	}
+}
+
+// witness:waiver test/parallel/default -- mutates package-global CheckInBackoff to prove retry sequencing with nanosecond waits.
+func TestRetryLoopRetriesThenAcceptsEnvelope(t *testing.T) {
+	keyID, _, signature := signedSeatLeaseParts(t)
+	lease := &core.Signed[SeatLeaseBody]{
+		KeyID:     keyID,
+		Signature: signature,
+		Body:      testSeatLeaseBody(t),
+	}
+	var attempts int
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempts++
+		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
+		if attempts < 3 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[SeatLeaseBody]]{
+				RequestID: core.NewAPIRequestID("req-retry"),
+				Error: &core.APIErrorBody{
+					Code:    core.APICodeServiceUnavailable,
+					Message: "try again",
+				},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[SeatLeaseBody]]{
+			RequestID: core.NewAPIRequestID("req-ok"),
+			Data: &CheckInResponse[SeatLeaseBody]{
+				Granted: true,
+				Refusal: RefusalNone,
+				Lease:   lease,
+			},
+		})
+	}))
+	defer server.Close()
+	restoreBackoff := setTestBackoff(core.BackoffPolicy{Base: time.Nanosecond, Max: time.Nanosecond, MaxAttempts: 3})
+	defer restoreBackoff()
+	endpoint, err := ParseCheckInEndpoint(server.URL + OffgridBugCheckInPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := Client[BugCheckIn, SeatLeaseBody]{
+		HTTP:     server.Client(),
+		Endpoint: endpoint,
+		Jitter:   func() float64 { return 1 },
+	}
+
+	if _, err := client.Do(context.Background(), testBugCheckIn(t)); err != nil {
+		t.Fatalf("client.Do retry success: %v", err)
+	}
+	if attempts != 3 {
+		t.Fatalf("attempts = %d, want 3", attempts)
+	}
+}
+
+// witness:waiver test/parallel/default -- mutates package-global CheckInBackoff to keep retry-exhaustion proof deterministic and fast.
+func TestRetryExhaustionCarriesServerRetryAfter(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
+		w.Header().Set(core.HTTPHeaderRetryAfter, "600")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[SeatLeaseBody]]{
+			RequestID: core.NewAPIRequestID("req-later"),
+			Error: &core.APIErrorBody{
+				Code:    core.APICodeServiceUnavailable,
+				Message: "slow down",
+			},
+		})
+	}))
+	defer server.Close()
+	restoreBackoff := setTestBackoff(core.BackoffPolicy{Base: time.Nanosecond, Max: time.Nanosecond, MaxAttempts: 1})
+	defer restoreBackoff()
+	endpoint, err := ParseCheckInEndpoint(server.URL + OffgridBugCheckInPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := Client[BugCheckIn, SeatLeaseBody]{
+		HTTP:     server.Client(),
+		Endpoint: endpoint,
+		Jitter:   func() float64 { return 1 },
+	}
+
+	_, err = client.Do(context.Background(), testBugCheckIn(t))
+	var retryErr CheckInRetryExhaustedError
+	if !errors.As(err, &retryErr) {
+		t.Fatalf("client.Do error = %v, want CheckInRetryExhaustedError", err)
+	}
+	if retryErr.RetryAfter != 10*time.Minute {
+		t.Fatalf("RetryAfter = %s, want 10m", retryErr.RetryAfter)
+	}
+	var apiErr CheckInAPIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("client.Do error = %v, want nested CheckInAPIError", err)
+	}
+	if apiErr.RetryAfter != 10*time.Minute {
+		t.Fatalf("CheckInAPIError.RetryAfter = %s, want 10m", apiErr.RetryAfter)
+	}
+}
+
+func TestJitterFractionZeroFailsToMaxDelay(t *testing.T) {
+	t.Parallel()
+	client := Client[BugCheckIn, SeatLeaseBody]{Jitter: func() float64 { return 0 }}
+	if got := client.jitterFraction(); got != 1 {
+		t.Fatalf("jitterFraction zero = %v, want 1", got)
+	}
+	if got := conservativeJitterFraction(-0.1); got != 1 {
+		t.Fatalf("conservativeJitterFraction negative = %v, want 1", got)
+	}
+	if got := conservativeJitterFraction(1.1); got != 1 {
+		t.Fatalf("conservativeJitterFraction >1 = %v, want 1", got)
+	}
+	if got := CheckInBackoff.Delay(0, client.jitterFraction()); got != CheckInBackoff.Base {
+		t.Fatalf("zero jitter delay = %s, want %s", got, CheckInBackoff.Base)
+	}
+}
+
+func TestCheckInBudgetCoversWorstCaseRetryAfterSchedule(t *testing.T) {
+	t.Parallel()
+	minBudget := time.Duration(CheckInBackoff.MaxAttempts-1) * CheckInBackoff.Max
+	if CheckInBudget < minBudget {
+		t.Fatalf("CheckInBudget = %s, want at least %s", CheckInBudget, minBudget)
+	}
+}
+
+// witness:waiver test/parallel/default -- reads package-global CheckInBackoff while serial retry tests mutate it.
+func TestRetryAfterClampedToBackoffMax(t *testing.T) {
 	now := time.Date(2026, time.July, 7, 12, 0, 0, 0, time.UTC)
 	for _, header := range []string{
 		"8640000",
 		"9223372036854775807",
 		now.Add(24 * time.Hour).Format(http.TimeFormat),
 	} {
-		if got := parseRetryAfter(header, now); got != CheckInBackoff.Max {
-			t.Fatalf("parseRetryAfter(%q) = %s, want %s", header, got, CheckInBackoff.Max)
+		if got := parseRetryAfter(header, now); got.Wait != CheckInBackoff.Max {
+			t.Fatalf("parseRetryAfter(%q).Wait = %s, want %s", header, got.Wait, CheckInBackoff.Max)
 		}
 	}
 	for _, header := range []string{
 		"-1",
 		now.Add(-time.Hour).Format(http.TimeFormat),
 	} {
-		if got := parseRetryAfter(header, now); got != 0 {
-			t.Fatalf("parseRetryAfter(%q) = %s, want 0", header, got)
+		if got := parseRetryAfter(header, now); got.Wait != 0 || got.Hint != 0 {
+			t.Fatalf("parseRetryAfter(%q) = %+v, want zero decision", header, got)
 		}
 	}
+}
+
+func setTestBackoff(policy core.BackoffPolicy) func() {
+	previous := CheckInBackoff
+	CheckInBackoff = policy
+	return func() { CheckInBackoff = previous }
 }
 
 func signedSeatLeaseParts(t *testing.T) (core.SigningKeyID, core.Ed25519PublicKeyHex, []byte) {
@@ -166,7 +332,8 @@ func signedSeatLeaseParts(t *testing.T) (core.SigningKeyID, core.Ed25519PublicKe
 	if err != nil {
 		t.Fatal(err)
 	}
-	message, err := testSeatLeaseBody(t).Canonical(nil)
+	body := testSeatLeaseBody(t)
+	message, err := core.AppendSignedMessage(nil, keyID, body)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"time"
+	"unicode"
 
 	json "github.com/goccy/go-json"
 )
@@ -12,6 +13,49 @@ const (
 	HTTPHeaderRetryAfter  = "Retry-After"
 	HTTPContentTypeJSON   = "application/json"
 )
+
+func ValidateHTTPHeaderName(value string) error {
+	if value == "" {
+		return fmt.Errorf(ErrFmtHTTPHeaderName, ErrFoundationContract)
+	}
+	for _, r := range value {
+		if !validHTTPTokenRune(r) {
+			return fmt.Errorf(ErrFmtHTTPHeaderName, ErrFoundationContract)
+		}
+	}
+	return nil
+}
+
+func ValidateHTTPHeaderValue(value string) error {
+	for _, r := range value {
+		if unicode.IsControl(r) && r != '\t' {
+			return fmt.Errorf(ErrFmtHTTPHeaderValue, ErrFoundationContract)
+		}
+	}
+	return nil
+}
+
+func validHTTPTokenRune(r rune) bool {
+	switch {
+	case r >= 'a' && r <= 'z':
+		return true
+	case r >= 'A' && r <= 'Z':
+		return true
+	case r >= '0' && r <= '9':
+		return true
+	default:
+		return stringsContainsHTTPTokenSpecial(r)
+	}
+}
+
+func stringsContainsHTTPTokenSpecial(r rune) bool {
+	switch r {
+	case '!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~':
+		return true
+	default:
+		return false
+	}
+}
 
 type HTTPOutcome uint8
 
@@ -61,6 +105,7 @@ func (o *HTTPOutcome) UnmarshalJSON(data []byte) error {
 }
 
 func ClassifyHTTPStatus(status int) HTTPOutcome {
+	// Offgrid API success responses are pinned to HTTP 200 with an APIEnvelope.
 	switch {
 	case status == 200:
 		return HTTPOutcomeSuccess

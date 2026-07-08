@@ -118,9 +118,9 @@ func (t *LeaseTrust) UnmarshalJSON(data []byte) error {
 }
 
 type GateInput[B Body] struct {
+	Lease          B
 	Now            core.UnixNanoTime
 	ClockHighWater core.UnixNanoTime
-	Lease          B
 	WarnWindow     time.Duration
 	Trust          LeaseTrust
 	Armed          bool

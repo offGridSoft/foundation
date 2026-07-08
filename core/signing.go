@@ -3,7 +3,6 @@ package core
 import (
 	"crypto/ed25519"
 	"fmt"
-	"strings"
 
 	json "github.com/goccy/go-json"
 )
@@ -12,6 +11,8 @@ const (
 	ErrFmtSigningKeyID    = "core.SigningKeyID: %w"
 	ErrFmtSigningKeyring  = "core.SigningKeyring: %w"
 	ErrFmtSignedSignature = "core.Signed.Signature: %w"
+	SignedMessageDomain   = "foundation-signed-v1"
+	SignedMessageSep      = byte(0)
 )
 
 type CanonicalBody interface {
@@ -24,7 +25,7 @@ type SigningKeyID struct {
 }
 
 func ParseSigningKeyID(value string) (SigningKeyID, error) {
-	if strings.TrimSpace(value) == "" {
+	if err := ValidateOpaqueToken(value, OpaqueTokenDefaultMaxRunes); err != nil {
 		return SigningKeyID{}, fmt.Errorf(ErrFmtSigningKeyID, ErrFoundationContract)
 	}
 	return SigningKeyID{value: value}, nil
@@ -79,10 +80,16 @@ func (r SigningKeyring) Validate() error {
 	if len(r.Keys) == 0 {
 		return fmt.Errorf(ErrFmtSigningKeyring, ErrFoundationContract)
 	}
+	seen := make(map[string]struct{}, len(r.Keys))
 	for _, key := range r.Keys {
 		if err := key.Validate(); err != nil {
 			return err
 		}
+		id := key.ID.String()
+		if _, exists := seen[id]; exists {
+			return fmt.Errorf(ErrFmtSigningKeyring, ErrFoundationContract)
+		}
+		seen[id] = struct{}{}
 	}
 	return nil
 }
@@ -126,7 +133,7 @@ func (s Signed[B]) Verify(keyring SigningKeyring) error {
 	if err != nil {
 		return err
 	}
-	message, err := s.Body.Canonical(nil)
+	message, err := AppendSignedMessage(nil, s.KeyID, s.Body)
 	if err != nil {
 		return err
 	}
@@ -134,4 +141,19 @@ func (s Signed[B]) Verify(keyring SigningKeyring) error {
 		return fmt.Errorf(ErrFmtSignedSignature, ErrFoundationContract)
 	}
 	return nil
+}
+
+func AppendSignedMessage[B CanonicalBody](dst []byte, keyID SigningKeyID, body B) ([]byte, error) {
+	if err := keyID.Validate(); err != nil {
+		return nil, err
+	}
+	canonical, err := body.Canonical(nil)
+	if err != nil {
+		return nil, err
+	}
+	dst = append(dst, SignedMessageDomain...)
+	dst = append(dst, SignedMessageSep)
+	dst = append(dst, keyID.String()...)
+	dst = append(dst, SignedMessageSep)
+	return append(dst, canonical...), nil
 }

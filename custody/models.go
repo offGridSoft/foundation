@@ -3,7 +3,6 @@ package custody
 import (
 	"fmt"
 	"math"
-	"strings"
 
 	"github.com/offGridSoft/foundation/core"
 )
@@ -93,11 +92,11 @@ func validateArtifactSet(
 }
 
 type SessionOpenResponse struct {
-	Retention RetentionPolicy   `json:"retention"`
-	ExpiresAt core.UnixNanoTime `json:"expires_at"`
 	Schema    string            `json:"schema"`
 	Session   SessionID         `json:"session_id"`
 	Targets   []UploadTarget    `json:"targets"`
+	Retention RetentionPolicy   `json:"retention"`
+	ExpiresAt core.UnixNanoTime `json:"expires_at"`
 }
 
 func (r SessionOpenResponse) Validate() error {
@@ -107,19 +106,34 @@ func (r SessionOpenResponse) Validate() error {
 	if err := r.Session.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtOpenResponse, err)
 	}
-	if len(r.Targets) == 0 {
-		return fmt.Errorf(ErrFmtOpenResponse, core.ErrCustodyContract)
-	}
-	for _, target := range r.Targets {
-		if err := target.Validate(); err != nil {
-			return fmt.Errorf(ErrFmtOpenResponse, err)
-		}
+	if err := validateUploadTargetSet(r.Targets, ErrFmtOpenResponse); err != nil {
+		return err
 	}
 	if err := r.Retention.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtOpenResponse, err)
 	}
 	if r.ExpiresAt.IsZero() {
 		return fmt.Errorf(ErrFmtOpenResponse, core.ErrCustodyContract)
+	}
+	return nil
+}
+
+func validateUploadTargetSet(targets []UploadTarget, errFmt string) error {
+	if len(targets) == 0 {
+		return fmt.Errorf(errFmt, core.ErrCustodyContract)
+	}
+	artifacts := make(map[string]struct{}, len(targets))
+	objects := make(map[string]struct{}, len(targets))
+	for _, target := range targets {
+		if err := target.Validate(); err != nil {
+			return fmt.Errorf(errFmt, err)
+		}
+		if duplicateString(artifacts, target.Artifact.String()) {
+			return fmt.Errorf(errFmt, core.ErrCustodyContract)
+		}
+		if duplicateString(objects, target.Object.String()) {
+			return fmt.Errorf(errFmt, core.ErrCustodyContract)
+		}
 	}
 	return nil
 }
@@ -163,10 +177,10 @@ type UploadHeader struct {
 }
 
 func (h UploadHeader) Validate() error {
-	if strings.TrimSpace(h.Name) == "" {
+	if err := core.ValidateHTTPHeaderName(h.Name); err != nil {
 		return fmt.Errorf(ErrFmtUploadHeader, core.ErrCustodyContract)
 	}
-	if strings.ContainsAny(h.Name, "\r\n") || strings.ContainsAny(h.Value, "\r\n") {
+	if err := core.ValidateHTTPHeaderValue(h.Value); err != nil {
 		return fmt.Errorf(ErrFmtUploadHeader, core.ErrCustodyContract)
 	}
 	return nil
@@ -231,26 +245,19 @@ func (r FinalizeRequest) Validate() error {
 	if err := r.Session.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtFinalize, err)
 	}
-	if len(r.Objects) == 0 {
-		return fmt.Errorf(ErrFmtFinalize, core.ErrCustodyContract)
-	}
-	for _, object := range r.Objects {
-		if err := object.Validate(); err != nil {
-			return fmt.Errorf(ErrFmtFinalize, err)
-		}
-	}
-	return nil
+	return validateUploadedObjectSet(r.Objects, ErrFmtFinalize)
 }
 
+// Field order is signature-load-bearing: Canonical uses Go struct field order.
 type ReceiptBody struct {
-	Retention RetentionPolicy   `json:"retention"`
-	IssuedAt  core.UnixNanoTime `json:"issued_at"`
 	Release   ReleaseIdentity   `json:"release"`
 	Schema    string            `json:"schema"`
 	Customer  CustomerID        `json:"customer_id"`
 	Session   SessionID         `json:"session_id"`
 	ChainHash core.SHA256Hex    `json:"chain_hash"`
 	Objects   []UploadedObject  `json:"objects"`
+	Retention RetentionPolicy   `json:"retention"`
+	IssuedAt  core.UnixNanoTime `json:"issued_at"`
 	LedgerSeq int64             `json:"ledger_seq"`
 	Provider  StorageProvider   `json:"provider"`
 }
@@ -289,15 +296,35 @@ func validateReceiptIdentity(b ReceiptBody) error {
 }
 
 func validateReceiptObjects(objects []UploadedObject) error {
+	return validateUploadedObjectSet(objects, ErrFmtReceipt)
+}
+
+func validateUploadedObjectSet(objects []UploadedObject, errFmt string) error {
 	if len(objects) == 0 {
-		return fmt.Errorf(ErrFmtReceipt, core.ErrCustodyContract)
+		return fmt.Errorf(errFmt, core.ErrCustodyContract)
 	}
+	artifacts := make(map[string]struct{}, len(objects))
+	paths := make(map[string]struct{}, len(objects))
 	for _, object := range objects {
 		if err := object.Validate(); err != nil {
-			return fmt.Errorf(ErrFmtReceipt, err)
+			return fmt.Errorf(errFmt, err)
+		}
+		if duplicateString(artifacts, object.Artifact.String()) {
+			return fmt.Errorf(errFmt, core.ErrCustodyContract)
+		}
+		if duplicateString(paths, object.Object.String()) {
+			return fmt.Errorf(errFmt, core.ErrCustodyContract)
 		}
 	}
 	return nil
+}
+
+func duplicateString(seen map[string]struct{}, value string) bool {
+	if _, exists := seen[value]; exists {
+		return true
+	}
+	seen[value] = struct{}{}
+	return false
 }
 
 func validateReceiptStorage(b ReceiptBody) error {

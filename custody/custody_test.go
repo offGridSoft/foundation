@@ -61,6 +61,10 @@ func TestStorageScalarsRejectHostileInputs(t *testing.T) {
 		{name: "object path empty segment", run: func() error { _, err := ParseObjectPath("customer//x"); return err }},
 		{name: "object path trailing slash", run: func() error { _, err := ParseObjectPath("customer/x/"); return err }},
 		{name: "object path backslash traversal", run: func() error { _, err := ParseObjectPath(`customer\..\x`); return err }},
+		{name: "object path control rune", run: func() error { _, err := ParseObjectPath("customer/\x00/x"); return err }},
+		{name: "object path too long", run: func() error { _, err := ParseObjectPath(strings.Repeat("a", ObjectPathMaxRunes+1)); return err }},
+		{name: "artifact name control rune", run: func() error { _, err := ParseArtifactName("bundle\x00.tar"); return err }},
+		{name: "artifact name too long", run: func() error { _, err := ParseArtifactName(strings.Repeat("a", ArtifactNameMaxRunes+1)); return err }},
 		{name: "signed url http", run: func() error { _, err := ParseSignedUploadURL("http://storage.example/upload"); return err }},
 		{name: "customer id lowercase", run: func() error { _, err := ParseCustomerID(strings.Repeat("a", ULIDTextLen)); return err }},
 		{name: "customer id illegal rune", run: func() error { _, err := ParseCustomerID("01HZZZZZZZZZZZZZZZZZZZZZZI"); return err }},
@@ -122,6 +126,20 @@ func TestSessionOpenResponseAndUploadTargetContracts(t *testing.T) {
 	if err := target.Validate(); !errors.Is(err, core.ErrCustodyContract) {
 		t.Fatalf("UploadTarget invalid header error = %v, want ErrCustodyContract", err)
 	}
+	target = validUploadTarget(t)
+	target.Headers[0].Name = " Content-Type "
+	if err := target.Validate(); !errors.Is(err, core.ErrCustodyContract) {
+		t.Fatalf("UploadTarget spaced header error = %v, want ErrCustodyContract", err)
+	}
+	target = validUploadTarget(t)
+	target.Headers[0].Value = "application/json\x00"
+	if err := target.Validate(); !errors.Is(err, core.ErrCustodyContract) {
+		t.Fatalf("UploadTarget control header value error = %v, want ErrCustodyContract", err)
+	}
+	response.Targets = append(response.Targets, target)
+	if err := response.Validate(); !errors.Is(err, core.ErrCustodyContract) {
+		t.Fatalf("SessionOpenResponse duplicate target error = %v, want ErrCustodyContract", err)
+	}
 }
 
 func TestSignedUploadURLWireContract(t *testing.T) {
@@ -153,14 +171,14 @@ func TestReceiptCanonicalWireForm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"retention":{"retain_until":1815000000000000000,"class":"conditional"},` +
-		`"issued_at":1782302400000000000,"release":{"version":"1.0.0",` +
+	want := `{"release":{"version":"1.0.0",` +
 		`"commit":"` + strings.Repeat("a", 40) + `","tool_manifest_sha":"` + strings.Repeat("b", 64) + `"},` +
 		`"schema":"witness-custody-receipt-v1","customer_id":"01HZZZZZZZZZZZZZZZZZZZZZZZ",` +
 		`"session_id":"01J00000000000000000000000","chain_hash":"` + strings.Repeat("e", 64) + `",` +
 		`"objects":[{"artifact":"bundle.tar","object":"customers/01HZZZZZZZZZZZZZZZZZZZZZZZ/witness/2026/07/07/01J00000000000000000000000/bundle.tar",` +
 		`"generation":"1710000000000000","sha256":"` + strings.Repeat("c", 64) + `","blake3":"` + strings.Repeat("d", 64) + `","size_bytes":12}],` +
-		`"ledger_seq":7,"provider":"gcs"}`
+		`"retention":{"retain_until":1815000000000000000,"class":"conditional"},` +
+		`"issued_at":1782302400000000000,"ledger_seq":7,"provider":"gcs"}`
 	if string(got) != want {
 		t.Fatalf("receipt canonical\n got: %s\nwant: %s", got, want)
 	}
@@ -175,6 +193,15 @@ func TestReceiptRejectsNegativeLedgerSeq(t *testing.T) {
 	}
 }
 
+func TestReceiptRejectsDuplicateObjects(t *testing.T) {
+	t.Parallel()
+	body := validReceipt(t)
+	body.Objects = append(body.Objects, body.Objects[0])
+	if err := body.Validate(); !errors.Is(err, core.ErrCustodyContract) {
+		t.Fatalf("ReceiptBody duplicate object error = %v, want ErrCustodyContract", err)
+	}
+}
+
 func TestFinalizeRejectsEmptyObjects(t *testing.T) {
 	t.Parallel()
 	req := FinalizeRequest{
@@ -183,6 +210,28 @@ func TestFinalizeRejectsEmptyObjects(t *testing.T) {
 	}
 	if err := req.Validate(); !errors.Is(err, core.ErrCustodyContract) {
 		t.Fatalf("FinalizeRequest error = %v, want ErrCustodyContract", err)
+	}
+}
+
+func TestFinalizeRejectsDuplicateObjects(t *testing.T) {
+	t.Parallel()
+	object := mustUploadedObject(t)
+	req := FinalizeRequest{
+		Schema:  SchemaFinalizeRequest,
+		Session: mustSessionID(t),
+		Objects: []UploadedObject{object, object},
+	}
+	if err := req.Validate(); !errors.Is(err, core.ErrCustodyContract) {
+		t.Fatalf("FinalizeRequest duplicate object error = %v, want ErrCustodyContract", err)
+	}
+}
+
+func TestGenerationRejectsControlToken(t *testing.T) {
+	t.Parallel()
+	for _, raw := range []string{"", " generation", "generation\n1", strings.Repeat("a", core.OpaqueTokenDefaultMaxRunes+1)} {
+		if _, err := ParseGeneration(raw); !errors.Is(err, core.ErrCustodyContract) {
+			t.Fatalf("ParseGeneration(%q) error = %v, want ErrCustodyContract", raw, err)
+		}
 	}
 }
 

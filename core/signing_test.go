@@ -30,7 +30,7 @@ func TestSignedVerifyHostileTable(t *testing.T) {
 	keyID, publicKey, privateKey := signingTestKey(t, "server-key-1")
 	otherID, otherPublicKey, _ := signingTestKey(t, "server-key-2")
 	body := signedTestBody{Value: "ok"}
-	message, err := body.Canonical(nil)
+	message, err := AppendSignedMessage(nil, keyID, body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestSignedVerifyAcceptsValidSignature(t *testing.T) {
 	t.Parallel()
 	keyID, publicKey, privateKey := signingTestKey(t, "server-key-1")
 	body := signedTestBody{Value: "ok"}
-	message, err := body.Canonical(nil)
+	message, err := AppendSignedMessage(nil, keyID, body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,6 +110,38 @@ func TestSignedVerifyAcceptsValidSignature(t *testing.T) {
 	keyring := SigningKeyring{Keys: []SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
 	if err := signed.Verify(keyring); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSignedVerifyRejectsSignatureBoundToDifferentKeyID(t *testing.T) {
+	t.Parallel()
+	keyID, publicKey, privateKey := signingTestKey(t, "server-key-1")
+	otherID, _, _ := signingTestKey(t, "server-key-2")
+	body := signedTestBody{Value: "ok"}
+	message, err := AppendSignedMessage(nil, otherID, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signed := Signed[signedTestBody]{
+		KeyID:     keyID,
+		Signature: ed25519.Sign(privateKey, message),
+		Body:      body,
+	}
+	keyring := SigningKeyring{Keys: []SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
+	if err := signed.Verify(keyring); !errors.Is(err, ErrFoundationContract) {
+		t.Fatalf("Verify wrong-key-id-bound signature error = %v, want ErrFoundationContract", err)
+	}
+}
+
+func TestSigningKeyringRejectsDuplicateKeyID(t *testing.T) {
+	t.Parallel()
+	keyID, publicKey, _ := signingTestKey(t, "server-key-1")
+	ring := SigningKeyring{Keys: []SigningPublicKey{
+		{ID: keyID, PublicKey: publicKey},
+		{ID: keyID, PublicKey: publicKey},
+	}}
+	if err := ring.Validate(); !errors.Is(err, ErrFoundationContract) {
+		t.Fatalf("SigningKeyring duplicate Validate error = %v, want ErrFoundationContract", err)
 	}
 }
 
