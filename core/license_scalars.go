@@ -81,6 +81,13 @@ func (id LeaseID) Validate() error {
 	return err
 }
 
+func (id LeaseID) ValidateOptional() error {
+	if id.IsZero() {
+		return nil
+	}
+	return id.Validate()
+}
+
 func (id LeaseID) MarshalJSON() ([]byte, error) {
 	if !id.IsZero() {
 		if err := id.Validate(); err != nil {
@@ -105,5 +112,5 @@ func (id *LeaseID) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*id = parsed
-	return id.Validate()
+	return nil
 }

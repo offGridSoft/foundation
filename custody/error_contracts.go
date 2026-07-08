@@ -1,7 +1,6 @@
 package custody
 
 const (
-	ErrFmtSchema         = "custody.Schema: %w"
 	ErrFmtULID           = "custody.ULID: %w"
 	ErrFmtRelease        = "custody.ReleaseIdentity: %w"
 	ErrFmtArtifactName   = "custody.ArtifactName: %w"
@@ -17,5 +16,4 @@ const (
 	ErrFmtUploadedObject = "custody.UploadedObject: %w"
 	ErrFmtFinalize       = "custody.FinalizeRequest: %w"
 	ErrFmtReceipt        = "custody.ReceiptBody: %w"
-	ErrFmtRefusal        = "custody.Refusal: %w"
 )

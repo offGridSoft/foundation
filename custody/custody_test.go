@@ -16,7 +16,7 @@ func TestSessionOpenRequestHostileTable(t *testing.T) {
 		mutate func(*testing.T, *SessionOpenRequest)
 		name   string
 	}{
-		{name: "schema mismatch", mutate: func(_ *testing.T, r *SessionOpenRequest) { r.Schema = SchemaFinalizeRequest }},
+		{name: "schema mismatch", mutate: func(_ *testing.T, r *SessionOpenRequest) { r.Schema = core.SchemaCustodyFinalizeRequest }},
 		{name: "artifact count mismatch", mutate: func(_ *testing.T, r *SessionOpenRequest) { r.ArtifactCount++ }},
 		{name: "total byte mismatch", mutate: func(_ *testing.T, r *SessionOpenRequest) { r.TotalBytes = core.NewByteCount(99) }},
 		{name: "duplicate artifact name", mutate: func(_ *testing.T, r *SessionOpenRequest) {
@@ -62,10 +62,24 @@ func TestStorageScalarsRejectHostileInputs(t *testing.T) {
 		{name: "object path trailing slash", run: func() error { _, err := ParseObjectPath("customer/x/"); return err }},
 		{name: "object path backslash traversal", run: func() error { _, err := ParseObjectPath(`customer\..\x`); return err }},
 		{name: "object path control rune", run: func() error { _, err := ParseObjectPath("customer/\x00/x"); return err }},
-		{name: "object path too long", run: func() error { _, err := ParseObjectPath(strings.Repeat("a", ObjectPathMaxRunes+1)); return err }},
+		{name: "object path too long", run: func() error { _, err := ParseObjectPath(strings.Repeat("a", core.PathTokenMaxRunes+1)); return err }},
 		{name: "artifact name control rune", run: func() error { _, err := ParseArtifactName("bundle\x00.tar"); return err }},
-		{name: "artifact name too long", run: func() error { _, err := ParseArtifactName(strings.Repeat("a", ArtifactNameMaxRunes+1)); return err }},
+		{name: "artifact name too long", run: func() error {
+			_, err := ParseArtifactName(strings.Repeat("a", core.FileNameTokenMaxRunes+1))
+			return err
+		}},
+		{name: "artifact name dot rejected", run: func() error { _, err := ParseArtifactName("."); return err }},
+		{name: "artifact name dot dot rejected", run: func() error { _, err := ParseArtifactName(".."); return err }},
 		{name: "signed url http", run: func() error { _, err := ParseSignedUploadURL("http://storage.example/upload"); return err }},
+		{name: "signed url missing path", run: func() error { _, err := ParseSignedUploadURL("https://storage.example"); return err }},
+		{name: "signed url userinfo", run: func() error {
+			_, err := ParseSignedUploadURL("https://trusted.example@evil.example/upload")
+			return err
+		}},
+		{name: "signed url control rune", run: func() error {
+			_, err := ParseSignedUploadURL("https://storage.example/upload\nx")
+			return err
+		}},
 		{name: "customer id lowercase", run: func() error { _, err := ParseCustomerID(strings.Repeat("a", ULIDTextLen)); return err }},
 		{name: "customer id illegal rune", run: func() error { _, err := ParseCustomerID("01HZZZZZZZZZZZZZZZZZZZZZZI"); return err }},
 	} {
@@ -80,7 +94,7 @@ func TestStorageScalarsRejectHostileInputs(t *testing.T) {
 
 func TestUploadMethodWireContract(t *testing.T) {
 	t.Parallel()
-	method := UploadMethodSignedPUT
+	method := core.UploadMethodSignedPUT
 	if !method.IsValid() || method.String() != "signed_put" {
 		t.Fatalf("UploadMethod = %q valid=%v", method.String(), method.IsValid())
 	}
@@ -91,7 +105,7 @@ func TestUploadMethodWireContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var roundTrip UploadMethod
+	var roundTrip core.UploadMethod
 	if err := roundTrip.UnmarshalJSON(data); err != nil {
 		t.Fatal(err)
 	}
@@ -99,9 +113,9 @@ func TestUploadMethodWireContract(t *testing.T) {
 		t.Fatalf("UploadMethod roundTrip = %s, want %s", roundTrip, method)
 	}
 	for _, raw := range []string{`"copy"`, `0`, `""`} {
-		var parsed UploadMethod
-		if err := parsed.UnmarshalJSON([]byte(raw)); !errors.Is(err, core.ErrCustodyContract) {
-			t.Fatalf("UploadMethod(%s) error = %v, want ErrCustodyContract", raw, err)
+		var parsed core.UploadMethod
+		if err := parsed.UnmarshalJSON([]byte(raw)); !errors.Is(err, core.ErrFoundationContract) {
+			t.Fatalf("UploadMethod(%s) error = %v, want ErrFoundationContract", raw, err)
 		}
 	}
 }
@@ -113,7 +127,7 @@ func TestSessionOpenResponseAndUploadTargetContracts(t *testing.T) {
 		t.Fatal(err)
 	}
 	response := SessionOpenResponse{
-		Schema:    SchemaSessionOpenResponse,
+		Schema:    core.SchemaCustodySessionOpenResponse,
 		Session:   mustSessionID(t),
 		Targets:   []UploadTarget{target},
 		Retention: mustRetention(),
@@ -173,7 +187,8 @@ func TestReceiptCanonicalWireForm(t *testing.T) {
 	}
 	want := `{"release":{"version":"1.0.0",` +
 		`"commit":"` + strings.Repeat("a", 40) + `","tool_manifest_sha":"` + strings.Repeat("b", 64) + `"},` +
-		`"schema":"witness-custody-receipt-v1","customer_id":"01HZZZZZZZZZZZZZZZZZZZZZZZ",` +
+		`"schema":"witness-custody-receipt-v1",` +
+		`"customer_id":"01HZZZZZZZZZZZZZZZZZZZZZZZ",` +
 		`"session_id":"01J00000000000000000000000","chain_hash":"` + strings.Repeat("e", 64) + `",` +
 		`"objects":[{"artifact":"bundle.tar","object":"customers/01HZZZZZZZZZZZZZZZZZZZZZZZ/witness/2026/07/07/01J00000000000000000000000/bundle.tar",` +
 		`"generation":"1710000000000000","sha256":"` + strings.Repeat("c", 64) + `","blake3":"` + strings.Repeat("d", 64) + `","size_bytes":12}],` +
@@ -181,6 +196,35 @@ func TestReceiptCanonicalWireForm(t *testing.T) {
 		`"issued_at":1782302400000000000,"ledger_seq":7,"provider":"gcs"}`
 	if string(got) != want {
 		t.Fatalf("receipt canonical\n got: %s\nwant: %s", got, want)
+	}
+}
+
+func TestReceiptCanonicalRoundTripTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		body ReceiptBody
+	}{
+		{name: "receipt", body: validReceipt(t)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			original, err := tc.body.Canonical(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			decoded, err := core.DecodeStrictJSON[ReceiptBody](original)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := decoded.Canonical(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != string(original) {
+				t.Fatalf("receipt canonical round trip\n got: %s\nwant: %s", got, original)
+			}
+		})
 	}
 }
 
@@ -205,7 +249,7 @@ func TestReceiptRejectsDuplicateObjects(t *testing.T) {
 func TestFinalizeRejectsEmptyObjects(t *testing.T) {
 	t.Parallel()
 	req := FinalizeRequest{
-		Schema:  SchemaFinalizeRequest,
+		Schema:  core.SchemaCustodyFinalizeRequest,
 		Session: mustSessionID(t),
 	}
 	if err := req.Validate(); !errors.Is(err, core.ErrCustodyContract) {
@@ -217,7 +261,7 @@ func TestFinalizeRejectsDuplicateObjects(t *testing.T) {
 	t.Parallel()
 	object := mustUploadedObject(t)
 	req := FinalizeRequest{
-		Schema:  SchemaFinalizeRequest,
+		Schema:  core.SchemaCustodyFinalizeRequest,
 		Session: mustSessionID(t),
 		Objects: []UploadedObject{object, object},
 	}
@@ -238,7 +282,7 @@ func TestGenerationRejectsControlToken(t *testing.T) {
 func validOpenRequest(t *testing.T) SessionOpenRequest {
 	t.Helper()
 	return SessionOpenRequest{
-		Schema:        SchemaSessionOpenRequest,
+		Schema:        core.SchemaCustodySessionOpenRequest,
 		Customer:      mustCustomerID(t),
 		Lease:         mustOpenLeaseRef(t),
 		Release:       mustRelease(t),
@@ -251,13 +295,13 @@ func validOpenRequest(t *testing.T) SessionOpenRequest {
 func validReceipt(t *testing.T) ReceiptBody {
 	t.Helper()
 	return ReceiptBody{
-		Schema:    SchemaReceipt,
+		Schema:    core.SchemaCustodyReceipt,
 		Customer:  mustCustomerID(t),
 		Session:   mustSessionID(t),
 		Release:   mustRelease(t),
 		Objects:   []UploadedObject{mustUploadedObject(t)},
 		Retention: mustRetention(),
-		Provider:  StorageProviderGCS,
+		Provider:  core.StorageProviderGCS,
 		LedgerSeq: 7,
 		ChainHash: mustSHA256(t, "e"),
 		IssuedAt:  core.UnixNanoTimeFromInt64(1782302400000000000),
@@ -283,7 +327,7 @@ func mustRelease(t *testing.T) ReleaseIdentity {
 	if err != nil {
 		t.Fatal(err)
 	}
-	commit, err := ParseBuildCommit(strings.Repeat("a", 40))
+	commit, err := core.ParseBuildCommit(strings.Repeat("a", 40))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -335,8 +379,8 @@ func validUploadTarget(t *testing.T) UploadTarget {
 			Name:  core.HTTPHeaderContentType,
 			Value: core.HTTPContentTypeJSON,
 		}},
-		Provider: StorageProviderGCS,
-		Method:   UploadMethodSignedPUT,
+		Provider: core.StorageProviderGCS,
+		Method:   core.UploadMethodSignedPUT,
 	}
 }
 

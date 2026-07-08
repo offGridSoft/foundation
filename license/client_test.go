@@ -106,6 +106,49 @@ func TestClientDecodesOffgridEnvelope(t *testing.T) {
 	}
 }
 
+func TestClientSendsFirstCheckInWithoutUsage(t *testing.T) {
+	t.Parallel()
+	keyID, _, signature := signedSeatLeaseParts(t)
+	lease := &core.Signed[SeatLeaseBody]{
+		KeyID:     keyID,
+		Signature: signature,
+		Body:      testSeatLeaseBody(t),
+	}
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload BugCheckIn
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if !payload.Usage.IsZero() {
+			t.Fatalf("first check-in usage = %+v, want zero usage", payload.Usage)
+		}
+		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
+		_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[SeatLeaseBody]]{
+			RequestID: core.NewAPIRequestID("req-first"),
+			Data: &CheckInResponse[SeatLeaseBody]{
+				Granted: true,
+				Refusal: RefusalNone,
+				Lease:   lease,
+			},
+		})
+	}))
+	defer server.Close()
+	endpoint, err := ParseCheckInEndpoint(server.URL + OffgridBugCheckInPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := testBugCheckIn(t)
+	payload.Usage = BugUsage{}
+	client := Client[BugCheckIn, SeatLeaseBody]{
+		HTTP:     server.Client(),
+		Endpoint: endpoint,
+	}
+
+	if _, err := client.Do(context.Background(), payload); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestClientRejectsRawResponseWithoutEnvelope(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -168,8 +211,8 @@ func TestClientDecodesTerminalErrorEnvelope(t *testing.T) {
 	}
 }
 
-// witness:waiver test/parallel/default -- mutates package-global CheckInBackoff to prove retry sequencing with nanosecond waits.
 func TestRetryLoopRetriesThenAcceptsEnvelope(t *testing.T) {
+	t.Parallel()
 	keyID, _, signature := signedSeatLeaseParts(t)
 	lease := &core.Signed[SeatLeaseBody]{
 		KeyID:     keyID,
@@ -201,8 +244,6 @@ func TestRetryLoopRetriesThenAcceptsEnvelope(t *testing.T) {
 		})
 	}))
 	defer server.Close()
-	restoreBackoff := setTestBackoff(core.BackoffPolicy{Base: time.Nanosecond, Max: time.Nanosecond, MaxAttempts: 3})
-	defer restoreBackoff()
 	endpoint, err := ParseCheckInEndpoint(server.URL + OffgridBugCheckInPath)
 	if err != nil {
 		t.Fatal(err)
@@ -211,6 +252,7 @@ func TestRetryLoopRetriesThenAcceptsEnvelope(t *testing.T) {
 		HTTP:     server.Client(),
 		Endpoint: endpoint,
 		Jitter:   func() float64 { return 1 },
+		Backoff:  core.BackoffPolicy{Base: time.Nanosecond, Max: time.Nanosecond, MaxAttempts: 3},
 	}
 
 	if _, err := client.Do(context.Background(), testBugCheckIn(t)); err != nil {
@@ -221,8 +263,8 @@ func TestRetryLoopRetriesThenAcceptsEnvelope(t *testing.T) {
 	}
 }
 
-// witness:waiver test/parallel/default -- mutates package-global CheckInBackoff to keep retry-exhaustion proof deterministic and fast.
 func TestRetryExhaustionCarriesServerRetryAfter(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
 		w.Header().Set(core.HTTPHeaderRetryAfter, "600")
@@ -236,8 +278,6 @@ func TestRetryExhaustionCarriesServerRetryAfter(t *testing.T) {
 		})
 	}))
 	defer server.Close()
-	restoreBackoff := setTestBackoff(core.BackoffPolicy{Base: time.Nanosecond, Max: time.Nanosecond, MaxAttempts: 1})
-	defer restoreBackoff()
 	endpoint, err := ParseCheckInEndpoint(server.URL + OffgridBugCheckInPath)
 	if err != nil {
 		t.Fatal(err)
@@ -246,6 +286,7 @@ func TestRetryExhaustionCarriesServerRetryAfter(t *testing.T) {
 		HTTP:     server.Client(),
 		Endpoint: endpoint,
 		Jitter:   func() float64 { return 1 },
+		Backoff:  core.BackoffPolicy{Base: time.Nanosecond, Max: time.Nanosecond, MaxAttempts: 1},
 	}
 
 	_, err = client.Do(context.Background(), testBugCheckIn(t))
@@ -262,6 +303,64 @@ func TestRetryExhaustionCarriesServerRetryAfter(t *testing.T) {
 	}
 	if apiErr.RetryAfter != 10*time.Minute {
 		t.Fatalf("CheckInAPIError.RetryAfter = %s, want 10m", apiErr.RetryAfter)
+	}
+}
+
+func TestRetryExhaustedTransportErrorCarriesLicenseIdentity(t *testing.T) {
+	t.Parallel()
+	endpoint, err := ParseCheckInEndpoint("https://api.offgridsoftware.ca" + OffgridBugCheckInPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := Client[BugCheckIn, SeatLeaseBody]{
+		HTTP:     &http.Client{Transport: failingRoundTripper{}},
+		Endpoint: endpoint,
+		Jitter:   func() float64 { return 1 },
+		Backoff:  core.BackoffPolicy{Base: time.Nanosecond, Max: time.Nanosecond, MaxAttempts: 1},
+	}
+
+	_, err = client.Do(context.Background(), testBugCheckIn(t))
+	var retryErr CheckInRetryExhaustedError
+	if !errors.As(err, &retryErr) {
+		t.Fatalf("client.Do error = %v, want CheckInRetryExhaustedError", err)
+	}
+	if !errors.Is(err, core.ErrLicenseContract) {
+		t.Fatalf("client.Do error = %v, want ErrLicenseContract identity", err)
+	}
+}
+
+func TestClientValidateChecksAPIKeyAndBackoffTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		mutate  func(*Client[BugCheckIn, SeatLeaseBody])
+		name    string
+		wantErr bool
+	}{
+		{name: "valid api key and backoff", mutate: func(*Client[BugCheckIn, SeatLeaseBody]) {}},
+		{name: "invalid backoff with valid api key", wantErr: true, mutate: func(c *Client[BugCheckIn, SeatLeaseBody]) {
+			c.Backoff.MaxAttempts = 0
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			client := Client[BugCheckIn, SeatLeaseBody]{
+				HTTP:     &http.Client{},
+				Endpoint: BugCheckInEndpoint,
+				APIKey:   testAPICallKey(t),
+				Backoff:  core.BackoffPolicy{Base: time.Nanosecond, Max: time.Nanosecond, MaxAttempts: 1},
+			}
+			tc.mutate(&client)
+			err := client.Validate()
+			if tc.wantErr {
+				if !errors.Is(err, core.ErrLicenseContract) && !errors.Is(err, core.ErrFoundationContract) {
+					t.Fatalf("Client.Validate() error = %v, want contract identity", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Client.Validate() = %v", err)
+			}
+		})
 	}
 }
 
@@ -282,6 +381,52 @@ func TestJitterFractionZeroFailsToMaxDelay(t *testing.T) {
 	}
 }
 
+func TestCheckInResponseHostileCombinations(t *testing.T) {
+	t.Parallel()
+	lease := &core.Signed[SeatLeaseBody]{
+		KeyID:     mustSigningKeyID(t),
+		Signature: make([]byte, ed25519.SignatureSize),
+		Body:      testSeatLeaseBody(t),
+	}
+	for _, tc := range []struct {
+		name     string
+		response CheckInResponse[SeatLeaseBody]
+	}{
+		{name: "granted missing lease", response: CheckInResponse[SeatLeaseBody]{Granted: true, Refusal: RefusalNone}},
+		{name: "granted with refusal", response: CheckInResponse[SeatLeaseBody]{
+			Granted: true,
+			Refusal: RefusalPaymentRequired,
+			Lease:   lease,
+		}},
+		{name: "granted with remediation", response: CheckInResponse[SeatLeaseBody]{
+			Granted:     true,
+			Refusal:     RefusalNone,
+			Remediation: "pay",
+			Lease:       lease,
+		}},
+		{name: "refused with lease", response: CheckInResponse[SeatLeaseBody]{
+			Refusal:     RefusalPaymentRequired,
+			Remediation: "pay",
+			Lease:       lease,
+		}},
+		{name: "refused none refusal", response: CheckInResponse[SeatLeaseBody]{
+			Refusal:     RefusalNone,
+			Remediation: "pay",
+		}},
+		{name: "refused blank remediation", response: CheckInResponse[SeatLeaseBody]{
+			Refusal:     RefusalPaymentRequired,
+			Remediation: " \t ",
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if err := tc.response.Validate(); !errors.Is(err, core.ErrLicenseContract) {
+				t.Fatalf("CheckInResponse.Validate() error = %v, want ErrLicenseContract", err)
+			}
+		})
+	}
+}
+
 func TestCheckInBudgetCoversWorstCaseRetryAfterSchedule(t *testing.T) {
 	t.Parallel()
 	minBudget := time.Duration(CheckInBackoff.MaxAttempts-1) * CheckInBackoff.Max
@@ -290,32 +435,27 @@ func TestCheckInBudgetCoversWorstCaseRetryAfterSchedule(t *testing.T) {
 	}
 }
 
-// witness:waiver test/parallel/default -- reads package-global CheckInBackoff while serial retry tests mutate it.
 func TestRetryAfterClampedToBackoffMax(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, time.July, 7, 12, 0, 0, 0, time.UTC)
+	maxWait := 17 * time.Millisecond
 	for _, header := range []string{
 		"8640000",
 		"9223372036854775807",
 		now.Add(24 * time.Hour).Format(http.TimeFormat),
 	} {
-		if got := parseRetryAfter(header, now); got.Wait != CheckInBackoff.Max {
-			t.Fatalf("parseRetryAfter(%q).Wait = %s, want %s", header, got.Wait, CheckInBackoff.Max)
+		if got := parseRetryAfter(header, now, maxWait); got.Wait != maxWait {
+			t.Fatalf("parseRetryAfter(%q).Wait = %s, want %s", header, got.Wait, maxWait)
 		}
 	}
 	for _, header := range []string{
 		"-1",
 		now.Add(-time.Hour).Format(http.TimeFormat),
 	} {
-		if got := parseRetryAfter(header, now); got.Wait != 0 || got.Hint != 0 {
+		if got := parseRetryAfter(header, now, maxWait); got.Wait != 0 || got.Hint != 0 {
 			t.Fatalf("parseRetryAfter(%q) = %+v, want zero decision", header, got)
 		}
 	}
-}
-
-func setTestBackoff(policy core.BackoffPolicy) func() {
-	previous := CheckInBackoff
-	CheckInBackoff = policy
-	return func() { CheckInBackoff = previous }
 }
 
 func signedSeatLeaseParts(t *testing.T) (core.SigningKeyID, core.Ed25519PublicKeyHex, []byte) {
@@ -340,6 +480,21 @@ func signedSeatLeaseParts(t *testing.T) (core.SigningKeyID, core.Ed25519PublicKe
 	return keyID, publicHex, ed25519.Sign(private, message)
 }
 
+type failingRoundTripper struct{}
+
+func (failingRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("dial failed")
+}
+
+func mustSigningKeyID(t *testing.T) core.SigningKeyID {
+	t.Helper()
+	keyID, err := core.ParseSigningKeyID("server-key-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return keyID
+}
+
 func testSeatLeaseBody(t *testing.T) SeatLeaseBody {
 	t.Helper()
 	return SeatLeaseBody{
@@ -347,7 +502,7 @@ func testSeatLeaseBody(t *testing.T) SeatLeaseBody {
 		TokenExpiresAt:     testTime(1784894400000000000),
 		CheckInAfterAt:     testTime(1783252800000000000),
 		CheckInByAt:        testTime(1784030400000000000),
-		Schema:             SchemaBugSeatLease,
+		Schema:             core.SchemaBugSeatLease,
 		DeveloperKeyID:     testDeveloperKeyID(t),
 		DeviceFingerprint:  testDeviceFingerprint(t),
 		WriteGraceDuration: core.NewNanosecondsDuration(72 * time.Hour),
@@ -358,15 +513,15 @@ func testSeatLeaseBody(t *testing.T) SeatLeaseBody {
 func testBugCheckIn(t *testing.T) BugCheckIn {
 	t.Helper()
 	return BugCheckIn{
-		Schema:            SchemaBugCheckIn,
+		Schema:            core.SchemaBugCheckIn,
 		DeveloperKey:      testDeveloperKey(t),
 		DeviceFingerprint: testDeviceFingerprint(t),
 		DeviceLabel:       testDeviceLabel(t),
 		BinaryVersion:     testProductVersion(t),
 		BinarySHA256:      testSHA256(t),
-		Platform:          PlatformDarwinARM64,
+		Platform:          core.PlatformDarwinARM64,
 		Usage: BugUsage{
-			Schema:      SchemaBugUsage,
+			Schema:      core.SchemaBugUsage,
 			WindowStart: testTime(1782302400000000000),
 			WindowEnd:   testTime(1782302401000000000),
 		},

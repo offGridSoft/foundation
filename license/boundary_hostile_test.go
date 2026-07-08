@@ -66,15 +66,15 @@ func TestPlanAndRefusalHostileTable(t *testing.T) {
 
 func TestPlatformRejectsUnknownAndOrdinal(t *testing.T) {
 	t.Parallel()
-	if platform, err := CurrentPlatform(); err != nil {
+	if platform, err := core.CurrentPlatform(); err != nil {
 		t.Fatal(err)
 	} else if err := platform.Validate(); err != nil {
 		t.Fatal(err)
 	}
 	for _, raw := range []string{`"linux-riscv64"`, `"darwin"`, `1`, `""`} {
-		var platform Platform
-		if err := json.Unmarshal([]byte(raw), &platform); !errors.Is(err, core.ErrLicenseContract) {
-			t.Fatalf("Unmarshal(%s) error = %v, want ErrLicenseContract", raw, err)
+		var platform core.Platform
+		if err := json.Unmarshal([]byte(raw), &platform); !errors.Is(err, core.ErrFoundationContract) {
+			t.Fatalf("Unmarshal(%s) error = %v, want ErrFoundationContract", raw, err)
 		}
 	}
 }
@@ -180,6 +180,19 @@ func TestCheckInEndpointWireContract(t *testing.T) {
 	if roundTrip != endpoint {
 		t.Fatalf("CheckInEndpoint roundTrip = %s, want %s", roundTrip, endpoint)
 	}
+	for _, raw := range []string{
+		"http://api.offgridsoftware.ca/v1/bug/check_in",
+		"https://",
+		"https://api.offgridsoftware.ca",
+		"https://api.offgridsoftware.ca@evil.example/v1/bug/check_in",
+		"https://api.offgridsoftware.ca/v1/bug/check_in\nx",
+		strings.Repeat("a", core.HTTPSURLDefaultMaxRunes+1),
+		"://bad",
+	} {
+		if _, err := ParseCheckInEndpoint(raw); !errors.Is(err, core.ErrLicenseContract) {
+			t.Fatalf("ParseCheckInEndpoint(%q) error = %v, want ErrLicenseContract", raw, err)
+		}
+	}
 }
 
 func TestCoreDeviceFingerprintHostileTable(t *testing.T) {
@@ -209,7 +222,7 @@ func TestBugUsageHostileTable(t *testing.T) {
 		mutate func(*BugUsage)
 		name   string
 	}{
-		{name: "bad schema", mutate: func(u *BugUsage) { u.Schema = "bug-usage-v0" }},
+		{name: "bad schema", mutate: func(u *BugUsage) { u.Schema = core.SchemaUnknown }},
 		{name: "zero start", mutate: func(u *BugUsage) { u.WindowStart = core.UnixNanoTime{} }},
 		{name: "end before start", mutate: func(u *BugUsage) { u.WindowEnd = u.WindowStart.Add(-1) }},
 	} {
@@ -224,20 +237,55 @@ func TestBugUsageHostileTable(t *testing.T) {
 	}
 }
 
+func TestBugUsageMarshalTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		want    string
+		usage   BugUsage
+		wantErr bool
+	}{
+		{name: "zero usage marshals as nullable first check-in body", usage: BugUsage{}, want: `{}`},
+		{name: "schema usage marshals typed usage body", usage: goodBugUsage(), want: `{"window_end":1782302401000000000,"window_start":1782302400000000000,"green":0,"verify":0,"start":0,"show":0,"list":0,"red":0,"license_admin":0,"audit":0,"dupe":0,"init":0,"languages":0,"install_hooks":0,"ledger_admin":0,"schema":"bug-usage-v1"}`},
+		{name: "invalid nonzero usage returns license contract", usage: BugUsage{
+			Schema:      core.SchemaUnknown,
+			WindowStart: testTime(1782302400000000000),
+			WindowEnd:   testTime(1782302401000000000),
+		}, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := json.Marshal(tc.usage)
+			if tc.wantErr {
+				if !errors.Is(err, core.ErrLicenseContract) {
+					t.Fatalf("json.Marshal(BugUsage) error = %v, want ErrLicenseContract", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != tc.want {
+				t.Fatalf("json.Marshal(BugUsage) = %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestBugCheckInHostileTable(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		mutate func(*BugCheckIn)
 		name   string
 	}{
-		{name: "bad schema", mutate: func(c *BugCheckIn) { c.Schema = SchemaWitnessCheckIn }},
+		{name: "bad schema", mutate: func(c *BugCheckIn) { c.Schema = core.SchemaWitnessCheckIn }},
 		{name: "bad developer key", mutate: func(c *BugCheckIn) { c.DeveloperKey = DeveloperKey{} }},
 		{name: "bad device fingerprint", mutate: func(c *BugCheckIn) { c.DeviceFingerprint = core.DeviceFingerprint{} }},
 		{name: "bad device label", mutate: func(c *BugCheckIn) { c.DeviceLabel = DeviceLabel{} }},
 		{name: "bad version", mutate: func(c *BugCheckIn) { c.BinaryVersion = core.ProductVersion{} }},
 		{name: "bad sha", mutate: func(c *BugCheckIn) { c.BinarySHA256 = core.SHA256Hex{} }},
-		{name: "bad platform", mutate: func(c *BugCheckIn) { c.Platform = platformInvalid }},
-		{name: "bad usage", mutate: func(c *BugCheckIn) { c.Usage.Schema = "bad" }},
+		{name: "bad platform", mutate: func(c *BugCheckIn) { c.Platform = core.PlatformUnknown }},
+		{name: "bad usage", mutate: func(c *BugCheckIn) { c.Usage.Schema = core.SchemaUnknown }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -256,11 +304,11 @@ func TestWitnessCheckInHostileTable(t *testing.T) {
 		mutate func(*WitnessCheckIn)
 		name   string
 	}{
-		{name: "bad schema", mutate: func(c *WitnessCheckIn) { c.Schema = SchemaBugCheckIn }},
+		{name: "bad schema", mutate: func(c *WitnessCheckIn) { c.Schema = core.SchemaBugCheckIn }},
 		{name: "bad device fingerprint", mutate: func(c *WitnessCheckIn) { c.DeviceFingerprint = core.DeviceFingerprint{} }},
 		{name: "bad version", mutate: func(c *WitnessCheckIn) { c.BinaryVersion = core.ProductVersion{} }},
 		{name: "bad sha", mutate: func(c *WitnessCheckIn) { c.BinarySHA256 = core.SHA256Hex{} }},
-		{name: "bad platform", mutate: func(c *WitnessCheckIn) { c.Platform = platformInvalid }},
+		{name: "bad platform", mutate: func(c *WitnessCheckIn) { c.Platform = core.PlatformUnknown }},
 		{name: "blank account token", mutate: func(c *WitnessCheckIn) { c.AccountToken = AccountToken{} }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -277,13 +325,13 @@ func TestWitnessCheckInHostileTable(t *testing.T) {
 func goodBugCheckIn(t *testing.T) BugCheckIn {
 	t.Helper()
 	return BugCheckIn{
-		Schema:            SchemaBugCheckIn,
+		Schema:            core.SchemaBugCheckIn,
 		DeveloperKey:      testDeveloperKey(t),
 		DeviceFingerprint: testDeviceFingerprint(t),
 		DeviceLabel:       testDeviceLabel(t),
 		BinaryVersion:     testProductVersion(t),
 		BinarySHA256:      testSHA256(t),
-		Platform:          PlatformDarwinARM64,
+		Platform:          core.PlatformDarwinARM64,
 		Usage:             goodBugUsage(),
 	}
 }
@@ -295,18 +343,18 @@ func goodWitnessCheckIn(t *testing.T) WitnessCheckIn {
 		t.Fatal(err)
 	}
 	return WitnessCheckIn{
-		Schema:            SchemaWitnessCheckIn,
+		Schema:            core.SchemaWitnessCheckIn,
 		DeviceFingerprint: testDeviceFingerprint(t),
 		BinaryVersion:     testProductVersion(t),
 		BinarySHA256:      testSHA256(t),
-		Platform:          PlatformDarwinARM64,
+		Platform:          core.PlatformDarwinARM64,
 		AccountToken:      token,
 	}
 }
 
 func goodBugUsage() BugUsage {
 	return BugUsage{
-		Schema:      SchemaBugUsage,
+		Schema:      core.SchemaBugUsage,
 		WindowStart: testTime(1782302400000000000),
 		WindowEnd:   testTime(1782302401000000000),
 	}

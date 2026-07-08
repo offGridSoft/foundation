@@ -1,8 +1,8 @@
 package custody
 
 import (
+	"errors"
 	"fmt"
-	"math"
 
 	"github.com/offGridSoft/foundation/core"
 )
@@ -30,18 +30,26 @@ func (a ArtifactDescriptor) Validate() error {
 	return nil
 }
 
+func (a ArtifactDescriptor) ArtifactSetName() string {
+	return a.Name.String()
+}
+
+func (a ArtifactDescriptor) ArtifactSetSize() core.ByteCount {
+	return a.Size
+}
+
 type SessionOpenRequest struct {
-	Schema        string               `json:"schema"`
-	Customer      CustomerID           `json:"customer_id"`
-	Lease         OpenLeaseRef         `json:"lease"`
 	Release       ReleaseIdentity      `json:"release"`
+	Lease         OpenLeaseRef         `json:"lease"`
+	Customer      CustomerID           `json:"customer_id"`
 	Artifacts     []ArtifactDescriptor `json:"artifacts"`
 	TotalBytes    core.ByteCount       `json:"total_bytes"`
 	ArtifactCount uint32               `json:"artifact_count"`
+	Schema        core.SchemaID        `json:"schema"`
 }
 
 func (r SessionOpenRequest) Validate() error {
-	if r.Schema != SchemaSessionOpenRequest {
+	if r.Schema != core.SchemaCustodySessionOpenRequest {
 		return fmt.Errorf(ErrFmtOpenRequest, core.ErrCustodyContract)
 	}
 	if err := r.Customer.Validate(); err != nil {
@@ -53,54 +61,23 @@ func (r SessionOpenRequest) Validate() error {
 	if err := r.Release.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtOpenRequest, err)
 	}
-	return validateArtifactSet(r.Artifacts, r.ArtifactCount, r.TotalBytes, ErrFmtOpenRequest)
-}
-
-func validateArtifactSet(
-	artifacts []ArtifactDescriptor,
-	count uint32,
-	total core.ByteCount,
-	errFmt string,
-) error {
-	if count == 0 || int(count) != len(artifacts) {
-		return fmt.Errorf(errFmt, core.ErrCustodyContract)
-	}
-	var sum uint64
-	names := make(map[string]struct{}, len(artifacts))
-	for _, artifact := range artifacts {
-		if err := artifact.Validate(); err != nil {
-			return fmt.Errorf(errFmt, err)
-		}
-		name := artifact.Name.String()
-		if _, exists := names[name]; exists {
-			return fmt.Errorf(errFmt, core.ErrCustodyContract)
-		}
-		names[name] = struct{}{}
-		size := artifact.Size.Uint64()
-		if size > math.MaxUint64-sum {
-			return fmt.Errorf(errFmt, core.ErrCustodyContract)
-		}
-		sum += size
-	}
-	if err := total.Validate(); err != nil {
-		return fmt.Errorf(errFmt, err)
-	}
-	if sum != total.Uint64() {
-		return fmt.Errorf(errFmt, core.ErrCustodyContract)
-	}
-	return nil
+	return validateCoreArtifactSet(core.ArtifactSet[ArtifactDescriptor]{
+		Items:      r.Artifacts,
+		Count:      r.ArtifactCount,
+		TotalBytes: r.TotalBytes,
+	}, ErrFmtOpenRequest)
 }
 
 type SessionOpenResponse struct {
-	Schema    string            `json:"schema"`
 	Session   SessionID         `json:"session_id"`
 	Targets   []UploadTarget    `json:"targets"`
 	Retention RetentionPolicy   `json:"retention"`
 	ExpiresAt core.UnixNanoTime `json:"expires_at"`
+	Schema    core.SchemaID     `json:"schema"`
 }
 
 func (r SessionOpenResponse) Validate() error {
-	if r.Schema != SchemaSessionOpenResponse {
+	if r.Schema != core.SchemaCustodySessionOpenResponse {
 		return fmt.Errorf(ErrFmtOpenResponse, core.ErrCustodyContract)
 	}
 	if err := r.Session.Validate(); err != nil {
@@ -122,16 +99,16 @@ func validateUploadTargetSet(targets []UploadTarget, errFmt string) error {
 	if len(targets) == 0 {
 		return fmt.Errorf(errFmt, core.ErrCustodyContract)
 	}
-	artifacts := make(map[string]struct{}, len(targets))
-	objects := make(map[string]struct{}, len(targets))
+	artifacts := core.NewUniqueStringSet(len(targets))
+	objects := core.NewUniqueStringSet(len(targets))
 	for _, target := range targets {
 		if err := target.Validate(); err != nil {
 			return fmt.Errorf(errFmt, err)
 		}
-		if duplicateString(artifacts, target.Artifact.String()) {
+		if err := artifacts.Add(target.Artifact.String()); err != nil {
 			return fmt.Errorf(errFmt, core.ErrCustodyContract)
 		}
-		if duplicateString(objects, target.Object.String()) {
+		if err := objects.Add(target.Object.String()); err != nil {
 			return fmt.Errorf(errFmt, core.ErrCustodyContract)
 		}
 	}
@@ -139,12 +116,12 @@ func validateUploadTargetSet(targets []UploadTarget, errFmt string) error {
 }
 
 type UploadTarget struct {
-	Artifact ArtifactName    `json:"artifact"`
-	Object   ObjectPath      `json:"object"`
-	URL      SignedUploadURL `json:"url"`
-	Headers  []UploadHeader  `json:"headers"`
-	Provider StorageProvider `json:"provider"`
-	Method   UploadMethod    `json:"method"`
+	Artifact ArtifactName         `json:"artifact"`
+	Object   ObjectPath           `json:"object"`
+	URL      SignedUploadURL      `json:"url"`
+	Headers  []UploadHeader       `json:"headers"`
+	Provider core.StorageProvider `json:"provider"`
+	Method   core.UploadMethod    `json:"method"`
 }
 
 func (t UploadTarget) Validate() error {
@@ -232,14 +209,22 @@ func (o UploadedObject) Validate() error {
 	return nil
 }
 
+func (o UploadedObject) ArtifactSetName() string {
+	return o.Artifact.String()
+}
+
+func (o UploadedObject) ArtifactSetSize() core.ByteCount {
+	return o.Size
+}
+
 type FinalizeRequest struct {
-	Schema  string           `json:"schema"`
 	Session SessionID        `json:"session_id"`
 	Objects []UploadedObject `json:"objects"`
+	Schema  core.SchemaID    `json:"schema"`
 }
 
 func (r FinalizeRequest) Validate() error {
-	if r.Schema != SchemaFinalizeRequest {
+	if r.Schema != core.SchemaCustodyFinalizeRequest {
 		return fmt.Errorf(ErrFmtFinalize, core.ErrCustodyContract)
 	}
 	if err := r.Session.Validate(); err != nil {
@@ -250,20 +235,20 @@ func (r FinalizeRequest) Validate() error {
 
 // Field order is signature-load-bearing: Canonical uses Go struct field order.
 type ReceiptBody struct {
-	Release   ReleaseIdentity   `json:"release"`
-	Schema    string            `json:"schema"`
-	Customer  CustomerID        `json:"customer_id"`
-	Session   SessionID         `json:"session_id"`
-	ChainHash core.SHA256Hex    `json:"chain_hash"`
-	Objects   []UploadedObject  `json:"objects"`
-	Retention RetentionPolicy   `json:"retention"`
-	IssuedAt  core.UnixNanoTime `json:"issued_at"`
-	LedgerSeq int64             `json:"ledger_seq"`
-	Provider  StorageProvider   `json:"provider"`
+	Release   ReleaseIdentity      `json:"release"`
+	Customer  CustomerID           `json:"customer_id"`
+	Session   SessionID            `json:"session_id"`
+	ChainHash core.SHA256Hex       `json:"chain_hash"`
+	Objects   []UploadedObject     `json:"objects"`
+	Retention RetentionPolicy      `json:"retention"`
+	IssuedAt  core.UnixNanoTime    `json:"issued_at"`
+	LedgerSeq int64                `json:"ledger_seq"`
+	Schema    core.SchemaID        `json:"schema"`
+	Provider  core.StorageProvider `json:"provider"`
 }
 
 func (b ReceiptBody) Validate() error {
-	if b.Schema != SchemaReceipt {
+	if b.Schema != core.SchemaCustodyReceipt {
 		return fmt.Errorf(ErrFmtReceipt, core.ErrCustodyContract)
 	}
 	return validateReceiptFields(b)
@@ -273,7 +258,7 @@ func validateReceiptFields(b ReceiptBody) error {
 	if err := validateReceiptIdentity(b); err != nil {
 		return err
 	}
-	if err := validateReceiptObjects(b.Objects); err != nil {
+	if err := validateUploadedObjectSet(b.Objects, ErrFmtReceipt); err != nil {
 		return err
 	}
 	if err := validateReceiptStorage(b); err != nil {
@@ -295,36 +280,24 @@ func validateReceiptIdentity(b ReceiptBody) error {
 	return nil
 }
 
-func validateReceiptObjects(objects []UploadedObject) error {
-	return validateUploadedObjectSet(objects, ErrFmtReceipt)
-}
-
 func validateUploadedObjectSet(objects []UploadedObject, errFmt string) error {
 	if len(objects) == 0 {
 		return fmt.Errorf(errFmt, core.ErrCustodyContract)
 	}
-	artifacts := make(map[string]struct{}, len(objects))
-	paths := make(map[string]struct{}, len(objects))
+	artifacts := core.NewUniqueStringSet(len(objects))
+	paths := core.NewUniqueStringSet(len(objects))
 	for _, object := range objects {
 		if err := object.Validate(); err != nil {
 			return fmt.Errorf(errFmt, err)
 		}
-		if duplicateString(artifacts, object.Artifact.String()) {
+		if err := artifacts.Add(object.Artifact.String()); err != nil {
 			return fmt.Errorf(errFmt, core.ErrCustodyContract)
 		}
-		if duplicateString(paths, object.Object.String()) {
+		if err := paths.Add(object.Object.String()); err != nil {
 			return fmt.Errorf(errFmt, core.ErrCustodyContract)
 		}
 	}
 	return nil
-}
-
-func duplicateString(seen map[string]struct{}, value string) bool {
-	if _, exists := seen[value]; exists {
-		return true
-	}
-	seen[value] = struct{}{}
-	return false
 }
 
 func validateReceiptStorage(b ReceiptBody) error {
@@ -348,8 +321,38 @@ func validateReceiptLedger(b ReceiptBody) error {
 }
 
 func (b ReceiptBody) Canonical(dst []byte) ([]byte, error) {
+	return core.AppendCanonicalJSON(dst, b)
+}
+
+func (b ReceiptBody) MarshalJSON() ([]byte, error) {
 	if err := b.Validate(); err != nil {
 		return nil, err
 	}
-	return core.AppendCanonicalJSON(dst, b)
+	return appendReceiptBodyJSON(nil, b)
+}
+
+func appendReceiptBodyJSON(dst []byte, b ReceiptBody) ([]byte, error) {
+	dst = append(dst, '{')
+	var err error
+	dst, err = core.AppendJSONField(dst, "release", b.Release)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldSchema, b.Schema)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, "customer_id", b.Customer)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, "session_id", b.Session)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, "chain_hash", b.ChainHash)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, "objects", b.Objects)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, "retention", b.Retention)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, "issued_at", b.IssuedAt)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, "ledger_seq", b.LedgerSeq)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, "provider", b.Provider)
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, '}'), nil
+}
+
+func validateCoreArtifactSet[T core.ArtifactSetItem](set core.ArtifactSet[T], errFmt string) error {
+	if err := core.ValidateArtifactSet(set); err != nil {
+		return fmt.Errorf(errFmt, errors.Join(core.ErrCustodyContract, err))
+	}
+	return nil
 }

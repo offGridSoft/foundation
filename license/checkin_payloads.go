@@ -3,7 +3,6 @@ package license
 import (
 	"errors"
 	"fmt"
-	"runtime"
 	"strings"
 	"unicode"
 
@@ -11,106 +10,23 @@ import (
 	"github.com/offGridSoft/foundation/core"
 )
 
-const (
-	SchemaBugUsage = "bug-usage-v1"
-)
-
-type Platform uint8
-
-const (
-	platformInvalid Platform = iota
-	PlatformDarwinAMD64
-	PlatformDarwinARM64
-	PlatformLinuxAMD64
-	PlatformLinuxARM64
-	PlatformWindowsAMD64
-	PlatformWindowsARM64
-)
-
-var platformNames = [...]string{
-	PlatformDarwinAMD64:  "darwin-amd64",
-	PlatformDarwinARM64:  "darwin-arm64",
-	PlatformLinuxAMD64:   "linux-amd64",
-	PlatformLinuxARM64:   "linux-arm64",
-	PlatformWindowsAMD64: "windows-amd64",
-	PlatformWindowsARM64: "windows-arm64",
-}
-
-func (p Platform) String() string {
-	if p.IsValid() {
-		return platformNames[p]
-	}
-	return ""
-}
-
-func (p Platform) IsValid() bool {
-	return p > platformInvalid && int(p) < len(platformNames) && platformNames[p] != ""
-}
-
-func (p Platform) Validate() error {
-	if !p.IsValid() {
-		return fmt.Errorf(ErrFmtCheckInPayload, core.ErrLicenseContract)
-	}
-	return nil
-}
-
-func CurrentPlatform() (Platform, error) {
-	switch runtime.GOOS + "-" + runtime.GOARCH {
-	case PlatformDarwinAMD64.String():
-		return PlatformDarwinAMD64, nil
-	case PlatformDarwinARM64.String():
-		return PlatformDarwinARM64, nil
-	case PlatformLinuxAMD64.String():
-		return PlatformLinuxAMD64, nil
-	case PlatformLinuxARM64.String():
-		return PlatformLinuxARM64, nil
-	case PlatformWindowsAMD64.String():
-		return PlatformWindowsAMD64, nil
-	case PlatformWindowsARM64.String():
-		return PlatformWindowsARM64, nil
-	default:
-		return platformInvalid, fmt.Errorf(ErrFmtCheckInPayload, core.ErrLicenseContract)
-	}
-}
-
-func (p Platform) MarshalJSON() ([]byte, error) {
-	if err := p.Validate(); err != nil {
-		return nil, err
-	}
-	return json.Marshal(p.String())
-}
-
-func (p *Platform) UnmarshalJSON(data []byte) error {
-	var token string
-	if err := json.Unmarshal(data, &token); err != nil {
-		return fmt.Errorf(ErrFmtCheckInPayload, core.ErrLicenseContract)
-	}
-	for platform := PlatformDarwinAMD64; int(platform) < len(platformNames); platform++ {
-		if platformNames[platform] == token {
-			*p = platform
-			return nil
-		}
-	}
-	return fmt.Errorf(ErrFmtCheckInPayload, core.ErrLicenseContract)
-}
-
 type BugUsage struct {
-	Schema       string            `json:"schema"`
-	WindowStart  core.UnixNanoTime `json:"window_start"`
 	WindowEnd    core.UnixNanoTime `json:"window_end"`
-	Audit        uint32            `json:"audit"`
+	WindowStart  core.UnixNanoTime `json:"window_start"`
+	Green        uint32            `json:"green"`
+	Verify       uint32            `json:"verify"`
 	Start        uint32            `json:"start"`
 	Show         uint32            `json:"show"`
 	List         uint32            `json:"list"`
 	Red          uint32            `json:"red"`
-	Green        uint32            `json:"green"`
-	Verify       uint32            `json:"verify"`
+	LicenseAdmin uint32            `json:"license_admin"`
+	Audit        uint32            `json:"audit"`
 	Dupe         uint32            `json:"dupe"`
 	Init         uint32            `json:"init"`
 	Languages    uint32            `json:"languages"`
 	InstallHooks uint32            `json:"install_hooks"`
 	LedgerAdmin  uint32            `json:"ledger_admin"`
-	LicenseAdmin uint32            `json:"license_admin"`
+	Schema       core.SchemaID     `json:"schema"`
 }
 
 func (u BugUsage) IsZero() bool {
@@ -121,7 +37,7 @@ func (u BugUsage) Validate() error {
 	if u.IsZero() {
 		return nil
 	}
-	if u.Schema != SchemaBugUsage {
+	if u.Schema != core.SchemaBugUsage {
 		return fmt.Errorf(ErrFmtCheckInPayload, core.ErrLicenseContract)
 	}
 	if u.WindowStart.IsZero() || !u.WindowEnd.After(u.WindowStart) {
@@ -130,8 +46,18 @@ func (u BugUsage) Validate() error {
 	return nil
 }
 
+func (u BugUsage) MarshalJSON() ([]byte, error) {
+	if u.IsZero() {
+		return []byte("{}"), nil
+	}
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	type bugUsageJSON BugUsage
+	return json.Marshal(bugUsageJSON(u))
+}
+
 type BugCheckIn struct {
-	Schema            string                 `json:"schema"`
 	DeveloperKey      DeveloperKey           `json:"developer_key"`
 	DeviceFingerprint core.DeviceFingerprint `json:"device_fingerprint"`
 	DeviceLabel       DeviceLabel            `json:"device_label"`
@@ -139,11 +65,12 @@ type BugCheckIn struct {
 	BinarySHA256      core.SHA256Hex         `json:"binary_sha256"`
 	LeaseID           core.LeaseID           `json:"lease_id"`
 	Usage             BugUsage               `json:"usage"`
-	Platform          Platform               `json:"platform"`
+	Schema            core.SchemaID          `json:"schema"`
+	Platform          core.Platform          `json:"platform"`
 }
 
 func (c BugCheckIn) Validate() error {
-	if c.Schema != SchemaBugCheckIn {
+	if c.Schema != core.SchemaBugCheckIn {
 		return fmt.Errorf(ErrFmtSchema, core.ErrLicenseContract)
 	}
 	if err := c.DeveloperKey.Validate(); err != nil {
@@ -161,6 +88,9 @@ func (c BugCheckIn) Validate() error {
 	if err := c.BinarySHA256.Validate(); err != nil {
 		return checkInPayloadError(err)
 	}
+	if err := c.LeaseID.ValidateOptional(); err != nil {
+		return checkInPayloadError(err)
+	}
 	if err := c.Platform.Validate(); err != nil {
 		return checkInPayloadError(err)
 	}
@@ -171,17 +101,17 @@ func (c BugCheckIn) Validate() error {
 }
 
 type WitnessCheckIn struct {
-	Schema            string                 `json:"schema"`
 	DeviceFingerprint core.DeviceFingerprint `json:"device_fingerprint"`
 	BinaryVersion     core.ProductVersion    `json:"binary_version"`
 	BinarySHA256      core.SHA256Hex         `json:"binary_sha256"`
 	LeaseID           core.LeaseID           `json:"lease_id"`
 	AccountToken      AccountToken           `json:"account_token"`
-	Platform          Platform               `json:"platform"`
+	Schema            core.SchemaID          `json:"schema"`
+	Platform          core.Platform          `json:"platform"`
 }
 
 func (c WitnessCheckIn) Validate() error {
-	if c.Schema != SchemaWitnessCheckIn {
+	if c.Schema != core.SchemaWitnessCheckIn {
 		return fmt.Errorf(ErrFmtSchema, core.ErrLicenseContract)
 	}
 	if err := c.DeviceFingerprint.Validate(); err != nil {
@@ -191,6 +121,9 @@ func (c WitnessCheckIn) Validate() error {
 		return checkInPayloadError(err)
 	}
 	if err := c.BinarySHA256.Validate(); err != nil {
+		return checkInPayloadError(err)
+	}
+	if err := c.LeaseID.ValidateOptional(); err != nil {
 		return checkInPayloadError(err)
 	}
 	if err := c.Platform.Validate(); err != nil {

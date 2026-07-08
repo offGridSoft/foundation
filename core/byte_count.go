@@ -1,10 +1,6 @@
 package core
 
-import (
-	"fmt"
-
-	"encoding/json"
-)
+import "fmt"
 
 const ErrFmtByteCount = "core.ByteCount: %w"
 
@@ -31,14 +27,18 @@ func (c ByteCount) MarshalJSON() ([]byte, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
-	return json.Marshal(c.value)
+	return appendUint64JSON(c.value), nil
 }
 
 func (c *ByteCount) UnmarshalJSON(data []byte) error {
-	var value uint64
-	if err := json.Unmarshal(data, &value); err != nil {
+	value, err := parseStrictUint64JSON(data)
+	if err != nil {
 		return fmt.Errorf(ErrFmtByteCount, ErrFoundationContract)
 	}
-	*c = NewByteCount(value)
+	decoded := NewByteCount(value)
+	if err := decoded.Validate(); err != nil {
+		return err
+	}
+	*c = decoded
 	return c.Validate()
 }

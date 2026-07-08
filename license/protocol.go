@@ -1,23 +1,17 @@
 package license
 
 import (
+	"errors"
 	"fmt"
-	"net/url"
-	"strings"
 
 	"encoding/json"
 	"github.com/offGridSoft/foundation/core"
 )
 
 const (
-	SchemaBugCheckIn          = "bug-license-check-in-v1"
-	SchemaBugSeatLease        = "bug-license-lease-v1"
-	SchemaWitnessCheckIn      = "witness-subscription-check-in-v1"
-	SchemaWitnessSubscription = "witness-subscription-lease-v1"
-
 	OffgridAPIBaseURL         = "https://api.offgridsoftware.ca"
-	OffgridBugCheckInPath     = "/v1/bug/check_in"
-	OffgridWitnessCheckInPath = "/v1/witness/check_in"
+	OffgridBugCheckInPath     = "/v1/" + core.ProductTokenBug + "/check_in"
+	OffgridWitnessCheckInPath = "/v1/" + core.ProductTokenWitness + "/check_in"
 	OffgridAPICallKeyHeader   = "X-Offgrid-Api-Key"
 )
 
@@ -34,12 +28,11 @@ func MustCheckInEndpoint(value string) CheckInEndpoint {
 }
 
 func ParseCheckInEndpoint(value string) (CheckInEndpoint, error) {
-	parsed, err := url.Parse(value)
-	if err != nil {
-		return CheckInEndpoint{}, fmt.Errorf(ErrFmtCheckInEndpoint, err)
-	}
-	if parsed.Scheme != "https" || parsed.Host == "" || strings.TrimSpace(parsed.Path) == "" {
-		return CheckInEndpoint{}, fmt.Errorf(ErrFmtCheckInEndpoint, core.ErrLicenseContract)
+	if err := core.ValidateHTTPSURL(value, core.HTTPSURLPolicy{
+		MaxRunes:    core.HTTPSURLDefaultMaxRunes,
+		RequirePath: true,
+	}); err != nil {
+		return CheckInEndpoint{}, fmt.Errorf(ErrFmtCheckInEndpoint, errors.Join(core.ErrLicenseContract, err))
 	}
 	return CheckInEndpoint{value: value}, nil
 }

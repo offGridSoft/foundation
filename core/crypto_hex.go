@@ -53,7 +53,7 @@ func (h SHA256Hex) MarshalJSON() ([]byte, error) {
 func (h *SHA256Hex) UnmarshalJSON(data []byte) error {
 	var value string
 	if err := json.Unmarshal(data, &value); err != nil {
-		return err
+		return fmt.Errorf(ErrFmtSHA256, ErrFoundationContract)
 	}
 	if value == "" {
 		*h = SHA256Hex{}
@@ -105,7 +105,7 @@ func (h BLAKE3Hex) MarshalJSON() ([]byte, error) {
 func (h *BLAKE3Hex) UnmarshalJSON(data []byte) error {
 	var value string
 	if err := json.Unmarshal(data, &value); err != nil {
-		return err
+		return fmt.Errorf(ErrFmtBLAKE3, ErrFoundationContract)
 	}
 	if value == "" {
 		*h = BLAKE3Hex{}
@@ -175,7 +175,7 @@ func (h Ed25519PublicKeyHex) MarshalJSON() ([]byte, error) {
 func (h *Ed25519PublicKeyHex) UnmarshalJSON(data []byte) error {
 	var value string
 	if err := json.Unmarshal(data, &value); err != nil {
-		return err
+		return fmt.Errorf(ErrFmtEd25519PublicKey, ErrFoundationContract)
 	}
 	if value == "" {
 		*h = Ed25519PublicKeyHex{}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -94,6 +95,7 @@ type Client[P CheckInPayload, B Body] struct {
 	Jitter   func() float64
 	Endpoint CheckInEndpoint
 	APIKey   APICallKey
+	Backoff  core.BackoffPolicy
 }
 
 func (c Client[P, B]) Validate() error {
@@ -104,7 +106,14 @@ func (c Client[P, B]) Validate() error {
 		return err
 	}
 	if !c.APIKey.IsZero() {
-		return c.APIKey.Validate()
+		if err := c.APIKey.Validate(); err != nil {
+			return err
+		}
+	}
+	if c.Backoff != (core.BackoffPolicy{}) {
+		if err := c.Backoff.Validate(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -120,13 +129,13 @@ func (c Client[P, B]) Do(ctx context.Context, in P) (CheckInResponse[B], error) 
 	defer cancel()
 	body, err := json.Marshal(in)
 	if err != nil {
-		return CheckInResponse[B]{}, fmt.Errorf(ErrFmtCheckInTransport, err)
+		return CheckInResponse[B]{}, transportError(err)
 	}
 	return c.roundTrip(ctx, body)
 }
 
 func (c Client[P, B]) roundTrip(ctx context.Context, body []byte) (CheckInResponse[B], error) {
-	policy := CheckInBackoff
+	policy := c.backoffPolicy()
 	var lastErr error
 	var retryAfter time.Duration
 	var retryAfterHint time.Duration
@@ -137,7 +146,7 @@ func (c Client[P, B]) roundTrip(ctx context.Context, body []byte) (CheckInRespon
 				return CheckInResponse[B]{}, transportError(err)
 			}
 		}
-		result := c.attempt(ctx, body)
+		result := c.attempt(ctx, body, policy.Max)
 		retryAfter = result.RetryAfter
 		retryAfterHint = maxDuration(retryAfterHint, result.RetryAfterHint)
 		switch result.Outcome {
@@ -166,7 +175,7 @@ type attemptResult[B Body] struct {
 	Outcome        core.HTTPOutcome
 }
 
-func (c Client[P, B]) attempt(ctx context.Context, body []byte) attemptResult[B] {
+func (c Client[P, B]) attempt(ctx context.Context, body []byte, maxRetryAfterWait time.Duration) attemptResult[B] {
 	request, err := c.buildRequest(ctx, body)
 	if err != nil {
 		return attemptResult[B]{Outcome: core.HTTPOutcomeTerminal, Err: err}
@@ -184,7 +193,7 @@ func (c Client[P, B]) attempt(ctx context.Context, body []byte) attemptResult[B]
 	defer func() { _ = reply.Body.Close() }()
 	outcome := core.ClassifyHTTPStatus(reply.StatusCode)
 	if outcome != core.HTTPOutcomeSuccess {
-		retryAfter := parseRetryAfter(reply.Header.Get(core.HTTPHeaderRetryAfter), time.Now().UTC())
+		retryAfter := parseRetryAfter(reply.Header.Get(core.HTTPHeaderRetryAfter), time.Now().UTC(), maxRetryAfterWait)
 		err = readFailureResponse[B](reply, reply.StatusCode, retryAfter.Hint)
 		return attemptResult[B]{
 			Outcome:        outcome,
@@ -272,6 +281,13 @@ func (c Client[P, B]) jitterFraction() float64 {
 	return conservativeJitterFraction(float64(binary.BigEndian.Uint64(raw[:])>>11) / float64(uint64(1)<<53))
 }
 
+func (c Client[P, B]) backoffPolicy() core.BackoffPolicy {
+	if c.Backoff == (core.BackoffPolicy{}) {
+		return CheckInBackoff
+	}
+	return c.Backoff
+}
+
 func conservativeJitterFraction(value float64) float64 {
 	if !(value > 0) {
 		return 1
@@ -283,7 +299,7 @@ func conservativeJitterFraction(value float64) float64 {
 }
 
 func transportError(err error) error {
-	return fmt.Errorf(ErrFmtCheckInTransport, err)
+	return fmt.Errorf(ErrFmtCheckInTransport, errors.Join(core.ErrLicenseContract, err))
 }
 
 func maxDuration(a, b time.Duration) time.Duration {
@@ -317,40 +333,40 @@ type retryAfterDecision struct {
 	Hint time.Duration
 }
 
-func parseRetryAfter(header string, now time.Time) retryAfterDecision {
+func parseRetryAfter(header string, now time.Time, maxWait time.Duration) retryAfterDecision {
 	header = strings.TrimSpace(header)
 	if header == "" {
 		return retryAfterDecision{}
 	}
 	if seconds, err := strconv.ParseInt(header, 10, 64); err == nil {
-		return retryAfterSeconds(seconds)
+		return retryAfterSeconds(seconds, maxWait)
 	}
 	if _, err := strconv.ParseUint(header, 10, 64); err == nil {
-		return retryAfterDecision{Wait: CheckInBackoff.Max, Hint: CheckInMaxRetryAfter}
+		return retryAfterDecision{Wait: maxWait, Hint: CheckInMaxRetryAfter}
 	}
 	when, err := http.ParseTime(header)
 	if err != nil || !when.After(now) {
 		return retryAfterDecision{}
 	}
-	return clampRetryAfter(when.Sub(now))
+	return clampRetryAfter(when.Sub(now), maxWait)
 }
 
-func clampRetryAfter(d time.Duration) retryAfterDecision {
+func clampRetryAfter(d time.Duration, maxWait time.Duration) retryAfterDecision {
 	if d > CheckInMaxRetryAfter {
 		d = CheckInMaxRetryAfter
 	}
-	return retryAfterDecision{Wait: minDuration(d, CheckInBackoff.Max), Hint: d}
+	return retryAfterDecision{Wait: minDuration(d, maxWait), Hint: d}
 }
 
-func retryAfterSeconds(seconds int64) retryAfterDecision {
+func retryAfterSeconds(seconds int64, maxWait time.Duration) retryAfterDecision {
 	if seconds <= 0 {
 		return retryAfterDecision{}
 	}
 	if seconds > int64(CheckInMaxRetryAfter/time.Second) {
-		return retryAfterDecision{Wait: CheckInBackoff.Max, Hint: CheckInMaxRetryAfter}
+		return retryAfterDecision{Wait: maxWait, Hint: CheckInMaxRetryAfter}
 	}
 	d := time.Duration(seconds) * time.Second
-	return retryAfterDecision{Wait: minDuration(d, CheckInBackoff.Max), Hint: d}
+	return retryAfterDecision{Wait: minDuration(d, maxWait), Hint: d}
 }
 
 func minDuration(a, b time.Duration) time.Duration {

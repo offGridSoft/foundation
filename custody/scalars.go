@@ -1,8 +1,8 @@
 package custody
 
 import (
+	"errors"
 	"fmt"
-	"net/url"
 	"strings"
 
 	"encoding/json"
@@ -10,14 +10,8 @@ import (
 )
 
 const (
-	SchemaSessionOpenRequest   = "witness-custody-session-open-v1"
-	SchemaSessionOpenResponse  = "witness-custody-session-targets-v1"
-	SchemaFinalizeRequest      = "witness-custody-finalize-v1"
-	SchemaReceipt              = "witness-custody-receipt-v1"
 	ULIDTextLen                = 26
 	ULIDUpperCrockfordAlphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
-	ArtifactNameMaxRunes       = 256
-	ObjectPathMaxRunes         = 1024
 )
 
 type CustomerID struct {
@@ -121,10 +115,7 @@ type ArtifactName struct {
 }
 
 func ParseArtifactName(value string) (ArtifactName, error) {
-	if err := core.ValidateOpaqueToken(value, ArtifactNameMaxRunes); err != nil {
-		return ArtifactName{}, fmt.Errorf(ErrFmtArtifactName, core.ErrCustodyContract)
-	}
-	if strings.ContainsAny(value, `/\`) {
+	if err := core.ValidateFileNameToken(value, core.FileNameTokenMaxRunes); err != nil {
 		return ArtifactName{}, fmt.Errorf(ErrFmtArtifactName, core.ErrCustodyContract)
 	}
 	return ArtifactName{value: value}, nil
@@ -164,16 +155,8 @@ type ObjectPath struct {
 }
 
 func ParseObjectPath(value string) (ObjectPath, error) {
-	if err := core.ValidateOpaqueToken(value, ObjectPathMaxRunes); err != nil {
+	if err := core.ValidatePathToken(value, core.PathTokenMaxRunes); err != nil {
 		return ObjectPath{}, fmt.Errorf(ErrFmtObjectPath, core.ErrCustodyContract)
-	}
-	if strings.HasPrefix(value, "/") || strings.Contains(value, `\`) {
-		return ObjectPath{}, fmt.Errorf(ErrFmtObjectPath, core.ErrCustodyContract)
-	}
-	for segment := range strings.SplitSeq(value, "/") {
-		if segment == "" || segment == "." || segment == ".." {
-			return ObjectPath{}, fmt.Errorf(ErrFmtObjectPath, core.ErrCustodyContract)
-		}
 	}
 	return ObjectPath{value: value}, nil
 }
@@ -212,12 +195,12 @@ type SignedUploadURL struct {
 }
 
 func ParseSignedUploadURL(value string) (SignedUploadURL, error) {
-	parsed, err := url.Parse(value)
-	if err != nil {
-		return SignedUploadURL{}, fmt.Errorf(ErrFmtSignedURL, err)
-	}
-	if parsed.Scheme != "https" || parsed.Host == "" {
-		return SignedUploadURL{}, fmt.Errorf(ErrFmtSignedURL, core.ErrCustodyContract)
+	if err := core.ValidateHTTPSURL(value, core.HTTPSURLPolicy{
+		MaxRunes:    core.HTTPSURLDefaultMaxRunes,
+		RequirePath: true,
+		AllowQuery:  true,
+	}); err != nil {
+		return SignedUploadURL{}, fmt.Errorf(ErrFmtSignedURL, errors.Join(core.ErrCustodyContract, err))
 	}
 	return SignedUploadURL{value: value}, nil
 }
@@ -253,7 +236,7 @@ func (u *SignedUploadURL) UnmarshalJSON(data []byte) error {
 
 type ReleaseIdentity struct {
 	Version     core.ProductVersion `json:"version"`
-	Commit      BuildCommit         `json:"commit"`
+	Commit      core.BuildCommit    `json:"commit"`
 	ManifestSHA core.SHA256Hex      `json:"tool_manifest_sha"`
 }
 
@@ -268,53 +251,6 @@ func (r ReleaseIdentity) Validate() error {
 		return fmt.Errorf(ErrFmtRelease, err)
 	}
 	return nil
-}
-
-type BuildCommit struct {
-	value string
-}
-
-func ParseBuildCommit(value string) (BuildCommit, error) {
-	if !validBuildCommitHex(value) {
-		return BuildCommit{}, fmt.Errorf(ErrFmtRelease, core.ErrCustodyContract)
-	}
-	return BuildCommit{value: value}, nil
-}
-
-func (c BuildCommit) String() string {
-	return c.value
-}
-
-func (c BuildCommit) Validate() error {
-	_, err := ParseBuildCommit(c.value)
-	return err
-}
-
-func (c BuildCommit) MarshalJSON() ([]byte, error) {
-	if err := c.Validate(); err != nil {
-		return nil, err
-	}
-	return json.Marshal(c.value)
-}
-
-func (c *BuildCommit) UnmarshalJSON(data []byte) error {
-	var value string
-	if err := json.Unmarshal(data, &value); err != nil {
-		return fmt.Errorf(ErrFmtRelease, core.ErrCustodyContract)
-	}
-	parsed, err := ParseBuildCommit(value)
-	if err != nil {
-		return err
-	}
-	*c = parsed
-	return nil
-}
-
-func validBuildCommitHex(value string) bool {
-	if len(value) != 40 && len(value) != 64 {
-		return false
-	}
-	return core.IsLowerHex(value)
 }
 
 type OpenLeaseRef struct {

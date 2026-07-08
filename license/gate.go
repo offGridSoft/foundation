@@ -36,11 +36,27 @@ func (o GateOutcome) IsValid() bool {
 	return o > gateOutcomeInvalid && int(o) < len(gateOutcomeNames) && gateOutcomeNames[o] != ""
 }
 
-func (o GateOutcome) MarshalJSON() ([]byte, error) {
+func (o GateOutcome) Validate() error {
 	if !o.IsValid() {
-		return nil, fmt.Errorf(ErrFmtGateOutcome, core.ErrLicenseContract)
+		return fmt.Errorf(ErrFmtGateOutcome, core.ErrLicenseContract)
+	}
+	return nil
+}
+
+func (o GateOutcome) MarshalJSON() ([]byte, error) {
+	if err := o.Validate(); err != nil {
+		return nil, err
 	}
 	return json.Marshal(o.String())
+}
+
+func ParseGateOutcome(token string) (GateOutcome, error) {
+	for outcome := GateAllow; int(outcome) < len(gateOutcomeNames); outcome++ {
+		if gateOutcomeNames[outcome] == token {
+			return outcome, nil
+		}
+	}
+	return gateOutcomeInvalid, fmt.Errorf(ErrFmtGateOutcome, core.ErrLicenseContract)
 }
 
 func (o *GateOutcome) UnmarshalJSON(data []byte) error {
@@ -48,13 +64,12 @@ func (o *GateOutcome) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &token); err != nil {
 		return fmt.Errorf(ErrFmtGateOutcome, core.ErrLicenseContract)
 	}
-	for outcome := GateAllow; int(outcome) < len(gateOutcomeNames); outcome++ {
-		if gateOutcomeNames[outcome] == token {
-			*o = outcome
-			return nil
-		}
+	parsed, err := ParseGateOutcome(token)
+	if err != nil {
+		return err
 	}
-	return fmt.Errorf(ErrFmtGateOutcome, core.ErrLicenseContract)
+	*o = parsed
+	return nil
 }
 
 func (o GateOutcome) Writable() bool {
@@ -103,18 +118,26 @@ func (t LeaseTrust) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.String())
 }
 
+func ParseLeaseTrust(token string) (LeaseTrust, error) {
+	for trust := LeaseTrustUntrusted; int(trust) < len(leaseTrustNames); trust++ {
+		if leaseTrustNames[trust] == token {
+			return trust, nil
+		}
+	}
+	return leaseTrustInvalid, fmt.Errorf(ErrFmtLeaseTrust, core.ErrLicenseContract)
+}
+
 func (t *LeaseTrust) UnmarshalJSON(data []byte) error {
 	var token string
 	if err := json.Unmarshal(data, &token); err != nil {
 		return fmt.Errorf(ErrFmtLeaseTrust, core.ErrLicenseContract)
 	}
-	for trust := LeaseTrustUntrusted; int(trust) < len(leaseTrustNames); trust++ {
-		if leaseTrustNames[trust] == token {
-			*t = trust
-			return nil
-		}
+	parsed, err := ParseLeaseTrust(token)
+	if err != nil {
+		return err
 	}
-	return fmt.Errorf(ErrFmtLeaseTrust, core.ErrLicenseContract)
+	*t = parsed
+	return nil
 }
 
 type GateInput[B Body] struct {
@@ -249,16 +272,24 @@ func (r GateReason) MarshalJSON() ([]byte, error) {
 	return json.Marshal(r.String())
 }
 
+func ParseGateReason(token string) (GateReason, error) {
+	for reason := GateReasonDisarmed; int(reason) < len(gateReasonNames); reason++ {
+		if gateReasonNames[reason] == token {
+			return reason, nil
+		}
+	}
+	return gateReasonInvalid, fmt.Errorf(ErrFmtGateReason, core.ErrLicenseContract)
+}
+
 func (r *GateReason) UnmarshalJSON(data []byte) error {
 	var token string
 	if err := json.Unmarshal(data, &token); err != nil {
 		return fmt.Errorf(ErrFmtGateReason, core.ErrLicenseContract)
 	}
-	for reason := GateReasonDisarmed; int(reason) < len(gateReasonNames); reason++ {
-		if gateReasonNames[reason] == token {
-			*r = reason
-			return nil
-		}
+	parsed, err := ParseGateReason(token)
+	if err != nil {
+		return err
 	}
-	return fmt.Errorf(ErrFmtGateReason, core.ErrLicenseContract)
+	*r = parsed
+	return nil
 }

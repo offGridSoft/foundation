@@ -17,9 +17,8 @@ type Body interface {
 	CheckInBy() core.UnixNanoTime
 }
 
-// Field order is signature-load-bearing: Canonical uses Go struct field order.
+// Field order is storage-only; MarshalJSON owns the signature-load-bearing order.
 type SeatLeaseBody struct {
-	Schema             string                   `json:"schema"`
 	DeveloperKeyID     DeveloperKeyID           `json:"developer_key_id"`
 	DeviceFingerprint  core.DeviceFingerprint   `json:"device_fingerprint"`
 	IssuedAt           core.UnixNanoTime        `json:"issued_at"`
@@ -27,11 +26,12 @@ type SeatLeaseBody struct {
 	CheckInAfterAt     core.UnixNanoTime        `json:"check_in_after"`
 	CheckInByAt        core.UnixNanoTime        `json:"check_in_by"`
 	WriteGraceDuration core.NanosecondsDuration `json:"write_grace_ns"`
+	Schema             core.SchemaID            `json:"schema"`
 	Plan               SeatPlan                 `json:"plan"`
 }
 
 func (b SeatLeaseBody) Validate() error {
-	if b.Schema != SchemaBugSeatLease {
+	if b.Schema != core.SchemaBugSeatLease {
 		return fmt.Errorf(ErrFmtSchema, core.ErrLicenseContract)
 	}
 	if err := b.Plan.Validate(); err != nil {
@@ -59,10 +59,14 @@ func (b SeatLeaseBody) Validate() error {
 }
 
 func (b SeatLeaseBody) Canonical(dst []byte) ([]byte, error) {
+	return core.AppendCanonicalJSON(dst, b)
+}
+
+func (b SeatLeaseBody) MarshalJSON() ([]byte, error) {
 	if err := b.Validate(); err != nil {
 		return nil, err
 	}
-	return core.AppendCanonicalJSON(dst, b)
+	return appendSeatLeaseBodyJSON(nil, b)
 }
 
 func (b SeatLeaseBody) ExpiresAt() core.UnixNanoTime {
@@ -91,19 +95,19 @@ func validCheckInWindow[B Body](b B) bool {
 	return !b.CheckInBy().After(b.ExpiresAt())
 }
 
-// Field order is signature-load-bearing: Canonical uses Go struct field order.
+// Field order is storage-only; MarshalJSON owns the signature-load-bearing order.
 type SubscriptionLeaseBody struct {
-	Schema         string            `json:"schema"`
 	PaidUntil      core.UnixNanoTime `json:"paid_until"`
 	TokenExpiresAt core.UnixNanoTime `json:"lease_not_after"`
 	CheckInAfterAt core.UnixNanoTime `json:"check_in_after"`
 	CheckInByAt    core.UnixNanoTime `json:"check_in_by"`
+	Schema         core.SchemaID     `json:"schema"`
 	Plan           SubscriptionPlan  `json:"plan"`
 	BillingPeriod  BillingPeriod     `json:"billing_period"`
 }
 
 func (b SubscriptionLeaseBody) Validate() error {
-	if b.Schema != SchemaWitnessSubscription {
+	if b.Schema != core.SchemaWitnessSubscription {
 		return fmt.Errorf(ErrFmtSchema, core.ErrLicenseContract)
 	}
 	if err := b.Plan.Validate(); err != nil {
@@ -122,10 +126,48 @@ func (b SubscriptionLeaseBody) Validate() error {
 }
 
 func (b SubscriptionLeaseBody) Canonical(dst []byte) ([]byte, error) {
+	return core.AppendCanonicalJSON(dst, b)
+}
+
+func (b SubscriptionLeaseBody) MarshalJSON() ([]byte, error) {
 	if err := b.Validate(); err != nil {
 		return nil, err
 	}
-	return core.AppendCanonicalJSON(dst, b)
+	return appendSubscriptionLeaseBodyJSON(nil, b)
+}
+
+func appendSeatLeaseBodyJSON(dst []byte, b SeatLeaseBody) ([]byte, error) {
+	dst = append(dst, '{')
+	var err error
+	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, b.Schema)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, "developer_key_id", b.DeveloperKeyID)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, "device_fingerprint", b.DeviceFingerprint)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, "issued_at", b.IssuedAt)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, "expires_at", b.TokenExpiresAt)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, "check_in_after", b.CheckInAfterAt)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, "check_in_by", b.CheckInByAt)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, "write_grace_ns", b.WriteGraceDuration)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, "plan", b.Plan)
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, '}'), nil
+}
+
+func appendSubscriptionLeaseBodyJSON(dst []byte, b SubscriptionLeaseBody) ([]byte, error) {
+	dst = append(dst, '{')
+	var err error
+	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, b.Schema)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, "paid_until", b.PaidUntil)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, "lease_not_after", b.TokenExpiresAt)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, "check_in_after", b.CheckInAfterAt)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, "check_in_by", b.CheckInByAt)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, "plan", b.Plan)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, "billing_period", b.BillingPeriod)
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, '}'), nil
 }
 
 func (b SubscriptionLeaseBody) ExpiresAt() core.UnixNanoTime {
@@ -172,11 +214,27 @@ func (s LeaseState) IsValid() bool {
 	return s > leaseStateInvalid && int(s) < len(leaseStateNames) && leaseStateNames[s] != ""
 }
 
-func (s LeaseState) MarshalJSON() ([]byte, error) {
+func (s LeaseState) Validate() error {
 	if !s.IsValid() {
-		return nil, fmt.Errorf(ErrFmtGateState, core.ErrLicenseContract)
+		return fmt.Errorf(ErrFmtGateState, core.ErrLicenseContract)
+	}
+	return nil
+}
+
+func (s LeaseState) MarshalJSON() ([]byte, error) {
+	if err := s.Validate(); err != nil {
+		return nil, err
 	}
 	return json.Marshal(s.String())
+}
+
+func ParseLeaseState(token string) (LeaseState, error) {
+	for state := LeaseValid; int(state) < len(leaseStateNames); state++ {
+		if leaseStateNames[state] == token {
+			return state, nil
+		}
+	}
+	return leaseStateInvalid, fmt.Errorf(ErrFmtGateState, core.ErrLicenseContract)
 }
 
 func (s *LeaseState) UnmarshalJSON(data []byte) error {
@@ -184,13 +242,12 @@ func (s *LeaseState) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &token); err != nil {
 		return fmt.Errorf(ErrFmtGateState, core.ErrLicenseContract)
 	}
-	for state := LeaseValid; int(state) < len(leaseStateNames); state++ {
-		if leaseStateNames[state] == token {
-			*s = state
-			return nil
-		}
+	parsed, err := ParseLeaseState(token)
+	if err != nil {
+		return err
 	}
-	return fmt.Errorf(ErrFmtGateState, core.ErrLicenseContract)
+	*s = parsed
+	return nil
 }
 
 func (s LeaseState) Writable() bool {

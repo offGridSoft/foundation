@@ -41,7 +41,7 @@ func TestSeatLeaseCanonicalWireForm(t *testing.T) {
 		TokenExpiresAt:     testTime(1784894400000000000),
 		CheckInAfterAt:     testTime(1783252800000000000),
 		CheckInByAt:        testTime(1784030400000000000),
-		Schema:             SchemaBugSeatLease,
+		Schema:             core.SchemaBugSeatLease,
 		DeveloperKeyID:     testDeveloperKeyID(t),
 		DeviceFingerprint:  testDeviceFingerprint(t),
 		WriteGraceDuration: core.NewNanosecondsDuration(72 * time.Hour),
@@ -69,7 +69,7 @@ func TestSubscriptionLeaseCanonicalWireForm(t *testing.T) {
 		TokenExpiresAt: testTime(1784030400000000000),
 		CheckInAfterAt: testTime(1783252800000000000),
 		CheckInByAt:    testTime(1784030400000000000),
-		Schema:         SchemaWitnessSubscription,
+		Schema:         core.SchemaWitnessSubscription,
 		Plan:           SubscriptionPlanSilver,
 		BillingPeriod:  BillingPeriodMonthly,
 	}
@@ -83,6 +83,56 @@ func TestSubscriptionLeaseCanonicalWireForm(t *testing.T) {
 		`"check_in_by":1784030400000000000,"plan":"silver","billing_period":"monthly"}`
 	if string(got) != want {
 		t.Fatalf("canonical subscription lease\n got: %s\nwant: %s", got, want)
+	}
+}
+
+func TestLeaseCanonicalRoundTripTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		run  func(*testing.T)
+		name string
+	}{
+		{name: "seat lease", run: func(t *testing.T) {
+			t.Helper()
+			original, err := testSeatLeaseBody(t).Canonical(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			decoded, err := core.DecodeStrictJSON[SeatLeaseBody](original)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := decoded.Canonical(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != string(original) {
+				t.Fatalf("seat lease canonical round trip\n got: %s\nwant: %s", got, original)
+			}
+		}},
+		{name: "subscription lease", run: func(t *testing.T) {
+			t.Helper()
+			original, err := testSubscriptionLeaseBody().Canonical(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			decoded, err := core.DecodeStrictJSON[SubscriptionLeaseBody](original)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := decoded.Canonical(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != string(original) {
+				t.Fatalf("subscription lease canonical round trip\n got: %s\nwant: %s", got, original)
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tc.run(t)
+		})
 	}
 }
 
@@ -136,7 +186,7 @@ func TestLeaseBodySchemaMutationRejectsSignedLease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body.Schema = SchemaWitnessSubscription
+	body.Schema = core.SchemaWitnessSubscription
 	signed := core.Signed[SeatLeaseBody]{
 		KeyID:     keyID,
 		Signature: ed25519.Sign(private, message),
@@ -145,6 +195,57 @@ func TestLeaseBodySchemaMutationRejectsSignedLease(t *testing.T) {
 	keyring := core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
 	if err := signed.Verify(keyring); !errors.Is(err, core.ErrLicenseContract) {
 		t.Fatalf("Verify schema mutation error = %v, want ErrLicenseContract", err)
+	}
+}
+
+func TestSeatLeaseBodyWindowHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		mutate func(*SeatLeaseBody)
+		name   string
+	}{
+		{name: "zero issued", mutate: func(b *SeatLeaseBody) { b.IssuedAt = core.UnixNanoTime{} }},
+		{name: "expires at issued", mutate: func(b *SeatLeaseBody) { b.TokenExpiresAt = b.IssuedAt }},
+		{name: "check-in before issued", mutate: func(b *SeatLeaseBody) { b.CheckInAfterAt = b.IssuedAt.Add(-time.Nanosecond) }},
+		{name: "check-in after by", mutate: func(b *SeatLeaseBody) { b.CheckInAfterAt = b.CheckInByAt.Add(time.Nanosecond) }},
+		{name: "check-in by after expiry", mutate: func(b *SeatLeaseBody) { b.CheckInByAt = b.TokenExpiresAt.Add(time.Nanosecond) }},
+		{name: "negative write grace", mutate: func(b *SeatLeaseBody) {
+			b.WriteGraceDuration = core.NanosecondsDurationFromInt64(-1)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			body := testSeatLeaseBody(t)
+			tc.mutate(&body)
+			if err := body.Validate(); !errors.Is(err, core.ErrLicenseContract) {
+				t.Fatalf("SeatLeaseBody.Validate() error = %v, want ErrLicenseContract", err)
+			}
+		})
+	}
+}
+
+func TestSubscriptionLeaseBodyWindowHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		mutate func(*SubscriptionLeaseBody)
+		name   string
+	}{
+		{name: "zero paid until", mutate: func(b *SubscriptionLeaseBody) { b.PaidUntil = core.UnixNanoTime{} }},
+		{name: "zero token expiry", mutate: func(b *SubscriptionLeaseBody) { b.TokenExpiresAt = core.UnixNanoTime{} }},
+		{name: "missing check-in after", mutate: func(b *SubscriptionLeaseBody) { b.CheckInAfterAt = core.UnixNanoTime{} }},
+		{name: "check-in after by", mutate: func(b *SubscriptionLeaseBody) { b.CheckInAfterAt = b.CheckInByAt.Add(time.Nanosecond) }},
+		{name: "check-in by after expiry", mutate: func(b *SubscriptionLeaseBody) {
+			b.CheckInByAt = b.TokenExpiresAt.Add(time.Nanosecond)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			body := testSubscriptionLeaseBody()
+			tc.mutate(&body)
+			if err := body.Validate(); !errors.Is(err, core.ErrLicenseContract) {
+				t.Fatalf("SubscriptionLeaseBody.Validate() error = %v, want ErrLicenseContract", err)
+			}
+		})
 	}
 }
 
@@ -165,7 +266,7 @@ func testSubscriptionLeaseBody() SubscriptionLeaseBody {
 		TokenExpiresAt: testTime(1784030400000000000),
 		CheckInAfterAt: testTime(1783252800000000000),
 		CheckInByAt:    testTime(1784030400000000000),
-		Schema:         SchemaWitnessSubscription,
+		Schema:         core.SchemaWitnessSubscription,
 		Plan:           SubscriptionPlanSilver,
 		BillingPeriod:  BillingPeriodMonthly,
 	}

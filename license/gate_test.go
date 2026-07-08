@@ -167,6 +167,13 @@ func TestLeaseTrustContract(t *testing.T) {
 	if err := LeaseTrustTrusted.Validate(); err != nil {
 		t.Fatal(err)
 	}
+	if err := leaseTrustInvalid.Validate(); !errors.Is(err, core.ErrLicenseContract) {
+		t.Fatalf("LeaseTrust invalid error = %v, want ErrLicenseContract", err)
+	}
+}
+
+func TestLeaseTrustJSONRoundTrip(t *testing.T) {
+	t.Parallel()
 	data, err := LeaseTrustTrusted.MarshalJSON()
 	if err != nil {
 		t.Fatal(err)
@@ -178,9 +185,6 @@ func TestLeaseTrustContract(t *testing.T) {
 	if roundTrip != LeaseTrustTrusted {
 		t.Fatalf("LeaseTrust roundTrip = %s, want %s", roundTrip, LeaseTrustTrusted)
 	}
-	if err := leaseTrustInvalid.Validate(); !errors.Is(err, core.ErrLicenseContract) {
-		t.Fatalf("LeaseTrust invalid error = %v, want ErrLicenseContract", err)
-	}
 }
 
 func gateLease(now core.UnixNanoTime) SeatLeaseBody {
@@ -189,7 +193,7 @@ func gateLease(now core.UnixNanoTime) SeatLeaseBody {
 		TokenExpiresAt:     now.Add(30 * 24 * time.Hour),
 		CheckInAfterAt:     now,
 		CheckInByAt:        now.Add(29 * 24 * time.Hour),
-		Schema:             SchemaBugSeatLease,
+		Schema:             core.SchemaBugSeatLease,
 		DeveloperKeyID:     mustDeveloperKeyID(),
 		DeviceFingerprint:  mustDeviceFingerprint(),
 		WriteGraceDuration: core.NewNanosecondsDuration(72 * time.Hour),

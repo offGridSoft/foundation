@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 )
 
 func DecodeStrictJSON[T any](data []byte) (T, error) {
@@ -39,7 +38,7 @@ const (
 )
 
 type strictJSONContainer struct {
-	keys      []string
+	keys      map[string]struct{}
 	kind      strictJSONContainerKind
 	expectKey bool
 }
@@ -96,7 +95,11 @@ func scanStrictJSONToken(stack []strictJSONContainer, token json.Token) ([]stric
 func scanStrictJSONDelim(stack []strictJSONContainer, delim json.Delim) ([]strictJSONContainer, error) {
 	switch delim {
 	case '{':
-		return append(stack, strictJSONContainer{kind: strictJSONContainerObject, expectKey: true}), nil
+		return append(stack, strictJSONContainer{
+			keys:      make(map[string]struct{}),
+			kind:      strictJSONContainerObject,
+			expectKey: true,
+		}), nil
 	case '[':
 		return append(stack, strictJSONContainer{kind: strictJSONContainerArray}), nil
 	case '}', ']':
@@ -114,10 +117,10 @@ func scanStrictJSONKey(stack []strictJSONContainer, key string) ([]strictJSONCon
 		return nil, fmt.Errorf(ErrFmtJSONUnexpectedField, ErrJSONContract)
 	}
 	top := &stack[len(stack)-1]
-	if slices.Contains(top.keys, key) {
+	if _, exists := top.keys[key]; exists {
 		return nil, fmt.Errorf(ErrFmtJSONDuplicateField, ErrJSONContract)
 	}
-	top.keys = append(top.keys, key)
+	top.keys[key] = struct{}{}
 	top.expectKey = false
 	return stack, nil
 }

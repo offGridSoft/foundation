@@ -206,6 +206,78 @@ func TestSHA256HexHostileTable(t *testing.T) {
 	}
 }
 
+func TestBuildCommitHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{name: "git sha1 accepted", value: strings.Repeat("a", 40)},
+		{name: "git sha256 accepted", value: strings.Repeat("b", 64)},
+		{name: "short rejected", value: strings.Repeat("a", 39), wantErr: true},
+		{name: "upper rejected", value: strings.Repeat("A", 40), wantErr: true},
+		{name: "non hex rejected", value: strings.Repeat("g", 40), wantErr: true},
+		{name: "empty rejected", value: "", wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := ParseBuildCommit(tc.value)
+			if tc.wantErr {
+				if !errors.Is(err, ErrFoundationContract) {
+					t.Fatalf("ParseBuildCommit() error = %v, want ErrFoundationContract", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestStorageTransferEnumsHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		run  func(*testing.T)
+		name string
+	}{
+		{name: "storage provider gcs wire token", run: func(t *testing.T) {
+			requireEnumJSON(t, StorageProviderGCS, storageProviderTokenGCS)
+		}},
+		{name: "storage provider unknown rejects", run: func(t *testing.T) {
+			if _, err := StorageProviderUnknown.MarshalJSON(); !errors.Is(err, ErrFoundationContract) {
+				t.Fatalf("StorageProviderUnknown.MarshalJSON() error = %v, want ErrFoundationContract", err)
+			}
+		}},
+		{name: "upload method signed put wire token", run: func(t *testing.T) {
+			requireEnumJSON(t, UploadMethodSignedPUT, uploadMethodTokenSignedPUT)
+		}},
+		{name: "upload method unknown rejects", run: func(t *testing.T) {
+			if _, err := UploadMethodUnknown.MarshalJSON(); !errors.Is(err, ErrFoundationContract) {
+				t.Fatalf("UploadMethodUnknown.MarshalJSON() error = %v, want ErrFoundationContract", err)
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tc.run(t)
+		})
+	}
+}
+
+func requireEnumJSON[T json.Marshaler](t *testing.T, value T, token string) {
+	t.Helper()
+	data, err := value.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `"` + token + `"`
+	if string(data) != want {
+		t.Fatalf("MarshalJSON() = %s, want %s", data, want)
+	}
+}
+
 func TestHTTPContractsHostileTable(t *testing.T) {
 	t.Parallel()
 	for _, outcome := range []HTTPOutcome{HTTPOutcomeSuccess, HTTPOutcomeRetryable, HTTPOutcomeTerminal} {
@@ -337,6 +409,34 @@ func TestBLAKE3HexHostileTable(t *testing.T) {
 			}
 			if err != nil {
 				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestCryptoHexNonStringJSONWrapsFoundationContract(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		run  func() error
+		name string
+	}{
+		{name: "sha256 number", run: func() error {
+			var value SHA256Hex
+			return value.UnmarshalJSON([]byte(`1`))
+		}},
+		{name: "blake3 object", run: func() error {
+			var value BLAKE3Hex
+			return value.UnmarshalJSON([]byte(`{}`))
+		}},
+		{name: "ed25519 bool", run: func() error {
+			var value Ed25519PublicKeyHex
+			return value.UnmarshalJSON([]byte(`true`))
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if err := tc.run(); !errors.Is(err, ErrFoundationContract) {
+				t.Fatalf("%s error = %v, want ErrFoundationContract", tc.name, err)
 			}
 		})
 	}

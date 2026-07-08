@@ -3,6 +3,7 @@ package core
 import (
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 const OpaqueTokenDefaultMaxRunes = 128
@@ -14,7 +15,7 @@ func ValidateOpaqueToken(value string, maxRunes int) error {
 	if value == "" || strings.TrimSpace(value) != value {
 		return ErrFoundationContract
 	}
-	if len([]rune(value)) > maxRunes {
+	if utf8.RuneCountInString(value) > maxRunes {
 		return ErrFoundationContract
 	}
 	for _, r := range value {

@@ -2,6 +2,8 @@ package core
 
 import (
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 	"unicode"
 
@@ -9,10 +11,59 @@ import (
 )
 
 const (
-	HTTPHeaderContentType = "Content-Type"
-	HTTPHeaderRetryAfter  = "Retry-After"
-	HTTPContentTypeJSON   = "application/json"
+	HTTPHeaderContentType   = "Content-Type"
+	HTTPHeaderRetryAfter    = "Retry-After"
+	HTTPContentTypeJSON     = "application/json"
+	URLSchemeHTTPS          = "https"
+	HTTPSURLDefaultMaxRunes = 2048
 )
+
+type HTTPSURLPolicy struct {
+	MaxRunes      int
+	RequirePath   bool
+	AllowQuery    bool
+	AllowFragment bool
+}
+
+func ValidateHTTPSURL(value string, policy HTTPSURLPolicy) error {
+	if err := validateURLLength(value, policy.MaxRunes); err != nil {
+		return err
+	}
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return fmt.Errorf(ErrFmtHTTPSURL, ErrFoundationContract)
+	}
+	return validateHTTPSURLParts(parsed, policy)
+}
+
+func validateURLLength(value string, maxRunes int) error {
+	if maxRunes < 1 {
+		return fmt.Errorf(ErrFmtHTTPSURL, ErrFoundationContract)
+	}
+	if err := ValidateOpaqueToken(value, maxRunes); err != nil {
+		return fmt.Errorf(ErrFmtHTTPSURL, ErrFoundationContract)
+	}
+	return nil
+}
+
+func validateHTTPSURLParts(parsed *url.URL, policy HTTPSURLPolicy) error {
+	if parsed.Scheme != URLSchemeHTTPS || parsed.Host == "" {
+		return fmt.Errorf(ErrFmtHTTPSURL, ErrFoundationContract)
+	}
+	if parsed.User != nil {
+		return fmt.Errorf(ErrFmtHTTPSURL, ErrFoundationContract)
+	}
+	if policy.RequirePath && strings.TrimSpace(parsed.Path) == "" {
+		return fmt.Errorf(ErrFmtHTTPSURL, ErrFoundationContract)
+	}
+	if !policy.AllowQuery && parsed.RawQuery != "" {
+		return fmt.Errorf(ErrFmtHTTPSURL, ErrFoundationContract)
+	}
+	if !policy.AllowFragment && parsed.Fragment != "" {
+		return fmt.Errorf(ErrFmtHTTPSURL, ErrFoundationContract)
+	}
+	return nil
+}
 
 func ValidateHTTPHeaderName(value string) error {
 	if value == "" {
@@ -83,11 +134,27 @@ func (o HTTPOutcome) IsValid() bool {
 	return o > httpOutcomeInvalid && int(o) < len(httpOutcomeNames) && httpOutcomeNames[o] != ""
 }
 
-func (o HTTPOutcome) MarshalJSON() ([]byte, error) {
+func (o HTTPOutcome) Validate() error {
 	if !o.IsValid() {
-		return nil, fmt.Errorf(ErrFmtHTTPOutcome, ErrFoundationContract)
+		return fmt.Errorf(ErrFmtHTTPOutcome, ErrFoundationContract)
+	}
+	return nil
+}
+
+func (o HTTPOutcome) MarshalJSON() ([]byte, error) {
+	if err := o.Validate(); err != nil {
+		return nil, err
 	}
 	return json.Marshal(o.String())
+}
+
+func ParseHTTPOutcome(token string) (HTTPOutcome, error) {
+	for outcome := HTTPOutcomeSuccess; int(outcome) < len(httpOutcomeNames); outcome++ {
+		if httpOutcomeNames[outcome] == token {
+			return outcome, nil
+		}
+	}
+	return httpOutcomeInvalid, fmt.Errorf(ErrFmtHTTPOutcome, ErrFoundationContract)
 }
 
 func (o *HTTPOutcome) UnmarshalJSON(data []byte) error {
@@ -95,13 +162,12 @@ func (o *HTTPOutcome) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &token); err != nil {
 		return fmt.Errorf(ErrFmtHTTPOutcome, ErrFoundationContract)
 	}
-	for outcome := HTTPOutcomeSuccess; int(outcome) < len(httpOutcomeNames); outcome++ {
-		if httpOutcomeNames[outcome] == token {
-			*o = outcome
-			return nil
-		}
+	parsed, err := ParseHTTPOutcome(token)
+	if err != nil {
+		return err
 	}
-	return fmt.Errorf(ErrFmtHTTPOutcome, ErrFoundationContract)
+	*o = parsed
+	return nil
 }
 
 func ClassifyHTTPStatus(status int) HTTPOutcome {

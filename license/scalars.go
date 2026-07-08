@@ -121,7 +121,7 @@ type DeviceLabel struct {
 
 func ParseDeviceLabel(value string) (DeviceLabel, error) {
 	trimmed := strings.TrimSpace(value)
-	if trimmed == "" || len([]rune(trimmed)) > DeviceLabelMaxRunes || containsControlRune(trimmed) {
+	if err := core.ValidateOpaqueToken(trimmed, DeviceLabelMaxRunes); err != nil {
 		return DeviceLabel{}, fmt.Errorf(ErrFmtDeviceLabel, core.ErrLicenseContract)
 	}
 	return DeviceLabel{value: trimmed}, nil
@@ -154,15 +154,6 @@ func (l *DeviceLabel) UnmarshalJSON(data []byte) error {
 	}
 	*l = parsed
 	return nil
-}
-
-func containsControlRune(value string) bool {
-	for _, r := range value {
-		if unicode.IsControl(r) {
-			return true
-		}
-	}
-	return false
 }
 
 type APICallKey struct {
