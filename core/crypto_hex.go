@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	json "github.com/goccy/go-json"
+	"encoding/json"
 )
 
 const BLAKE3DigestBytes = 32

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	json "github.com/goccy/go-json"
+	"encoding/json"
 )
 
 const (

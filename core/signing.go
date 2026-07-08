@@ -4,7 +4,7 @@ import (
 	"crypto/ed25519"
 	"fmt"
 
-	json "github.com/goccy/go-json"
+	"encoding/json"
 )
 
 const (

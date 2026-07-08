@@ -3,7 +3,7 @@ package core
 import (
 	"fmt"
 
-	json "github.com/goccy/go-json"
+	"encoding/json"
 )
 
 type ProductVersion struct {

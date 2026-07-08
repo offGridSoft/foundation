@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	json "github.com/goccy/go-json"
+	"encoding/json"
 )
 
 func TestUnixNanoTimeJSONIsBareNanoseconds(t *testing.T) {
@@ -368,6 +368,47 @@ func TestDecodeStrictJSONHostileTable(t *testing.T) {
 			t.Parallel()
 			if _, err := DecodeStrictJSON[payload]([]byte(tc.raw)); !errors.Is(err, ErrJSONContract) {
 				t.Fatalf("DecodeStrictJSON error = %v, want ErrJSONContract", err)
+			}
+		})
+	}
+}
+
+func TestDecodeStrictJSONValidLineTable(t *testing.T) {
+	t.Parallel()
+	type payload struct {
+		Name string `json:"name"`
+		At   int64  `json:"at"`
+		OK   bool   `json:"ok"`
+	}
+	for _, tc := range []struct {
+		name string
+		raw  string
+		want payload
+	}{
+		{
+			name: "compact object without newline",
+			raw:  `{"name":"ok","at":1783484211688677000,"ok":true}`,
+			want: payload{Name: "ok", At: 1783484211688677000, OK: true},
+		},
+		{
+			name: "escaped angle brackets from operation log line",
+			raw:  `{"name":"Ase Deliri \u003cdeliri.ase@gmail.com\u003e","at":1783484211688677000,"ok":true}`,
+			want: payload{Name: "Ase Deliri <deliri.ase@gmail.com>", At: 1783484211688677000, OK: true},
+		},
+		{
+			name: "valid object with trailing json whitespace",
+			raw:  "{\"name\":\"ok\",\"at\":1783484211688677000,\"ok\":true}\n\t ",
+			want: payload{Name: "ok", At: 1783484211688677000, OK: true},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := DecodeStrictJSON[payload]([]byte(tc.raw))
+			if err != nil {
+				t.Fatalf("DecodeStrictJSON error = %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("DecodeStrictJSON = %+v, want %+v", got, tc.want)
 			}
 		})
 	}

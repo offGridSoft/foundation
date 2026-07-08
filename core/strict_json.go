@@ -2,11 +2,10 @@ package core
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
-
-	json "github.com/goccy/go-json"
 )
 
 func DecodeStrictJSON[T any](data []byte) (T, error) {
