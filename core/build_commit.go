@@ -42,7 +42,10 @@ func (c *BuildCommit) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*c = parsed
-	return c.Validate()
+	if err := c.Validate(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func validBuildCommitHex(value string) bool {

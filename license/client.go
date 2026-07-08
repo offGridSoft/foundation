@@ -76,7 +76,10 @@ func (r CheckInResponse[B]) Validate() error {
 		if r.Refusal != RefusalNone || r.Remediation != "" || r.Lease == nil {
 			return fmt.Errorf(ErrFmtCheckInResponse, core.ErrLicenseContract)
 		}
-		return r.Lease.Validate()
+		if err := r.Lease.Validate(); err != nil {
+			return fmt.Errorf(ErrFmtCheckInResponse, errors.Join(core.ErrLicenseContract, err))
+		}
+		return nil
 	}
 	if r.Lease != nil {
 		return fmt.Errorf(ErrFmtCheckInResponse, core.ErrLicenseContract)
@@ -212,7 +215,7 @@ func (c Client[P, B]) attempt(ctx context.Context, body []byte, maxRetryAfterWai
 func (c Client[P, B]) buildRequest(ctx context.Context, body []byte) (*http.Request, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.Endpoint.String(), bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf(ErrFmtCheckInTransport, err)
+		return nil, transportError(err)
 	}
 	request.Header.Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
 	if !c.APIKey.IsZero() {
@@ -228,10 +231,10 @@ func readResponse[B Body](reply *http.Response) (CheckInResponse[B], error) {
 	}
 	decoded, err := core.DecodeStrictJSON[core.APIEnvelope[CheckInResponse[B]]](data)
 	if err != nil {
-		return CheckInResponse[B]{}, fmt.Errorf(ErrFmtCheckInResponse, err)
+		return CheckInResponse[B]{}, fmt.Errorf(ErrFmtCheckInResponse, errors.Join(core.ErrLicenseContract, err))
 	}
 	if err := decoded.ValidateSuccess(); err != nil {
-		return CheckInResponse[B]{}, fmt.Errorf(ErrFmtCheckInResponse, err)
+		return CheckInResponse[B]{}, fmt.Errorf(ErrFmtCheckInResponse, errors.Join(core.ErrLicenseContract, err))
 	}
 	if err := decoded.Data.Validate(); err != nil {
 		return CheckInResponse[B]{}, err
@@ -246,10 +249,10 @@ func readFailureResponse[B Body](reply *http.Response, statusCode int, retryAfte
 	}
 	decoded, err := core.DecodeStrictJSON[core.APIEnvelope[CheckInResponse[B]]](data)
 	if err != nil {
-		return fmt.Errorf(ErrFmtCheckInResponse, err)
+		return fmt.Errorf(ErrFmtCheckInResponse, errors.Join(core.ErrLicenseContract, err))
 	}
 	if err := decoded.ValidateFailure(); err != nil {
-		return fmt.Errorf(ErrFmtCheckInResponse, err)
+		return fmt.Errorf(ErrFmtCheckInResponse, errors.Join(core.ErrLicenseContract, err))
 	}
 	return CheckInAPIError{
 		StatusCode: statusCode,
@@ -262,7 +265,7 @@ func readFailureResponse[B Body](reply *http.Response, statusCode int, retryAfte
 func readCappedResponseBody(body io.Reader) ([]byte, error) {
 	data, err := io.ReadAll(io.LimitReader(body, CheckInResponseByteCap+1))
 	if err != nil {
-		return nil, fmt.Errorf(ErrFmtCheckInTransport, err)
+		return nil, transportError(err)
 	}
 	if len(data) > CheckInResponseByteCap {
 		return nil, fmt.Errorf(ErrFmtCheckInResponse, core.ErrLicenseContract)

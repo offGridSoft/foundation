@@ -163,6 +163,7 @@ func (h UploadHeader) Validate() error {
 	return nil
 }
 
+// Field order is signature-load-bearing when nested inside ReceiptBody.
 type RetentionPolicy struct {
 	RetainUntil core.UnixNanoTime `json:"retain_until"`
 	Class       RetentionClass    `json:"class"`
@@ -178,6 +179,7 @@ func (p RetentionPolicy) Validate() error {
 	return nil
 }
 
+// Field order is signature-load-bearing when nested inside ReceiptBody.
 type UploadedObject struct {
 	Artifact   ArtifactName   `json:"artifact"`
 	Object     ObjectPath     `json:"object"`
@@ -233,7 +235,7 @@ func (r FinalizeRequest) Validate() error {
 	return validateUploadedObjectSet(r.Objects, ErrFmtFinalize)
 }
 
-// Field order is signature-load-bearing: Canonical uses Go struct field order.
+// Field order is storage-only; MarshalJSON owns the signature-load-bearing order.
 type ReceiptBody struct {
 	Release   ReleaseIdentity      `json:"release"`
 	Customer  CustomerID           `json:"customer_id"`

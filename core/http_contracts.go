@@ -16,6 +16,7 @@ const (
 	HTTPContentTypeJSON     = "application/json"
 	URLSchemeHTTPS          = "https"
 	HTTPSURLDefaultMaxRunes = 2048
+	BackoffMaxDuration      = 24 * time.Hour
 )
 
 type HTTPSURLPolicy struct {
@@ -194,7 +195,7 @@ func (p BackoffPolicy) Validate() error {
 	if p.MaxAttempts < 1 {
 		return fmt.Errorf(ErrFmtBackoffAttempts, ErrFoundationContract)
 	}
-	if p.Base <= 0 || p.Max < p.Base {
+	if p.Base <= 0 || p.Max < p.Base || p.Max > BackoffMaxDuration {
 		return fmt.Errorf(ErrFmtBackoffWindow, ErrFoundationContract)
 	}
 	return nil

@@ -40,5 +40,8 @@ func (c *ByteCount) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*c = decoded
-	return c.Validate()
+	if err := c.Validate(); err != nil {
+		return err
+	}
+	return nil
 }

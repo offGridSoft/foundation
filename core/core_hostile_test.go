@@ -379,6 +379,7 @@ func TestBackoffPolicyValidateHostileTable(t *testing.T) {
 		{Base: time.Second, Max: time.Minute},
 		{Base: 0, Max: time.Minute, MaxAttempts: 1},
 		{Base: time.Minute, Max: time.Second, MaxAttempts: 1},
+		{Base: time.Second, Max: BackoffMaxDuration + time.Nanosecond, MaxAttempts: 1},
 	} {
 		if err := policy.Validate(); !errors.Is(err, ErrFoundationContract) {
 			t.Fatalf("BackoffPolicy.Validate error = %v, want ErrFoundationContract", err)

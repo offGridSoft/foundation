@@ -101,5 +101,5 @@ func (id *SchemaID) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*id = parsed
-	return id.Validate()
+	return nil
 }

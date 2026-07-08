@@ -68,6 +68,7 @@ func validateArchiveEntries(l ArchiveLayout) error {
 	return nil
 }
 
+// Field order is signature-load-bearing when nested inside Manifest.
 type Artifact struct {
 	Name     ArtifactName   `json:"name"`
 	SHA256   core.SHA256Hex `json:"sha256"`
@@ -113,6 +114,7 @@ func validateArtifactPlatform(a Artifact) error {
 	return nil
 }
 
+// Field order is storage-only; MarshalJSON owns the signature-load-bearing order.
 type Manifest struct {
 	Version       core.ProductVersion `json:"version"`
 	ReleaseID     ReleaseID           `json:"release_id"`

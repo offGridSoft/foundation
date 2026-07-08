@@ -234,6 +234,7 @@ func (u *SignedUploadURL) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Field order is signature-load-bearing when nested inside ReceiptBody.
 type ReleaseIdentity struct {
 	Version     core.ProductVersion `json:"version"`
 	Commit      core.BuildCommit    `json:"commit"`

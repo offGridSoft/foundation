@@ -3,7 +3,6 @@ package release
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"math"
 	"strings"
 	"testing"
@@ -26,9 +25,9 @@ func TestEnumWireContractsHostileTable(t *testing.T) {
 		name    string
 		wantErr bool
 	}{
-		{name: "kind tool bundle wire token", run: enumRoundTrip(KindToolBundle, kindTokenToolBundle)},
+		{name: "kind tool bundle wire token", run: requireKindJSON(KindToolBundle, "tool_bundle")},
 		{name: "kind unknown rejects", run: enumMarshalFails(KindUnknown), wantErr: true},
-		{name: "visibility public wire token", run: enumRoundTrip(VisibilityPublic, ObjectSegmentPublic)},
+		{name: "visibility public wire token", run: requireVisibilityJSON(VisibilityPublic, "public")},
 		{name: "visibility unknown rejects", run: enumMarshalFails(VisibilityUnknown), wantErr: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -315,21 +314,11 @@ func TestManifestCanonicalWireForm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := fmt.Sprintf(
-		`{"schema":%q,"version":%q,"release_id":%q,"date":%q,"commit":%q,`+
-			`"artifacts":[{"name":%q,"sha256":%q,"size_bytes":12,"kind":%q,"platform":%q}],`+
-			`"created_at":1782302400000000000,"total_bytes":12,"artifact_count":1,"product":%q}`,
-		core.SchemaReleaseManifest,
-		testVersionToken,
-		testReleaseToken,
-		testDateToken,
-		strings.Repeat("a", 40),
-		ToolsArchiveName,
-		strings.Repeat("b", 64),
-		kindTokenToolBundle,
-		core.PlatformTokenLinuxAMD64,
-		core.ProductTokenWitness,
-	)
+	want := `{"schema":"offgrid-release-manifest-v1","version":"1.2.3","release_id":"2026-07-08-1.2.3","date":"2026-07-08","commit":"` +
+		strings.Repeat("a", 40) +
+		`","artifacts":[{"name":"tools.tar.gz","sha256":"` +
+		strings.Repeat("b", 64) +
+		`","size_bytes":12,"kind":"tool_bundle","platform":"linux-amd64"}],"created_at":1782302400000000000,"total_bytes":12,"artifact_count":1,"product":"witness"}`
 	if string(got) != want {
 		t.Fatalf("Manifest.Canonical()\n got: %s\nwant: %s", got, want)
 	}
@@ -364,19 +353,44 @@ func TestManifestCanonicalRoundTripTable(t *testing.T) {
 	}
 }
 
-func enumRoundTrip[T interface {
-	json.Marshaler
-	fmt.Stringer
-}](value T, token string) func(*testing.T) {
+func requireKindJSON(value Kind, token string) func(*testing.T) {
 	return func(t *testing.T) {
 		t.Helper()
 		data, err := value.MarshalJSON()
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := fmt.Sprintf("%q", token)
+		want := `"` + token + `"`
 		if string(data) != want {
 			t.Fatalf("MarshalJSON() = %s, want %s", data, want)
+		}
+		var decoded Kind
+		if err := decoded.UnmarshalJSON(data); err != nil {
+			t.Fatal(err)
+		}
+		if decoded != value {
+			t.Fatalf("Kind.UnmarshalJSON() = %s, want %s", decoded, value)
+		}
+	}
+}
+
+func requireVisibilityJSON(value Visibility, token string) func(*testing.T) {
+	return func(t *testing.T) {
+		t.Helper()
+		data, err := value.MarshalJSON()
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := `"` + token + `"`
+		if string(data) != want {
+			t.Fatalf("MarshalJSON() = %s, want %s", data, want)
+		}
+		var decoded Visibility
+		if err := decoded.UnmarshalJSON(data); err != nil {
+			t.Fatal(err)
+		}
+		if decoded != value {
+			t.Fatalf("Visibility.UnmarshalJSON() = %s, want %s", decoded, value)
 		}
 	}
 }
