@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/offGridSoft/foundation/core"
+	"github.com/offGridSoft/foundation/v2026/core"
 )
 
 func TestSessionOpenRequestHostileTable(t *testing.T) {
@@ -185,7 +185,7 @@ func TestReceiptCanonicalWireForm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"release":{"version":"1.0.0",` +
+	want := `{"release":{"version":"2026.0.0",` +
 		`"commit":"` + strings.Repeat("a", 40) + `","tool_manifest_sha":"` + strings.Repeat("b", 64) + `"},` +
 		`"schema":"witness-custody-receipt-v1",` +
 		`"customer_id":"01HZZZZZZZZZZZZZZZZZZZZZZZ",` +
@@ -323,7 +323,7 @@ func mustOpenLeaseRef(t *testing.T) OpenLeaseRef {
 
 func mustRelease(t *testing.T) ReleaseIdentity {
 	t.Helper()
-	version, err := core.ParseProductVersion("1.0.0")
+	version, err := core.ParseProductVersion(core.FoundationVersion2026)
 	if err != nil {
 		t.Fatal(err)
 	}

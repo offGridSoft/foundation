@@ -14,12 +14,12 @@ import (
 	"time"
 
 	"encoding/json"
-	"github.com/offGridSoft/foundation/core"
+	"github.com/offGridSoft/foundation/v2026/core"
 )
 
 func testProductVersion(t *testing.T) core.ProductVersion {
 	t.Helper()
-	version, err := core.ParseProductVersion("1.0.0")
+	version, err := core.ParseProductVersion(core.FoundationVersion2026)
 	if err != nil {
 		t.Fatal(err)
 	}

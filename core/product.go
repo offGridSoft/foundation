@@ -10,6 +10,10 @@ type ProductVersion struct {
 	value string
 }
 
+// FoundationVersion2026 is this module's compiler-owned source version token
+// for the 2026 release line.
+const FoundationVersion2026 = "2026.0.0"
+
 func ParseProductVersion(value string) (ProductVersion, error) {
 	if err := ValidateOpaqueToken(value, OpaqueTokenDefaultMaxRunes); err != nil {
 		return ProductVersion{}, fmt.Errorf(ErrFmtProductVersion, ErrFoundationContract)

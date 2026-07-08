@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"encoding/json"
-	"github.com/offGridSoft/foundation/core"
+	"github.com/offGridSoft/foundation/v2026/core"
 )
 
 func testTime(nanos int64) core.UnixNanoTime {

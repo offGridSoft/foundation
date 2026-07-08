@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/offGridSoft/foundation/core"
+	"github.com/offGridSoft/foundation/v2026/core"
 )
 
 func wrapReleaseContract(format string, err error) error {

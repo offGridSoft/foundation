@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"encoding/json"
-	"github.com/offGridSoft/foundation/core"
+	"github.com/offGridSoft/foundation/v2026/core"
 )
 
 const (

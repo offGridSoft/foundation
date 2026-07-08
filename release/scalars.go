@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/offGridSoft/foundation/core"
+	"github.com/offGridSoft/foundation/v2026/core"
 )
 
 const (

@@ -3,7 +3,7 @@ package release
 import (
 	"fmt"
 
-	"github.com/offGridSoft/foundation/core"
+	"github.com/offGridSoft/foundation/v2026/core"
 )
 
 type ArchiveEntry struct {

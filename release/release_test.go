@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/offGridSoft/foundation/core"
+	"github.com/offGridSoft/foundation/v2026/core"
 )
 
 const (
-	testVersionToken = "1.2.3"
-	testReleaseToken = "2026-07-08-1.2.3"
+	testVersionToken = core.FoundationVersion2026
+	testReleaseToken = "2026-07-08-2026.0.0"
 	testDateToken    = "2026-07-08"
 	testBucketToken  = "offgrid-release"
 )
@@ -314,7 +314,7 @@ func TestManifestCanonicalWireForm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"schema":"offgrid-release-manifest-v1","version":"1.2.3","release_id":"2026-07-08-1.2.3","date":"2026-07-08","commit":"` +
+	want := `{"schema":"offgrid-release-manifest-v1","version":"2026.0.0","release_id":"2026-07-08-2026.0.0","date":"2026-07-08","commit":"` +
 		strings.Repeat("a", 40) +
 		`","artifacts":[{"name":"tools.tar.gz","sha256":"` +
 		strings.Repeat("b", 64) +
@@ -516,7 +516,7 @@ func validDownloadIndex(t *testing.T) DownloadIndex {
 
 func validDownloadURL(t *testing.T) DownloadURL {
 	t.Helper()
-	u, err := ParseDownloadURL("https://downloads.offgridsoftware.com/witness/2026-07-08/2026-07-08-1.2.3/public/tools.tar.gz")
+	u, err := ParseDownloadURL("https://downloads.offgridsoftware.com/witness/2026-07-08/2026-07-08-2026.0.0/public/tools.tar.gz")
 	if err != nil {
 		t.Fatal(err)
 	}

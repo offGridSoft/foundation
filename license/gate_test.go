@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/offGridSoft/foundation/core"
+	"github.com/offGridSoft/foundation/v2026/core"
 )
 
 func TestGateHostileTable(t *testing.T) {
