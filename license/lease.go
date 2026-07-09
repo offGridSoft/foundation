@@ -22,12 +22,15 @@ type SeatLeaseBody struct {
 	DeveloperKeyID     DeveloperKeyID           `json:"developer_key_id"`
 	DeviceFingerprint  core.DeviceFingerprint   `json:"device_fingerprint"`
 	IssuedAt           core.UnixNanoTime        `json:"issued_at"`
-	TokenExpiresAt     core.UnixNanoTime        `json:"expires_at"`
+	PaidUntil          core.UnixNanoTime        `json:"paid_until"`
+	TokenExpiresAt     core.UnixNanoTime        `json:"lease_not_after"`
 	CheckInAfterAt     core.UnixNanoTime        `json:"check_in_after"`
 	CheckInByAt        core.UnixNanoTime        `json:"check_in_by"`
 	WriteGraceDuration core.NanosecondsDuration `json:"write_grace_ns"`
 	Schema             core.SchemaID            `json:"schema"`
 	Plan               SeatPlan                 `json:"plan"`
+	BillingPeriod      BillingPeriod            `json:"billing_period"`
+	PrepaidYears       uint8                    `json:"prepaid_years"`
 }
 
 func (b SeatLeaseBody) Validate() error {
@@ -37,25 +40,19 @@ func (b SeatLeaseBody) Validate() error {
 	if err := b.Plan.Validate(); err != nil {
 		return err
 	}
+	if err := b.BillingPeriod.Validate(); err != nil {
+		return err
+	}
 	if err := b.DeveloperKeyID.Validate(); err != nil {
 		return err
 	}
 	if err := b.DeviceFingerprint.Validate(); err != nil {
 		return err
 	}
-	if b.IssuedAt.IsZero() || !b.TokenExpiresAt.After(b.IssuedAt) {
-		return fmt.Errorf(ErrFmtLeaseWindow, core.ErrLicenseContract)
+	if err := validateCommonLeaseWindow(b); err != nil {
+		return err
 	}
-	if b.CheckInAfterAt.Before(b.IssuedAt) {
-		return fmt.Errorf(ErrFmtLeaseCheckInWindow, core.ErrLicenseContract)
-	}
-	if !validCheckInWindow(b) {
-		return fmt.Errorf(ErrFmtLeaseCheckInWindow, core.ErrLicenseContract)
-	}
-	if b.WriteGraceDuration.Duration() < 0 {
-		return fmt.Errorf(ErrFmtLeaseWriteGrace, core.ErrLicenseContract)
-	}
-	return nil
+	return validateLeaseBillingTerm(b.BillingPeriod, b.PrepaidYears)
 }
 
 func (b SeatLeaseBody) Canonical(dst []byte) ([]byte, error) {
@@ -85,7 +82,13 @@ func (b SeatLeaseBody) CheckInBy() core.UnixNanoTime {
 	return b.CheckInByAt
 }
 
-func validCheckInWindow[B Body](b B) bool {
+type leaseSchedule interface {
+	ExpiresAt() core.UnixNanoTime
+	CheckInAfter() core.UnixNanoTime
+	CheckInBy() core.UnixNanoTime
+}
+
+func validCheckInWindow[B leaseSchedule](b B) bool {
 	if b.CheckInAfter().IsZero() || b.CheckInBy().IsZero() {
 		return false
 	}
@@ -95,15 +98,50 @@ func validCheckInWindow[B Body](b B) bool {
 	return !b.CheckInBy().After(b.ExpiresAt())
 }
 
+type leaseWindowBody interface {
+	Issued() core.UnixNanoTime
+	PaidThrough() core.UnixNanoTime
+	ExpiresAt() core.UnixNanoTime
+	CheckInAfter() core.UnixNanoTime
+	CheckInBy() core.UnixNanoTime
+	WriteGrace() core.NanosecondsDuration
+}
+
+func validateCommonLeaseWindow[B leaseWindowBody](b B) error {
+	if b.Issued().IsZero() || b.PaidThrough().IsZero() || b.ExpiresAt().IsZero() {
+		return fmt.Errorf(ErrFmtLeaseWindow, core.ErrLicenseContract)
+	}
+	if !b.ExpiresAt().After(b.Issued()) || !b.PaidThrough().After(b.Issued()) {
+		return fmt.Errorf(ErrFmtLeaseWindow, core.ErrLicenseContract)
+	}
+	if b.CheckInAfter().Before(b.PaidThrough()) {
+		return fmt.Errorf(ErrFmtLeaseCheckInWindow, core.ErrLicenseContract)
+	}
+	if b.CheckInAfter().Before(b.Issued()) {
+		return fmt.Errorf(ErrFmtLeaseCheckInWindow, core.ErrLicenseContract)
+	}
+	if !validCheckInWindow(b) {
+		return fmt.Errorf(ErrFmtLeaseCheckInWindow, core.ErrLicenseContract)
+	}
+	if b.WriteGrace().Duration() < 0 {
+		return fmt.Errorf(ErrFmtLeaseWriteGrace, core.ErrLicenseContract)
+	}
+	return nil
+}
+
 // Field order is storage-only; MarshalJSON owns the signature-load-bearing order.
 type SubscriptionLeaseBody struct {
-	PaidUntil      core.UnixNanoTime `json:"paid_until"`
-	TokenExpiresAt core.UnixNanoTime `json:"lease_not_after"`
-	CheckInAfterAt core.UnixNanoTime `json:"check_in_after"`
-	CheckInByAt    core.UnixNanoTime `json:"check_in_by"`
-	Schema         core.SchemaID     `json:"schema"`
-	Plan           SubscriptionPlan  `json:"plan"`
-	BillingPeriod  BillingPeriod     `json:"billing_period"`
+	DeviceFingerprint  core.DeviceFingerprint   `json:"device_fingerprint"`
+	IssuedAt           core.UnixNanoTime        `json:"issued_at"`
+	PaidUntil          core.UnixNanoTime        `json:"paid_until"`
+	TokenExpiresAt     core.UnixNanoTime        `json:"lease_not_after"`
+	CheckInAfterAt     core.UnixNanoTime        `json:"check_in_after"`
+	CheckInByAt        core.UnixNanoTime        `json:"check_in_by"`
+	WriteGraceDuration core.NanosecondsDuration `json:"write_grace_ns"`
+	Schema             core.SchemaID            `json:"schema"`
+	Plan               SubscriptionPlan         `json:"plan"`
+	BillingPeriod      BillingPeriod            `json:"billing_period"`
+	PrepaidYears       uint8                    `json:"prepaid_years"`
 }
 
 func (b SubscriptionLeaseBody) Validate() error {
@@ -116,13 +154,13 @@ func (b SubscriptionLeaseBody) Validate() error {
 	if err := b.BillingPeriod.Validate(); err != nil {
 		return err
 	}
-	if b.PaidUntil.IsZero() || b.TokenExpiresAt.IsZero() {
-		return fmt.Errorf(ErrFmtLeaseWindow, core.ErrLicenseContract)
+	if err := b.DeviceFingerprint.Validate(); err != nil {
+		return err
 	}
-	if !validCheckInWindow(b) {
-		return fmt.Errorf(ErrFmtLeaseCheckInWindow, core.ErrLicenseContract)
+	if err := validateCommonLeaseWindow(b); err != nil {
+		return err
 	}
-	return nil
+	return validateLeaseBillingTerm(b.BillingPeriod, b.PrepaidYears)
 }
 
 func (b SubscriptionLeaseBody) Canonical(dst []byte) ([]byte, error) {
@@ -140,14 +178,17 @@ func appendSeatLeaseBodyJSON(dst []byte, b SeatLeaseBody) ([]byte, error) {
 	dst = append(dst, '{')
 	var err error
 	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, b.Schema)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "developer_key_id", b.DeveloperKeyID)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "device_fingerprint", b.DeviceFingerprint)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "issued_at", b.IssuedAt)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "expires_at", b.TokenExpiresAt)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "check_in_after", b.CheckInAfterAt)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "check_in_by", b.CheckInByAt)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "write_grace_ns", b.WriteGraceDuration)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "plan", b.Plan)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDeveloperKeyID, b.DeveloperKeyID)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDeviceFingerprint, b.DeviceFingerprint)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldIssuedAt, b.IssuedAt)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldPaidUntil, b.PaidUntil)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldLeaseNotAfter, b.TokenExpiresAt)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCheckInAfter, b.CheckInAfterAt)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCheckInBy, b.CheckInByAt)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldWriteGraceNS, b.WriteGraceDuration)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldPlan, b.Plan)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldBillingPeriod, b.BillingPeriod)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldPrepaidYears, b.PrepaidYears)
 	if err != nil {
 		return nil, err
 	}
@@ -158,12 +199,16 @@ func appendSubscriptionLeaseBodyJSON(dst []byte, b SubscriptionLeaseBody) ([]byt
 	dst = append(dst, '{')
 	var err error
 	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, b.Schema)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "paid_until", b.PaidUntil)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "lease_not_after", b.TokenExpiresAt)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "check_in_after", b.CheckInAfterAt)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "check_in_by", b.CheckInByAt)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "plan", b.Plan)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "billing_period", b.BillingPeriod)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDeviceFingerprint, b.DeviceFingerprint)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldIssuedAt, b.IssuedAt)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldPaidUntil, b.PaidUntil)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldLeaseNotAfter, b.TokenExpiresAt)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCheckInAfter, b.CheckInAfterAt)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCheckInBy, b.CheckInByAt)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldWriteGraceNS, b.WriteGraceDuration)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldPlan, b.Plan)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldBillingPeriod, b.BillingPeriod)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldPrepaidYears, b.PrepaidYears)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +220,7 @@ func (b SubscriptionLeaseBody) ExpiresAt() core.UnixNanoTime {
 }
 
 func (b SubscriptionLeaseBody) WriteGraceUntil() core.UnixNanoTime {
-	return b.TokenExpiresAt
+	return b.TokenExpiresAt.Add(b.WriteGraceDuration.Duration())
 }
 
 func (b SubscriptionLeaseBody) CheckInAfter() core.UnixNanoTime {
@@ -184,6 +229,47 @@ func (b SubscriptionLeaseBody) CheckInAfter() core.UnixNanoTime {
 
 func (b SubscriptionLeaseBody) CheckInBy() core.UnixNanoTime {
 	return b.CheckInByAt
+}
+
+func (b SeatLeaseBody) Issued() core.UnixNanoTime {
+	return b.IssuedAt
+}
+
+func (b SeatLeaseBody) PaidThrough() core.UnixNanoTime {
+	return b.PaidUntil
+}
+
+func (b SeatLeaseBody) WriteGrace() core.NanosecondsDuration {
+	return b.WriteGraceDuration
+}
+
+func (b SubscriptionLeaseBody) Issued() core.UnixNanoTime {
+	return b.IssuedAt
+}
+
+func (b SubscriptionLeaseBody) PaidThrough() core.UnixNanoTime {
+	return b.PaidUntil
+}
+
+func (b SubscriptionLeaseBody) WriteGrace() core.NanosecondsDuration {
+	return b.WriteGraceDuration
+}
+
+func validateLeaseBillingTerm(period BillingPeriod, prepaidYears uint8) error {
+	switch period {
+	case BillingPeriodFourWeeks:
+		if prepaidYears != 0 {
+			return fmt.Errorf(ErrFmtBillingPeriod, core.ErrLicenseContract)
+		}
+		return nil
+	case BillingPeriodPrepaidYears:
+		if prepaidYears == 0 {
+			return fmt.Errorf(ErrFmtBillingPeriod, core.ErrLicenseContract)
+		}
+		return nil
+	default:
+		return fmt.Errorf(ErrFmtBillingPeriod, core.ErrLicenseContract)
+	}
 }
 
 type LeaseState uint8

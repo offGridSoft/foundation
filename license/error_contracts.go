@@ -3,6 +3,7 @@ package license
 const (
 	ErrFmtSchema             = "license.Schema: %w"
 	ErrFmtPlan               = "license.Plan: %w"
+	ErrFmtOffer              = "license.Offer: %w"
 	ErrFmtBillingPeriod      = "license.BillingPeriod: %w"
 	ErrFmtDeveloperKey       = "license.DeveloperKey: %w"
 	ErrFmtDeveloperKeyID     = "license.DeveloperKeyID: %w"

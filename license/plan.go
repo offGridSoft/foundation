@@ -12,9 +12,11 @@ const (
 	SeatPlanTokenEnterprise        = "enterprise"
 	SeatPlanTokenEnterpriseOffline = "enterprise_offline"
 	SeatPlanTokenOSS               = "oss"
+	SubscriptionPlanTokenBronze    = "bronze"
 	SubscriptionPlanTokenSilver    = "silver"
 	SubscriptionPlanTokenGold      = "gold"
-	BillingPeriodTokenMonthly      = "monthly"
+	BillingPeriodTokenFourWeeks    = "four_weeks"
+	BillingPeriodTokenPrepaidYears = "prepaid_years"
 )
 
 type SeatPlan uint8
@@ -85,11 +87,13 @@ type SubscriptionPlan uint8
 
 const (
 	subscriptionPlanInvalid SubscriptionPlan = iota
+	SubscriptionPlanBronze
 	SubscriptionPlanSilver
 	SubscriptionPlanGold
 )
 
 var subscriptionPlanNames = [...]string{
+	SubscriptionPlanBronze: SubscriptionPlanTokenBronze,
 	SubscriptionPlanSilver: SubscriptionPlanTokenSilver,
 	SubscriptionPlanGold:   SubscriptionPlanTokenGold,
 }
@@ -113,7 +117,7 @@ func (p SubscriptionPlan) Validate() error {
 }
 
 func ParseSubscriptionPlan(token string) (SubscriptionPlan, error) {
-	for plan := SubscriptionPlanSilver; int(plan) < len(subscriptionPlanNames); plan++ {
+	for plan := SubscriptionPlanBronze; int(plan) < len(subscriptionPlanNames); plan++ {
 		if subscriptionPlanNames[plan] == token {
 			return plan, nil
 		}
@@ -145,11 +149,13 @@ type BillingPeriod uint8
 
 const (
 	billingPeriodInvalid BillingPeriod = iota
-	BillingPeriodMonthly
+	BillingPeriodFourWeeks
+	BillingPeriodPrepaidYears
 )
 
 var billingPeriodNames = [...]string{
-	BillingPeriodMonthly: BillingPeriodTokenMonthly,
+	BillingPeriodFourWeeks:    BillingPeriodTokenFourWeeks,
+	BillingPeriodPrepaidYears: BillingPeriodTokenPrepaidYears,
 }
 
 func (p BillingPeriod) String() string {
@@ -171,7 +177,7 @@ func (p BillingPeriod) Validate() error {
 }
 
 func ParseBillingPeriod(token string) (BillingPeriod, error) {
-	for period := BillingPeriodMonthly; int(period) < len(billingPeriodNames); period++ {
+	for period := BillingPeriodFourWeeks; int(period) < len(billingPeriodNames); period++ {
 		if billingPeriodNames[period] == token {
 			return period, nil
 		}

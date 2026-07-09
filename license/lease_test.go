@@ -36,16 +36,19 @@ func testDeviceFingerprint(t *testing.T) core.DeviceFingerprint {
 
 func TestSeatLeaseCanonicalWireForm(t *testing.T) {
 	t.Parallel()
+	window := testLeaseWindow(t, SeatPlanStandard, 0)
 	body := SeatLeaseBody{
-		IssuedAt:           testTime(1782302400000000000),
-		TokenExpiresAt:     testTime(1784894400000000000),
-		CheckInAfterAt:     testTime(1783252800000000000),
-		CheckInByAt:        testTime(1784030400000000000),
+		IssuedAt:           window.IssuedAt,
+		PaidUntil:          window.PaidUntil,
+		TokenExpiresAt:     window.TokenExpiresAt,
+		CheckInAfterAt:     window.CheckInAfterAt,
+		CheckInByAt:        window.CheckInByAt,
 		Schema:             core.SchemaBugSeatLease,
 		DeveloperKeyID:     testDeveloperKeyID(t),
 		DeviceFingerprint:  testDeviceFingerprint(t),
-		WriteGraceDuration: core.NewNanosecondsDuration(72 * time.Hour),
+		WriteGraceDuration: window.WriteGraceDuration,
 		Plan:               SeatPlanStandard,
+		BillingPeriod:      BillingPeriodFourWeeks,
 	}
 
 	got, err := body.Canonical(nil)
@@ -54,9 +57,10 @@ func TestSeatLeaseCanonicalWireForm(t *testing.T) {
 	}
 	want := `{"schema":"bug-license-lease-v1","developer_key_id":"OGS-DEV-alpha",` +
 		`"device_fingerprint":"sha256:` + strings.Repeat("a", 64) + `",` +
-		`"issued_at":1782302400000000000,"expires_at":1784894400000000000,` +
-		`"check_in_after":1783252800000000000,"check_in_by":1784030400000000000,` +
-		`"write_grace_ns":259200000000000,"plan":"standard"}`
+		`"issued_at":1782302400000000000,"paid_until":1784721600000000000,` +
+		`"lease_not_after":1785067200000000000,` +
+		`"check_in_after":1784980800000000000,"check_in_by":1785067200000000000,` +
+		`"write_grace_ns":259200000000000,"plan":"standard","billing_period":"four_weeks","prepaid_years":0}`
 	if string(got) != want {
 		t.Fatalf("canonical seat lease\n got: %s\nwant: %s", got, want)
 	}
@@ -64,23 +68,30 @@ func TestSeatLeaseCanonicalWireForm(t *testing.T) {
 
 func TestSubscriptionLeaseCanonicalWireForm(t *testing.T) {
 	t.Parallel()
+	window := testSubscriptionLeaseWindow(t, SubscriptionPlanSilver, 0)
 	body := SubscriptionLeaseBody{
-		PaidUntil:      testTime(1784894400000000000),
-		TokenExpiresAt: testTime(1784030400000000000),
-		CheckInAfterAt: testTime(1783252800000000000),
-		CheckInByAt:    testTime(1784030400000000000),
-		Schema:         core.SchemaWitnessSubscription,
-		Plan:           SubscriptionPlanSilver,
-		BillingPeriod:  BillingPeriodMonthly,
+		DeviceFingerprint:  testDeviceFingerprint(t),
+		IssuedAt:           window.IssuedAt,
+		PaidUntil:          window.PaidUntil,
+		TokenExpiresAt:     window.TokenExpiresAt,
+		CheckInAfterAt:     window.CheckInAfterAt,
+		CheckInByAt:        window.CheckInByAt,
+		WriteGraceDuration: window.WriteGraceDuration,
+		Schema:             core.SchemaWitnessSubscription,
+		Plan:               SubscriptionPlanSilver,
+		BillingPeriod:      BillingPeriodFourWeeks,
 	}
 
 	got, err := body.Canonical(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"schema":"witness-subscription-lease-v1","paid_until":1784894400000000000,` +
-		`"lease_not_after":1784030400000000000,"check_in_after":1783252800000000000,` +
-		`"check_in_by":1784030400000000000,"plan":"silver","billing_period":"monthly"}`
+	want := `{"schema":"witness-subscription-lease-v1","device_fingerprint":"sha256:` +
+		strings.Repeat("a", 64) + `","issued_at":1782302400000000000,` +
+		`"paid_until":1784721600000000000,` +
+		`"lease_not_after":1785067200000000000,"check_in_after":1784980800000000000,` +
+		`"check_in_by":1785067200000000000,"write_grace_ns":259200000000000,` +
+		`"plan":"silver","billing_period":"four_weeks","prepaid_years":0}`
 	if string(got) != want {
 		t.Fatalf("canonical subscription lease\n got: %s\nwant: %s", got, want)
 	}
@@ -136,15 +147,18 @@ func TestLeaseCanonicalRoundTripTable(t *testing.T) {
 	}
 }
 
-func TestSubscriptionLeaseRejectsDeviceFingerprintField(t *testing.T) {
+func TestSubscriptionLeaseRejectsDeveloperKeyField(t *testing.T) {
 	t.Parallel()
-	raw := []byte(`{"paid_until":1784894400000000000,"lease_not_after":1784894400000000000,` +
-		`"check_in_after":1783252800000000000,"check_in_by":1784030400000000000,` +
-		`"schema":"witness-subscription-lease-v1","plan":"silver","billing_period":"monthly",` +
-		`"device_fingerprint":"sha256:` + strings.Repeat("a", 64) + `"}`)
+	raw := []byte(`{"device_fingerprint":"sha256:` + strings.Repeat("a", 64) + `",` +
+		`"issued_at":1782302400000000000,` +
+		`"paid_until":1784721600000000000,"lease_not_after":1785067200000000000,` +
+		`"check_in_after":1784980800000000000,"check_in_by":1785067200000000000,` +
+		`"write_grace_ns":259200000000000,` +
+		`"schema":"witness-subscription-lease-v1","plan":"silver","billing_period":"four_weeks",` +
+		`"prepaid_years":0,"developer_key_id":"OGS-DEV-alpha"}`)
 
 	if _, err := core.DecodeStrictJSON[SubscriptionLeaseBody](raw); err == nil {
-		t.Fatalf("SubscriptionLeaseBody accepted device_fingerprint")
+		t.Fatalf("SubscriptionLeaseBody accepted developer_key_id")
 	}
 }
 
@@ -249,6 +263,84 @@ func TestSubscriptionLeaseBodyWindowHostileTable(t *testing.T) {
 	}
 }
 
+func TestSignedLeaseBodiesAcceptServerOwnedPolicyTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		run  func(*testing.T)
+		name string
+	}{
+		{name: "seat lease accepts changed connected grace", run: func(t *testing.T) {
+			t.Helper()
+			body := testSeatLeaseBody(t)
+			body.PaidUntil = body.IssuedAt.Add(30 * 24 * time.Hour)
+			body.CheckInAfterAt = body.PaidUntil.Add(6 * time.Hour)
+			body.CheckInByAt = body.CheckInAfterAt.Add(12 * time.Hour)
+			body.TokenExpiresAt = body.CheckInByAt
+			body.WriteGraceDuration = core.NewNanosecondsDuration(6 * time.Hour)
+			if err := body.Validate(); err != nil {
+				t.Fatalf("SeatLeaseBody.Validate() = %v", err)
+			}
+		}},
+		{name: "subscription lease accepts changed connected grace", run: func(t *testing.T) {
+			t.Helper()
+			body := testSubscriptionLeaseBody()
+			body.PaidUntil = body.IssuedAt.Add(30 * 24 * time.Hour)
+			body.CheckInAfterAt = body.PaidUntil.Add(6 * time.Hour)
+			body.CheckInByAt = body.CheckInAfterAt.Add(12 * time.Hour)
+			body.TokenExpiresAt = body.CheckInByAt
+			body.WriteGraceDuration = core.NewNanosecondsDuration(6 * time.Hour)
+			if err := body.Validate(); err != nil {
+				t.Fatalf("SubscriptionLeaseBody.Validate() = %v", err)
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tc.run(t)
+		})
+	}
+}
+
+func TestLeaseBillingTermHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		run  func(*testing.T) error
+		name string
+	}{
+		{name: "four week seat lease rejects prepaid years", run: func(t *testing.T) error {
+			t.Helper()
+			body := testSeatLeaseBody(t)
+			body.PrepaidYears = 1
+			return body.Validate()
+		}},
+		{name: "prepaid seat lease rejects zero years", run: func(t *testing.T) error {
+			t.Helper()
+			body := testSeatLeaseBody(t)
+			body.BillingPeriod = BillingPeriodPrepaidYears
+			return body.Validate()
+		}},
+		{name: "four week subscription lease rejects prepaid years", run: func(t *testing.T) error {
+			t.Helper()
+			body := testSubscriptionLeaseBody()
+			body.PrepaidYears = 1
+			return body.Validate()
+		}},
+		{name: "prepaid subscription lease rejects zero years", run: func(t *testing.T) error {
+			t.Helper()
+			body := testSubscriptionLeaseBody()
+			body.BillingPeriod = BillingPeriodPrepaidYears
+			return body.Validate()
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if err := tc.run(t); !errors.Is(err, core.ErrLicenseContract) {
+				t.Fatalf("Validate() error = %v, want ErrLicenseContract", err)
+			}
+		})
+	}
+}
+
 func TestCheckInDueUsesBodyBoundary(t *testing.T) {
 	t.Parallel()
 	body := testSubscriptionLeaseBody()
@@ -261,13 +353,63 @@ func TestCheckInDueUsesBodyBoundary(t *testing.T) {
 }
 
 func testSubscriptionLeaseBody() SubscriptionLeaseBody {
-	return SubscriptionLeaseBody{
-		PaidUntil:      testTime(1784894400000000000),
-		TokenExpiresAt: testTime(1784030400000000000),
-		CheckInAfterAt: testTime(1783252800000000000),
-		CheckInByAt:    testTime(1784030400000000000),
-		Schema:         core.SchemaWitnessSubscription,
-		Plan:           SubscriptionPlanSilver,
-		BillingPeriod:  BillingPeriodMonthly,
+	window, err := BuildLeaseWindow(testTime(1782302400000000000), mustSubscriptionOffer(SubscriptionPlanSilver), 0)
+	if err != nil {
+		panic(err)
 	}
+	return SubscriptionLeaseBody{
+		DeviceFingerprint:  testDeviceFingerprintNoT(),
+		IssuedAt:           window.IssuedAt,
+		PaidUntil:          window.PaidUntil,
+		TokenExpiresAt:     window.TokenExpiresAt,
+		CheckInAfterAt:     window.CheckInAfterAt,
+		CheckInByAt:        window.CheckInByAt,
+		WriteGraceDuration: window.WriteGraceDuration,
+		Schema:             core.SchemaWitnessSubscription,
+		Plan:               SubscriptionPlanSilver,
+		BillingPeriod:      BillingPeriodFourWeeks,
+		PrepaidYears:       0,
+	}
+}
+
+func testLeaseWindow(t *testing.T, plan SeatPlan, prepaidYears uint8) LeaseWindow {
+	t.Helper()
+	window, err := BuildLeaseWindow(testTime(1782302400000000000), mustSeatOffer(plan), prepaidYears)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return window
+}
+
+func testSubscriptionLeaseWindow(t *testing.T, plan SubscriptionPlan, prepaidYears uint8) LeaseWindow {
+	t.Helper()
+	window, err := BuildLeaseWindow(testTime(1782302400000000000), mustSubscriptionOffer(plan), prepaidYears)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return window
+}
+
+func mustSeatOffer(plan SeatPlan) Offer {
+	offer, err := OfferForSeatPlan(plan)
+	if err != nil {
+		panic(err)
+	}
+	return offer
+}
+
+func mustSubscriptionOffer(plan SubscriptionPlan) Offer {
+	offer, err := OfferForSubscriptionPlan(plan)
+	if err != nil {
+		panic(err)
+	}
+	return offer
+}
+
+func testDeviceFingerprintNoT() core.DeviceFingerprint {
+	fp, err := core.ParseDeviceFingerprint(core.DeviceFingerprintPrefixSHA256 + strings.Repeat("a", 64))
+	if err != nil {
+		panic(err)
+	}
+	return fp
 }

@@ -691,17 +691,32 @@ func mustSigningKeyID(t *testing.T) core.SigningKeyID {
 
 func testSeatLeaseBody(t *testing.T) SeatLeaseBody {
 	t.Helper()
+	window, err := BuildLeaseWindow(testTime(1782302400000000000), mustTestSeatOffer(t, SeatPlanStandard), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
 	return SeatLeaseBody{
-		IssuedAt:           testTime(1782302400000000000),
-		TokenExpiresAt:     testTime(1784894400000000000),
-		CheckInAfterAt:     testTime(1783252800000000000),
-		CheckInByAt:        testTime(1784030400000000000),
+		IssuedAt:           window.IssuedAt,
+		PaidUntil:          window.PaidUntil,
+		TokenExpiresAt:     window.TokenExpiresAt,
+		CheckInAfterAt:     window.CheckInAfterAt,
+		CheckInByAt:        window.CheckInByAt,
 		Schema:             core.SchemaBugSeatLease,
 		DeveloperKeyID:     testDeveloperKeyID(t),
 		DeviceFingerprint:  testDeviceFingerprint(t),
-		WriteGraceDuration: core.NewNanosecondsDuration(72 * time.Hour),
+		WriteGraceDuration: window.WriteGraceDuration,
 		Plan:               SeatPlanStandard,
+		BillingPeriod:      BillingPeriodFourWeeks,
 	}
+}
+
+func mustTestSeatOffer(t *testing.T, plan SeatPlan) Offer {
+	t.Helper()
+	offer, err := OfferForSeatPlan(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return offer
 }
 
 func testBugCheckIn(t *testing.T) BugCheckIn {

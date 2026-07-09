@@ -188,17 +188,31 @@ func TestLeaseTrustJSONRoundTrip(t *testing.T) {
 }
 
 func gateLease(now core.UnixNanoTime) SeatLeaseBody {
+	window, err := BuildLeaseWindow(now.Add(-10*24*time.Hour), mustGateSeatOffer(), 0)
+	if err != nil {
+		panic(err)
+	}
 	return SeatLeaseBody{
-		IssuedAt:           now.Add(-24 * time.Hour),
-		TokenExpiresAt:     now.Add(30 * 24 * time.Hour),
-		CheckInAfterAt:     now,
-		CheckInByAt:        now.Add(29 * 24 * time.Hour),
+		IssuedAt:           window.IssuedAt,
+		PaidUntil:          window.PaidUntil,
+		TokenExpiresAt:     window.TokenExpiresAt,
+		CheckInAfterAt:     window.CheckInAfterAt,
+		CheckInByAt:        window.CheckInByAt,
 		Schema:             core.SchemaBugSeatLease,
 		DeveloperKeyID:     mustDeveloperKeyID(),
 		DeviceFingerprint:  mustDeviceFingerprint(),
-		WriteGraceDuration: core.NewNanosecondsDuration(72 * time.Hour),
+		WriteGraceDuration: window.WriteGraceDuration,
 		Plan:               SeatPlanStandard,
+		BillingPeriod:      BillingPeriodFourWeeks,
 	}
+}
+
+func mustGateSeatOffer() Offer {
+	offer, err := OfferForSeatPlan(SeatPlanStandard)
+	if err != nil {
+		panic(err)
+	}
+	return offer
 }
 
 func mustDeveloperKeyID() DeveloperKeyID {
