@@ -150,6 +150,26 @@ func (p BuildOutputPath) Validate() error {
 	return err
 }
 
+func (p BuildOutputPath) MarshalJSON() ([]byte, error) {
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(p.value)
+}
+
+func (p *BuildOutputPath) UnmarshalJSON(data []byte) error {
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return fmt.Errorf(ErrFmtBuildOutput, core.ErrReleaseContract)
+	}
+	parsed, err := ParseBuildOutputPath(value)
+	if err != nil {
+		return err
+	}
+	*p = parsed
+	return nil
+}
+
 type BuildTag struct {
 	value string
 }

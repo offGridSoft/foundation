@@ -15,6 +15,7 @@ const (
 	ErrFmtUploadTarget  = "release.UploadTarget: %w"
 	ErrFmtUploadReceipt = "release.UploadReceipt: %w"
 	ErrFmtDownloadIndex = "release.DownloadIndex: %w"
+	ErrFmtReleaseRoot   = "release.ReleaseRoot: %w"
 	ErrFmtGarbleSeed    = "release.GarbleSeed: %w"
 	ErrFmtBuildCommand  = "release.BuildCommand: %w"
 	ErrFmtBuildOutput   = "release.BuildOutput: %w"

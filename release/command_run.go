@@ -221,17 +221,34 @@ func (m MachineIdentity) Validate() error {
 	return nil
 }
 
+func (m MachineIdentity) MarshalJSON() ([]byte, error) {
+	if err := m.Validate(); err != nil {
+		return nil, err
+	}
+	dst := []byte{'{'}
+	var err error
+	dst, err = core.AppendJSONField(dst, jsonFieldPlatform, m.Platform)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldHostnameSHA256, m.HostnameSHA256)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldUserSHA256, m.UserSHA256)
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, '}'), nil
+}
+
 type CommandRun struct {
-	Version     core.ProductVersion `json:"version"`
-	GitCommit   core.BuildCommit    `json:"git_commit"`
-	EvidenceRef ObjectKey           `json:"evidence_ref"`
-	Machine     MachineIdentity     `json:"machine"`
-	StartedAt   core.UnixNanoTime   `json:"started_at"`
-	FinishedAt  core.UnixNanoTime   `json:"finished_at"`
-	Kind        CommandKind         `json:"kind"`
-	Status      CommandStatus       `json:"status"`
-	TreeState   TreeState           `json:"tree_state"`
-	Product     core.Product        `json:"product"`
+	Version        core.ProductVersion `json:"version"`
+	GitCommit      core.BuildCommit    `json:"git_commit"`
+	ReleaseID      ReleaseID           `json:"release_id"`
+	EvidenceRef    ObjectKey           `json:"evidence_ref"`
+	OperatorSHA256 core.SHA256Hex      `json:"operator_sha256"`
+	Machine        MachineIdentity     `json:"machine"`
+	StartedAt      core.UnixNanoTime   `json:"started_at"`
+	FinishedAt     core.UnixNanoTime   `json:"finished_at"`
+	Kind           CommandKind         `json:"kind"`
+	Status         CommandStatus       `json:"status"`
+	TreeState      TreeState           `json:"tree_state"`
+	Product        core.Product        `json:"product"`
 }
 
 func (r CommandRun) Validate() error {
@@ -245,6 +262,34 @@ func (r CommandRun) Validate() error {
 		return wrapReleaseContract(ErrFmtCommandRun, err)
 	}
 	return nil
+}
+
+func (r CommandRun) Canonical(dst []byte) ([]byte, error) {
+	return core.AppendCanonicalJSON(dst, r)
+}
+
+func (r CommandRun) MarshalJSON() ([]byte, error) {
+	if err := r.Validate(); err != nil {
+		return nil, err
+	}
+	dst := []byte{'{'}
+	var err error
+	dst, err = core.AppendJSONField(dst, jsonFieldKind, r.Kind)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldStatus, r.Status)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldTreeState, r.TreeState)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldProduct, r.Product)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldVersion, r.Version)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldReleaseID, r.ReleaseID)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldGitCommit, r.GitCommit)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldMachine, r.Machine)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldOperatorSHA256, r.OperatorSHA256)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldStartedAt, r.StartedAt)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldFinishedAt, r.FinishedAt)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldEvidenceRef, r.EvidenceRef)
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, '}'), nil
 }
 
 func validateCommandRunIdentity(r CommandRun) error {
@@ -263,10 +308,16 @@ func validateCommandRunIdentity(r CommandRun) error {
 	if err := r.Version.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtCommandRun, err)
 	}
+	if err := r.ReleaseID.Validate(); err != nil {
+		return wrapReleaseContract(ErrFmtCommandRun, err)
+	}
 	if err := r.GitCommit.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtCommandRun, err)
 	}
 	if err := r.Machine.Validate(); err != nil {
+		return wrapReleaseContract(ErrFmtCommandRun, err)
+	}
+	if err := r.OperatorSHA256.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtCommandRun, err)
 	}
 	return nil

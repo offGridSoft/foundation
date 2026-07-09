@@ -179,15 +179,15 @@ func appendManifestJSON(dst []byte, m Manifest) ([]byte, error) {
 	dst = append(dst, '{')
 	var err error
 	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, m.Schema)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "version", m.Version)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "release_id", m.ReleaseID)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "date", m.Date)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "commit", m.Commit)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "artifacts", m.Artifacts)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "created_at", m.CreatedAt)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "total_bytes", m.TotalBytes)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "artifact_count", m.ArtifactCount)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "product", m.Product)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldVersion, m.Version)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldReleaseID, m.ReleaseID)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDate, m.Date)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCommit, m.Commit)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldArtifacts, m.Artifacts)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCreatedAt, m.CreatedAt)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldTotalBytes, m.TotalBytes)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldArtifactCount, m.ArtifactCount)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldProduct, m.Product)
 	if err != nil {
 		return nil, err
 	}

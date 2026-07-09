@@ -373,6 +373,92 @@ func TestManifestCanonicalRoundTripTable(t *testing.T) {
 	}
 }
 
+func TestReleaseRootLayoutHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		mutateInput  func(*ReleaseRootInput)
+		mutateLayout func(*testing.T, *ReleaseRootLayout)
+		name         string
+		wantError    bool
+	}{
+		{name: "valid release root"},
+		{name: "unknown product", mutateInput: func(i *ReleaseRootInput) { i.Product = core.ProductUnknown }, wantError: true},
+		{name: "bad version", mutateInput: func(i *ReleaseRootInput) { i.Version = core.ProductVersion{} }, wantError: true},
+		{name: "bad date", mutateInput: func(i *ReleaseRootInput) { i.Date = ReleaseDate{value: "2026-7-8"} }, wantError: true},
+		{name: "path escape release id", mutateInput: func(i *ReleaseRootInput) { i.ReleaseID = ReleaseID{value: ".."} }, wantError: true},
+		{name: "tampered root path", mutateLayout: func(t *testing.T, l *ReleaseRootLayout) {
+			l.Root = tamperedReleaseRootPath(t, "other")
+		}, wantError: true},
+		{name: "tampered private path", mutateLayout: func(t *testing.T, l *ReleaseRootLayout) {
+			l.Private = tamperedReleaseRootPath(t, ObjectSegmentPrivate+"-copy")
+		}, wantError: true},
+		{name: "zero dogfood path", mutateLayout: func(_ *testing.T, l *ReleaseRootLayout) { l.Dogfood = BuildOutputPath{} }, wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			input := validReleaseRootInput(t)
+			if tc.mutateInput != nil {
+				tc.mutateInput(&input)
+			}
+			layout, err := BuildReleaseRootLayout(input)
+			if err == nil && tc.mutateLayout != nil {
+				tc.mutateLayout(t, &layout)
+				err = layout.Validate()
+			}
+			if !tc.wantError {
+				if err != nil {
+					t.Fatalf("ReleaseRootLayout valid case error = %v", err)
+				}
+				return
+			}
+			if !errors.Is(err, core.ErrReleaseContract) && !errors.Is(err, core.ErrFoundationContract) {
+				t.Fatalf("ReleaseRootLayout hostile error = %v, want release/foundation contract", err)
+			}
+		})
+	}
+}
+
+func TestReleaseRootLayoutCanonicalRoundTripTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		want  string
+		input ReleaseRootInput
+	}{
+		{
+			name:  "witness release root",
+			input: validReleaseRootInput(t),
+			want:  `{"product":"witness","version":"2026.0.0","date":"2026-07-08","release_id":"2026-07-08-2026.0.0","root":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0","private":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/private","public":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/public","platforms":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/platforms","receipts":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/receipts","manifests":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/manifests","dogfood":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/dogfood"}`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			layout, err := BuildReleaseRootLayout(tc.input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := layout.Canonical(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != tc.want {
+				t.Fatalf("ReleaseRootLayout.Canonical()\n got: %s\nwant: %s", got, tc.want)
+			}
+			decoded, err := core.DecodeStrictJSON[ReleaseRootLayout](got)
+			if err != nil {
+				t.Fatal(err)
+			}
+			roundTrip, err := decoded.Canonical(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(roundTrip) != string(got) {
+				t.Fatalf("ReleaseRootLayout canonical round trip\n got: %s\nwant: %s", roundTrip, got)
+			}
+		})
+	}
+}
+
 func requireKindJSON(value Kind, token string) func(*testing.T) {
 	return func(t *testing.T) {
 		t.Helper()
@@ -874,9 +960,11 @@ func TestCommandRunHostileTable(t *testing.T) {
 		{name: "unknown status", mutate: func(r *CommandRun) { r.Status = CommandStatusUnknown }},
 		{name: "unknown tree state", mutate: func(r *CommandRun) { r.TreeState = TreeStateUnknown }},
 		{name: "unknown product", mutate: func(r *CommandRun) { r.Product = core.ProductUnknown }},
+		{name: "bad release id", mutate: func(r *CommandRun) { r.ReleaseID = ReleaseID{} }},
 		{name: "bad git commit", mutate: func(r *CommandRun) { r.GitCommit = core.BuildCommit{} }},
 		{name: "bad machine platform", mutate: func(r *CommandRun) { r.Machine.Platform = core.PlatformUnknown }},
 		{name: "bad hostname hash", mutate: func(r *CommandRun) { r.Machine.HostnameSHA256 = core.SHA256Hex{} }},
+		{name: "bad operator hash", mutate: func(r *CommandRun) { r.OperatorSHA256 = core.SHA256Hex{} }},
 		{name: "zero started timestamp", mutate: func(r *CommandRun) { r.StartedAt = core.UnixNanoTime{} }},
 		{name: "finish before start", mutate: func(r *CommandRun) {
 			r.StartedAt = core.UnixNanoTimeFromInt64(20)
@@ -897,6 +985,51 @@ func TestCommandRunHostileTable(t *testing.T) {
 			}
 			if !errors.Is(err, core.ErrReleaseContract) && !errors.Is(err, core.ErrFoundationContract) {
 				t.Fatalf("CommandRun.Validate() error = %v, want release/foundation contract", err)
+			}
+		})
+	}
+}
+
+func TestCommandRunCanonicalRoundTripTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		want string
+		run  CommandRun
+	}{
+		{
+			name: "release command run",
+			run:  validCommandRun(t),
+			want: `{"kind":"release","status":"succeeded","tree_state":"clean","product":"witness","version":"2026.0.0","release_id":"2026-07-08-2026.0.0","git_commit":"` +
+				strings.Repeat("a", 40) +
+				`","machine":{"platform":"darwin-arm64","hostname_sha256":"` +
+				strings.Repeat("c", 64) +
+				`","user_sha256":"` +
+				strings.Repeat("d", 64) +
+				`"},"operator_sha256":"` +
+				strings.Repeat("e", 64) +
+				`","started_at":1782302400000000000,"finished_at":1782302400000000100,"evidence_ref":"witness/2026-07-08/2026-07-08-2026.0.0/private/release_run.json"}`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := tc.run.Canonical(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != tc.want {
+				t.Fatalf("CommandRun.Canonical()\n got: %s\nwant: %s", got, tc.want)
+			}
+			decoded, err := core.DecodeStrictJSON[CommandRun](got)
+			if err != nil {
+				t.Fatal(err)
+			}
+			roundTrip, err := decoded.Canonical(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(roundTrip) != string(got) {
+				t.Fatalf("CommandRun canonical round trip\n got: %s\nwant: %s", roundTrip, got)
 			}
 		})
 	}
@@ -1002,21 +1135,47 @@ func validCommandRun(t *testing.T) CommandRun {
 		t.Fatal(err)
 	}
 	return CommandRun{
-		Kind:        CommandKindRelease,
-		Status:      CommandStatusSucceeded,
-		TreeState:   TreeStateClean,
-		Product:     core.ProductWitness,
-		Version:     mustVersion(t),
-		GitCommit:   mustCommit(t),
-		StartedAt:   core.UnixNanoTimeFromInt64(1782302400000000000),
-		FinishedAt:  core.UnixNanoTimeFromInt64(1782302400000000100),
-		EvidenceRef: ref,
+		Kind:           CommandKindRelease,
+		Status:         CommandStatusSucceeded,
+		TreeState:      TreeStateClean,
+		Product:        core.ProductWitness,
+		Version:        mustVersion(t),
+		ReleaseID:      mustReleaseID(t),
+		GitCommit:      mustCommit(t),
+		StartedAt:      core.UnixNanoTimeFromInt64(1782302400000000000),
+		FinishedAt:     core.UnixNanoTimeFromInt64(1782302400000000100),
+		EvidenceRef:    ref,
+		OperatorSHA256: mustSHA256(t, "e"),
 		Machine: MachineIdentity{
 			Platform:       core.PlatformDarwinARM64,
 			HostnameSHA256: mustSHA256(t, "c"),
 			UserSHA256:     mustSHA256(t, "d"),
 		},
 	}
+}
+
+func validReleaseRootInput(t *testing.T) ReleaseRootInput {
+	t.Helper()
+	return ReleaseRootInput{
+		Product:   core.ProductWitness,
+		Version:   mustVersion(t),
+		Date:      mustReleaseDate(t),
+		ReleaseID: mustReleaseID(t),
+	}
+}
+
+func tamperedReleaseRootPath(t *testing.T, finalSegment string) BuildOutputPath {
+	t.Helper()
+	segments := []string{
+		DistDirName,
+		ReleaseRootDirName,
+		core.ProductTokenWitness,
+		testDateToken[:4],
+		testDateToken[5:7],
+		testDateToken[8:10],
+		finalSegment,
+	}
+	return mustBuildOutputPath(t, strings.Join(segments, "/"))
 }
 
 func mustGarbleSeed(t *testing.T) GarbleSeed {
