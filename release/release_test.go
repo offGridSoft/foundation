@@ -241,6 +241,25 @@ func TestReleasePlatformsPinned(t *testing.T) {
 			}
 		})
 	}
+	got := BuildPlatforms()
+	want := []core.Platform{
+		core.PlatformDarwinARM64,
+		core.PlatformLinuxAMD64,
+		core.PlatformLinuxARM64,
+		core.PlatformWindowsAMD64,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("BuildPlatforms() len = %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("BuildPlatforms()[%d] = %s, want %s", i, got[i], want[i])
+		}
+	}
+	got[0] = core.PlatformUnknown
+	if BuildPlatforms()[0] != core.PlatformDarwinARM64 {
+		t.Fatalf("BuildPlatforms()[0] after caller mutation = %s, want %s", BuildPlatforms()[0], core.PlatformDarwinARM64)
+	}
 }
 
 func TestVisibilityRejectsUnknownWireToken(t *testing.T) {
@@ -405,6 +424,99 @@ func enumMarshalFails[T json.Marshaler](value T) func(*testing.T) {
 	}
 }
 
+func requireCommandKindJSON(value CommandKind, token string) func(*testing.T) {
+	return func(t *testing.T) {
+		t.Helper()
+		data, err := value.MarshalJSON()
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := `"` + token + `"`
+		if string(data) != want {
+			t.Fatalf("CommandKind.MarshalJSON() = %s, want %s", data, want)
+		}
+		var decoded CommandKind
+		if err := decoded.UnmarshalJSON(data); err != nil {
+			t.Fatal(err)
+		}
+		if decoded != value {
+			t.Fatalf("CommandKind.UnmarshalJSON() = %s, want %s", decoded, value)
+		}
+	}
+}
+
+func requireCommandStatusJSON(value CommandStatus, token string) func(*testing.T) {
+	return func(t *testing.T) {
+		t.Helper()
+		data, err := value.MarshalJSON()
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := `"` + token + `"`
+		if string(data) != want {
+			t.Fatalf("CommandStatus.MarshalJSON() = %s, want %s", data, want)
+		}
+		var decoded CommandStatus
+		if err := decoded.UnmarshalJSON(data); err != nil {
+			t.Fatal(err)
+		}
+		if decoded != value {
+			t.Fatalf("CommandStatus.UnmarshalJSON() = %s, want %s", decoded, value)
+		}
+	}
+}
+
+func requireTreeStateJSON(value TreeState, token string) func(*testing.T) {
+	return func(t *testing.T) {
+		t.Helper()
+		data, err := value.MarshalJSON()
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := `"` + token + `"`
+		if string(data) != want {
+			t.Fatalf("TreeState.MarshalJSON() = %s, want %s", data, want)
+		}
+		var decoded TreeState
+		if err := decoded.UnmarshalJSON(data); err != nil {
+			t.Fatal(err)
+		}
+		if decoded != value {
+			t.Fatalf("TreeState.UnmarshalJSON() = %s, want %s", decoded, value)
+		}
+	}
+}
+
+func commandKindJSONFails(data string) func(*testing.T) {
+	return func(t *testing.T) {
+		t.Helper()
+		var decoded CommandKind
+		if err := decoded.UnmarshalJSON([]byte(data)); !errors.Is(err, core.ErrReleaseContract) {
+			t.Fatalf("CommandKind.UnmarshalJSON() error = %v, want ErrReleaseContract", err)
+		}
+	}
+}
+
+func commandStatusJSONFails(data string) func(*testing.T) {
+	return func(t *testing.T) {
+		t.Helper()
+		var decoded CommandStatus
+		if err := decoded.UnmarshalJSON([]byte(data)); !errors.Is(err, core.ErrReleaseContract) {
+			t.Fatalf("CommandStatus.UnmarshalJSON() error = %v, want ErrReleaseContract", err)
+		}
+	}
+}
+
+func treeStateJSONFails(data string) func(*testing.T) {
+	return func(t *testing.T) {
+		t.Helper()
+		var decoded TreeState
+		if err := decoded.UnmarshalJSON([]byte(data)); !errors.Is(err, core.ErrReleaseContract) {
+			t.Fatalf("TreeState.UnmarshalJSON() error = %v, want ErrReleaseContract", err)
+		}
+	}
+}
+
 func validObjectKeyInput(t *testing.T) ObjectKeyInput {
 	t.Helper()
 	return ObjectKeyInput{
@@ -480,6 +592,301 @@ func (s testReleaseSigner) SignRelease([]byte) (core.Ed25519SignatureHex, error)
 	return s.signature, s.err
 }
 
+func TestGarbleSeedHostileTable(t *testing.T) {
+	t.Parallel()
+	const exactSeed = "AQIDBAUGBwg="
+	const longSeed = "AQIDBAUGBwgJCg=="
+	for _, tc := range []struct {
+		wantError error
+		name      string
+		value     string
+		want      string
+		required  bool
+	}{
+		{name: "empty seed is random for development build", value: "", want: GarbleSeedRandom},
+		{name: "explicit random seed is random", value: GarbleSeedRandom, want: GarbleSeedRandom},
+		{name: "exact base64 seed accepted", value: exactSeed, want: exactSeed, required: true},
+		{name: "long seed normalized to eight bytes", value: longSeed, want: exactSeed, required: true},
+		{name: "required rejects empty random", value: "", required: true, wantError: core.ErrReleaseContract},
+		{name: "short decoded seed rejected", value: "AQIDBA==", wantError: core.ErrReleaseContract},
+		{name: "malformed base64 rejected", value: "not-base64", wantError: core.ErrReleaseContract},
+		{name: "oversize attacker seed rejected", value: strings.Repeat("A", GarbleSeedMaxInputBytes+1), wantError: core.ErrReleaseContract},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			parse := ParseGarbleSeed
+			if tc.required {
+				parse = ParseRequiredGarbleSeed
+			}
+			got, err := parse(tc.value)
+			if tc.wantError != nil {
+				if !errors.Is(err, tc.wantError) {
+					t.Fatalf("parse seed error = %v, want %v", err, tc.wantError)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parse seed error = %v", err)
+			}
+			if got.String() != tc.want {
+				t.Fatalf("parse seed = %q, want %q", got.String(), tc.want)
+			}
+		})
+	}
+}
+
+func TestReleasePlanningJSONHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		run  func(*testing.T)
+		name string
+	}{
+		{name: "garble seed round trip", run: func(t *testing.T) {
+			t.Helper()
+			seed := mustGarbleSeed(t)
+			data, err := seed.MarshalJSON()
+			if err != nil {
+				t.Fatal(err)
+			}
+			var decoded GarbleSeed
+			if err := decoded.UnmarshalJSON(data); err != nil {
+				t.Fatal(err)
+			}
+			if decoded != seed {
+				t.Fatalf("GarbleSeed JSON round trip = %q, want %q", decoded.String(), seed.String())
+			}
+		}},
+		{name: "garble seed wrong JSON shape", run: func(t *testing.T) {
+			t.Helper()
+			var decoded GarbleSeed
+			if err := decoded.UnmarshalJSON([]byte(`7`)); !errors.Is(err, core.ErrReleaseContract) {
+				t.Fatalf("GarbleSeed.UnmarshalJSON() error = %v, want ErrReleaseContract", err)
+			}
+		}},
+		{name: "command kind round trip", run: requireCommandKindJSON(CommandKindRelease, CommandKindTokenRelease)},
+		{name: "command kind unknown token", run: commandKindJSONFails(`"ship"`)},
+		{name: "command status round trip", run: requireCommandStatusJSON(CommandStatusSucceeded, CommandStatusTokenSucceeded)},
+		{name: "command status wrong shape", run: commandStatusJSONFails(`7`)},
+		{name: "tree state round trip", run: requireTreeStateJSON(TreeStateClean, TreeStateTokenClean)},
+		{name: "tree state unknown token", run: treeStateJSONFails(`"maybe"`)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tc.run(t)
+		})
+	}
+}
+
+func TestReleaseBuildSpecHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		mutate func(*ProductReleaseSpec)
+		name   string
+	}{
+		{name: "bug one command valid", mutate: func(s *ProductReleaseSpec) {
+			*s = validBugReleaseSpec(t)
+		}},
+		{name: "witness multiple commands valid", mutate: func(*ProductReleaseSpec) {}},
+		{name: "unknown product", mutate: func(s *ProductReleaseSpec) { s.Product = core.ProductUnknown }},
+		{name: "bad version", mutate: func(s *ProductReleaseSpec) { s.Version = core.ProductVersion{} }},
+		{name: "missing command", mutate: func(s *ProductReleaseSpec) {
+			s.Commands = nil
+			s.CommandCount = 0
+		}},
+		{name: "command count mismatch", mutate: func(s *ProductReleaseSpec) { s.CommandCount++ }},
+		{name: "duplicate command name", mutate: func(s *ProductReleaseSpec) {
+			s.Commands[1].Name = s.Commands[0].Name
+		}},
+		{name: "duplicate import path", mutate: func(s *ProductReleaseSpec) {
+			s.Commands[1].ImportPath = s.Commands[0].ImportPath
+		}},
+		{name: "unsupported release platform", mutate: func(s *ProductReleaseSpec) {
+			s.Platforms[0] = core.PlatformDarwinAMD64
+		}},
+		{name: "duplicate platform", mutate: func(s *ProductReleaseSpec) {
+			s.Platforms[1] = s.Platforms[0]
+		}},
+		{name: "platform count mismatch", mutate: func(s *ProductReleaseSpec) { s.PlatformCount++ }},
+		{name: "non-stripped build rejected", mutate: func(s *ProductReleaseSpec) { s.Policy.Strip = false }},
+		{name: "duplicate build tag", mutate: func(s *ProductReleaseSpec) {
+			s.Policy.Tags = append(s.Policy.Tags, s.Policy.Tags[0])
+			s.Policy.TagCount = uint32(len(s.Policy.Tags))
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			spec := validWitnessReleaseSpec(t)
+			tc.mutate(&spec)
+			err := spec.Validate()
+			if strings.Contains(tc.name, " valid") {
+				if err != nil {
+					t.Fatalf("ProductReleaseSpec.Validate() = %v", err)
+				}
+				return
+			}
+			if !errors.Is(err, core.ErrReleaseContract) {
+				t.Fatalf("ProductReleaseSpec.Validate() error = %v, want ErrReleaseContract", err)
+			}
+		})
+	}
+}
+
+func TestGarbleBuildArgsHostileTable(t *testing.T) {
+	t.Parallel()
+	seed := mustGarbleSeed(t)
+	for _, tc := range []struct {
+		mutate func(*ReleaseGarbleBuildRequest)
+		name   string
+		want   []string
+	}{
+		{name: "bug build args pinned", mutate: func(r *ReleaseGarbleBuildRequest) {
+			*r = validBugBuildRequest(t, seed)
+		}, want: []string{
+			GarbleSeedFlagPrefix + seed.String(),
+			GarbleArgLiterals,
+			GarbleArgTiny,
+			GoArgBuild,
+			GoArgTrimPath,
+			GoBuildLDFlagsPrefix + "-s -w",
+			GoBuildOutputFlag,
+			"dist/linux-amd64/bug",
+			"./cmd/bug",
+		}},
+		{name: "witness build args pinned", mutate: func(*ReleaseGarbleBuildRequest) {}, want: []string{
+			GarbleSeedFlagPrefix + seed.String(),
+			GarbleArgLiterals,
+			GarbleArgTiny,
+			GoArgBuild,
+			GoArgTrimPath,
+			GoArgBuildVCS,
+			GoBuildTagsPrefix + "osusergo,netgo,witness_production",
+			GoBuildLDFlagsPrefix + "-s -w -buildid= -X github.com/offGridSoft/witness/internal/release.BuildCommit=" + strings.Repeat("a", 40),
+			GoBuildOutputFlag,
+			"dist/linux-amd64/witness",
+			"./cmd/witness",
+		}},
+		{name: "random seed cannot build release", mutate: func(r *ReleaseGarbleBuildRequest) {
+			r.Seed = GarbleSeed{value: GarbleSeedRandom}
+		}},
+		{name: "bad output path rejected", mutate: func(r *ReleaseGarbleBuildRequest) {
+			r.Output = BuildOutputPath{value: "../dist/bug"}
+		}},
+		{name: "unsupported platform rejected", mutate: func(r *ReleaseGarbleBuildRequest) {
+			r.Platform = core.PlatformWindowsARM64
+		}},
+		{name: "bad command import path rejected", mutate: func(r *ReleaseGarbleBuildRequest) {
+			r.Command.ImportPath = BuildImportPath{value: "./internal/bug"}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			request := validWitnessBuildRequest(t, seed)
+			tc.mutate(&request)
+			got, err := GarbleBuildArgs(request)
+			if tc.want == nil {
+				if !errors.Is(err, core.ErrReleaseContract) {
+					t.Fatalf("GarbleBuildArgs() error = %v, want ErrReleaseContract", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("GarbleBuildArgs() error = %v", err)
+			}
+			if strings.Join(got, "\n") != strings.Join(tc.want, "\n") {
+				t.Fatalf("GarbleBuildArgs()\n got: %#v\nwant: %#v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestProductReleaseSpecBuildRequestsHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		mutate    func(*ProductReleaseSpec, *GarbleSeed, *ArtifactName)
+		name      string
+		wantCount int
+	}{
+		{name: "bug matrix expands one command across release platforms", wantCount: len(BuildPlatforms()), mutate: func(s *ProductReleaseSpec, _ *GarbleSeed, _ *ArtifactName) {
+			*s = validBugReleaseSpec(t)
+		}},
+		{name: "witness matrix expands all commands", wantCount: len(BuildPlatforms()) * 2, mutate: func(*ProductReleaseSpec, *GarbleSeed, *ArtifactName) {}},
+		{name: "random seed rejected before output planning", mutate: func(_ *ProductReleaseSpec, seed *GarbleSeed, _ *ArtifactName) {
+			*seed = GarbleSeed{value: GarbleSeedRandom}
+		}},
+		{name: "bad output root rejected", mutate: func(_ *ProductReleaseSpec, _ *GarbleSeed, root *ArtifactName) {
+			*root = ArtifactName{value: ".."}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			spec := validWitnessReleaseSpec(t)
+			seed := mustGarbleSeed(t)
+			root, err := DefaultOutputRoot()
+			if err != nil {
+				t.Fatal(err)
+			}
+			tc.mutate(&spec, &seed, &root)
+			got, err := spec.GarbleBuildRequests(seed, root)
+			if tc.wantCount == 0 {
+				if !errors.Is(err, core.ErrReleaseContract) {
+					t.Fatalf("GarbleBuildRequests() error = %v, want ErrReleaseContract", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("GarbleBuildRequests() error = %v", err)
+			}
+			if len(got) != tc.wantCount {
+				t.Fatalf("GarbleBuildRequests() len = %d, want %d", len(got), tc.wantCount)
+			}
+			if got[len(got)-1].Output.String() != "dist/windows-amd64/witness-sign.exe" && spec.Product == core.ProductWitness {
+				t.Fatalf("last witness output = %q, want windows executable suffix", got[len(got)-1].Output.String())
+			}
+		})
+	}
+}
+
+func TestCommandRunHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		mutate func(*CommandRun)
+		name   string
+	}{
+		{name: "release run valid", mutate: func(*CommandRun) {}},
+		{name: "deploy run valid", mutate: func(r *CommandRun) { r.Kind = CommandKindDeploy }},
+		{name: "dirty tree run valid", mutate: func(r *CommandRun) { r.TreeState = TreeStateDirty }},
+		{name: "unknown kind", mutate: func(r *CommandRun) { r.Kind = CommandKindUnknown }},
+		{name: "unknown status", mutate: func(r *CommandRun) { r.Status = CommandStatusUnknown }},
+		{name: "unknown tree state", mutate: func(r *CommandRun) { r.TreeState = TreeStateUnknown }},
+		{name: "unknown product", mutate: func(r *CommandRun) { r.Product = core.ProductUnknown }},
+		{name: "bad git commit", mutate: func(r *CommandRun) { r.GitCommit = core.BuildCommit{} }},
+		{name: "bad machine platform", mutate: func(r *CommandRun) { r.Machine.Platform = core.PlatformUnknown }},
+		{name: "bad hostname hash", mutate: func(r *CommandRun) { r.Machine.HostnameSHA256 = core.SHA256Hex{} }},
+		{name: "zero started timestamp", mutate: func(r *CommandRun) { r.StartedAt = core.UnixNanoTime{} }},
+		{name: "finish before start", mutate: func(r *CommandRun) {
+			r.StartedAt = core.UnixNanoTimeFromInt64(20)
+			r.FinishedAt = core.UnixNanoTimeFromInt64(10)
+		}},
+		{name: "bad evidence ref", mutate: func(r *CommandRun) { r.EvidenceRef = ObjectKey{value: "/absolute"} }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			run := validCommandRun(t)
+			tc.mutate(&run)
+			err := run.Validate()
+			if strings.Contains(tc.name, " valid") {
+				if err != nil {
+					t.Fatalf("CommandRun.Validate() = %v", err)
+				}
+				return
+			}
+			if !errors.Is(err, core.ErrReleaseContract) && !errors.Is(err, core.ErrFoundationContract) {
+				t.Fatalf("CommandRun.Validate() error = %v, want release/foundation contract", err)
+			}
+		})
+	}
+}
+
 func validManifest(t *testing.T) Manifest {
 	t.Helper()
 	return Manifest{
@@ -494,6 +901,152 @@ func validManifest(t *testing.T) Manifest {
 		ArtifactCount: 1,
 		TotalBytes:    core.NewByteCount(12),
 	}
+}
+
+func validBugReleaseSpec(t *testing.T) ProductReleaseSpec {
+	t.Helper()
+	return ProductReleaseSpec{
+		Product:       core.ProductBug,
+		Version:       mustVersion(t),
+		Commands:      []ReleaseCommand{mustReleaseCommand(t, core.ProductTokenBug, "./cmd/bug")},
+		CommandCount:  1,
+		Platforms:     BuildPlatforms(),
+		PlatformCount: uint32(len(BuildPlatforms())),
+		Policy:        validBugBuildPolicy(t),
+	}
+}
+
+func validWitnessReleaseSpec(t *testing.T) ProductReleaseSpec {
+	t.Helper()
+	commands := []ReleaseCommand{
+		mustReleaseCommand(t, core.ProductTokenWitness, "./cmd/witness"),
+		mustReleaseCommand(t, "witness-sign", "./cmd/witness-sign"),
+	}
+	return ProductReleaseSpec{
+		Product:       core.ProductWitness,
+		Version:       mustVersion(t),
+		Commands:      commands,
+		CommandCount:  uint32(len(commands)),
+		Platforms:     BuildPlatforms(),
+		PlatformCount: uint32(len(BuildPlatforms())),
+		Policy:        validWitnessBuildPolicy(t),
+	}
+}
+
+func validBugBuildRequest(t *testing.T, seed GarbleSeed) ReleaseGarbleBuildRequest {
+	t.Helper()
+	return ReleaseGarbleBuildRequest{
+		Seed:     seed,
+		Command:  mustReleaseCommand(t, core.ProductTokenBug, "./cmd/bug"),
+		Output:   mustBuildOutputPath(t, "dist/linux-amd64/bug"),
+		Platform: core.PlatformLinuxAMD64,
+		Policy:   validBugBuildPolicy(t),
+	}
+}
+
+func validWitnessBuildRequest(t *testing.T, seed GarbleSeed) ReleaseGarbleBuildRequest {
+	t.Helper()
+	return ReleaseGarbleBuildRequest{
+		Seed:     seed,
+		Command:  mustReleaseCommand(t, core.ProductTokenWitness, "./cmd/witness"),
+		Output:   mustBuildOutputPath(t, "dist/linux-amd64/witness"),
+		Platform: core.PlatformLinuxAMD64,
+		Policy:   validWitnessBuildPolicy(t),
+	}
+}
+
+func validBugBuildPolicy(t *testing.T) ReleaseBuildPolicy {
+	t.Helper()
+	return ReleaseBuildPolicy{Strip: true}
+}
+
+func validWitnessBuildPolicy(t *testing.T) ReleaseBuildPolicy {
+	t.Helper()
+	tags := []BuildTag{
+		mustBuildTag(t, "osusergo"),
+		mustBuildTag(t, "netgo"),
+		mustBuildTag(t, "witness_production"),
+	}
+	return ReleaseBuildPolicy{
+		BuildVCS:     true,
+		ClearBuildID: true,
+		Strip:        true,
+		Tags:         tags,
+		TagCount:     uint32(len(tags)),
+		CommitStamp: BuildCommitStamp{
+			Symbol: mustLinkerSymbol(t, "github.com/offGridSoft/witness/internal/release.BuildCommit"),
+			Commit: mustCommit(t),
+		},
+	}
+}
+
+func validCommandRun(t *testing.T) CommandRun {
+	t.Helper()
+	ref, err := ParseObjectKey("witness/2026-07-08/2026-07-08-2026.0.0/private/release_run.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return CommandRun{
+		Kind:        CommandKindRelease,
+		Status:      CommandStatusSucceeded,
+		TreeState:   TreeStateClean,
+		Product:     core.ProductWitness,
+		Version:     mustVersion(t),
+		GitCommit:   mustCommit(t),
+		StartedAt:   core.UnixNanoTimeFromInt64(1782302400000000000),
+		FinishedAt:  core.UnixNanoTimeFromInt64(1782302400000000100),
+		EvidenceRef: ref,
+		Machine: MachineIdentity{
+			Platform:       core.PlatformDarwinARM64,
+			HostnameSHA256: mustSHA256(t, "c"),
+			UserSHA256:     mustSHA256(t, "d"),
+		},
+	}
+}
+
+func mustGarbleSeed(t *testing.T) GarbleSeed {
+	t.Helper()
+	seed, err := ParseRequiredGarbleSeed("AQIDBAUGBwg=")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return seed
+}
+
+func mustReleaseCommand(t *testing.T, name string, importPath string) ReleaseCommand {
+	t.Helper()
+	command, err := NewReleaseCommand(name, importPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return command
+}
+
+func mustBuildOutputPath(t *testing.T, value string) BuildOutputPath {
+	t.Helper()
+	output, err := ParseBuildOutputPath(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return output
+}
+
+func mustBuildTag(t *testing.T, value string) BuildTag {
+	t.Helper()
+	tag, err := ParseBuildTag(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tag
+}
+
+func mustLinkerSymbol(t *testing.T, value string) LinkerSymbol {
+	t.Helper()
+	symbol, err := ParseLinkerSymbol(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return symbol
 }
 
 func validArtifactWithSize(t *testing.T, name string, size uint64) Artifact {

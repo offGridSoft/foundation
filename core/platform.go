@@ -27,6 +27,14 @@ const (
 	PlatformTokenWindowsARM64 = "windows-arm64"
 )
 
+const (
+	GOOSDarwin  = "darwin"
+	GOOSLinux   = "linux" // #nosec G101 -- GOOS token, not a credential.
+	GOOSWindows = "windows"
+	GOARCHAMD64 = "amd64"
+	GOARCHARM64 = "arm64"
+)
+
 var platformNames = [...]string{
 	PlatformDarwinAMD64:  PlatformTokenDarwinAMD64,
 	PlatformDarwinARM64:  PlatformTokenDarwinARM64,
@@ -73,6 +81,30 @@ func (p Platform) IsReleaseTarget() bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func (p Platform) GOOS() (string, error) {
+	switch p {
+	case PlatformDarwinAMD64, PlatformDarwinARM64:
+		return GOOSDarwin, nil
+	case PlatformLinuxAMD64, PlatformLinuxARM64:
+		return GOOSLinux, nil
+	case PlatformWindowsAMD64, PlatformWindowsARM64:
+		return GOOSWindows, nil
+	default:
+		return "", fmt.Errorf(ErrFmtPlatform, ErrFoundationContract)
+	}
+}
+
+func (p Platform) GOARCH() (string, error) {
+	switch p {
+	case PlatformDarwinAMD64, PlatformLinuxAMD64, PlatformWindowsAMD64:
+		return GOARCHAMD64, nil
+	case PlatformDarwinARM64, PlatformLinuxARM64, PlatformWindowsARM64:
+		return GOARCHARM64, nil
+	default:
+		return "", fmt.Errorf(ErrFmtPlatform, ErrFoundationContract)
 	}
 }
 
