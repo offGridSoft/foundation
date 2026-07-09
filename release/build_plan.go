@@ -130,6 +130,26 @@ func (p BuildImportPath) Validate() error {
 	return err
 }
 
+func (p BuildImportPath) MarshalJSON() ([]byte, error) {
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(p.value)
+}
+
+func (p *BuildImportPath) UnmarshalJSON(data []byte) error {
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return fmt.Errorf(ErrFmtBuildCommand, core.ErrReleaseContract)
+	}
+	parsed, err := ParseBuildImportPath(value)
+	if err != nil {
+		return err
+	}
+	*p = parsed
+	return nil
+}
+
 type BuildOutputPath struct {
 	value string
 }
@@ -190,6 +210,26 @@ func (t BuildTag) Validate() error {
 	return err
 }
 
+func (t BuildTag) MarshalJSON() ([]byte, error) {
+	if err := t.Validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(t.value)
+}
+
+func (t *BuildTag) UnmarshalJSON(data []byte) error {
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return fmt.Errorf(ErrFmtBuildTag, core.ErrReleaseContract)
+	}
+	parsed, err := ParseBuildTag(value)
+	if err != nil {
+		return err
+	}
+	*t = parsed
+	return nil
+}
+
 type LinkerSymbol struct {
 	value string
 }
@@ -211,6 +251,26 @@ func (s LinkerSymbol) String() string {
 func (s LinkerSymbol) Validate() error {
 	_, err := ParseLinkerSymbol(s.value)
 	return err
+}
+
+func (s LinkerSymbol) MarshalJSON() ([]byte, error) {
+	if err := s.Validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(s.value)
+}
+
+func (s *LinkerSymbol) UnmarshalJSON(data []byte) error {
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return fmt.Errorf(ErrFmtLinkerSymbol, core.ErrReleaseContract)
+	}
+	parsed, err := ParseLinkerSymbol(value)
+	if err != nil {
+		return err
+	}
+	*s = parsed
+	return nil
 }
 
 type BuildCommitStamp struct {
@@ -235,6 +295,23 @@ func (s BuildCommitStamp) Validate() error {
 	return nil
 }
 
+func (s BuildCommitStamp) MarshalJSON() ([]byte, error) {
+	if s.IsZero() {
+		return []byte("null"), nil
+	}
+	if err := s.Validate(); err != nil {
+		return nil, err
+	}
+	dst := []byte{'{'}
+	var err error
+	dst, err = core.AppendJSONField(dst, jsonFieldSymbol, s.Symbol)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCommit, s.Commit)
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, '}'), nil
+}
+
 type ReleaseBuildPolicy struct {
 	CommitStamp  BuildCommitStamp `json:"commit_stamp"`
 	Tags         []BuildTag       `json:"tags"`
@@ -252,6 +329,24 @@ func (p ReleaseBuildPolicy) Validate() error {
 		return err
 	}
 	return validateBuildTags(p)
+}
+
+func (p ReleaseBuildPolicy) MarshalJSON() ([]byte, error) {
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+	dst := []byte{'{'}
+	var err error
+	dst, err = core.AppendJSONField(dst, jsonFieldCommitStamp, p.CommitStamp)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldTags, p.Tags)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldTagCount, p.TagCount)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldBuildVCS, p.BuildVCS)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldClearBuildID, p.ClearBuildID)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldStrip, p.Strip)
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, '}'), nil
 }
 
 func validateBuildTags(p ReleaseBuildPolicy) error {
@@ -283,6 +378,20 @@ func (c ReleaseCommand) Validate() error {
 		return wrapReleaseContract(ErrFmtBuildCommand, err)
 	}
 	return nil
+}
+
+func (c ReleaseCommand) MarshalJSON() ([]byte, error) {
+	if err := c.Validate(); err != nil {
+		return nil, err
+	}
+	dst := []byte{'{'}
+	var err error
+	dst, err = core.AppendJSONField(dst, jsonFieldName, c.Name)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldImportPath, c.ImportPath)
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, '}'), nil
 }
 
 func (c ReleaseCommand) BinaryName(platform core.Platform) (ArtifactName, error) {
@@ -326,6 +435,23 @@ func (r ReleaseGarbleBuildRequest) Validate() error {
 		return wrapReleaseContract(ErrFmtBuildRequest, err)
 	}
 	return nil
+}
+
+func (r ReleaseGarbleBuildRequest) MarshalJSON() ([]byte, error) {
+	if err := r.Validate(); err != nil {
+		return nil, err
+	}
+	dst := []byte{'{'}
+	var err error
+	dst, err = core.AppendJSONField(dst, jsonFieldCommand, r.Command)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldSeed, r.Seed)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldOutput, r.Output)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldPolicy, r.Policy)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldPlatform, r.Platform)
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, '}'), nil
 }
 
 func GarbleBuildArgs(r ReleaseGarbleBuildRequest) ([]string, error) {
@@ -404,26 +530,51 @@ func (s ProductReleaseSpec) Validate() error {
 	return validateSpecPlatforms(s)
 }
 
-func (s ProductReleaseSpec) GarbleBuildRequests(seed GarbleSeed, outputRoot ArtifactName) ([]ReleaseGarbleBuildRequest, error) {
+func (s ProductReleaseSpec) MarshalJSON() ([]byte, error) {
+	if err := s.Validate(); err != nil {
+		return nil, err
+	}
+	dst := []byte{'{'}
+	var err error
+	dst, err = core.AppendJSONField(dst, jsonFieldProduct, s.Product)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldVersion, s.Version)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCommands, s.Commands)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCommandCount, s.CommandCount)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldPlatforms, s.Platforms)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldPlatformCount, s.PlatformCount)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldPolicy, s.Policy)
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, '}'), nil
+}
+
+func (s ProductReleaseSpec) GarbleBuildRequests(seed GarbleSeed, layout ReleaseRootLayout) ([]ReleaseGarbleBuildRequest, error) {
 	if err := s.Validate(); err != nil {
 		return nil, err
 	}
 	if err := seed.Validate(); err != nil || seed.IsRandom() {
 		return nil, fmt.Errorf(ErrFmtReleaseSpec, core.ErrReleaseContract)
 	}
-	return buildRequestsForSpec(s, seed, outputRoot)
+	if err := layout.Validate(); err != nil {
+		return nil, wrapReleaseContract(ErrFmtReleaseSpec, err)
+	}
+	if !specMatchesLayout(s, layout) {
+		return nil, fmt.Errorf(ErrFmtReleaseSpec, core.ErrReleaseContract)
+	}
+	return buildRequestsForSpec(s, seed, layout)
 }
 
-func buildRequestsForSpec(s ProductReleaseSpec, seed GarbleSeed, outputRoot ArtifactName) ([]ReleaseGarbleBuildRequest, error) {
+func buildRequestsForSpec(s ProductReleaseSpec, seed GarbleSeed, layout ReleaseRootLayout) ([]ReleaseGarbleBuildRequest, error) {
 	requests := make([]ReleaseGarbleBuildRequest, 0, len(s.Commands)*len(s.Platforms))
 	for _, platform := range s.Platforms {
 		for _, command := range s.Commands {
 			request, err := buildRequestForCommand(buildRequestInput{
-				Spec:       s,
-				Seed:       seed,
-				OutputRoot: outputRoot,
-				Platform:   platform,
-				Command:    command,
+				Spec:     s,
+				Seed:     seed,
+				Layout:   layout,
+				Platform: platform,
+				Command:  command,
 			})
 			if err != nil {
 				return nil, err
@@ -435,11 +586,11 @@ func buildRequestsForSpec(s ProductReleaseSpec, seed GarbleSeed, outputRoot Arti
 }
 
 type buildRequestInput struct {
-	Command    ReleaseCommand
-	Seed       GarbleSeed
-	OutputRoot ArtifactName
-	Spec       ProductReleaseSpec
-	Platform   core.Platform
+	Command  ReleaseCommand
+	Seed     GarbleSeed
+	Layout   ReleaseRootLayout
+	Spec     ProductReleaseSpec
+	Platform core.Platform
 }
 
 func buildRequestForCommand(input buildRequestInput) (ReleaseGarbleBuildRequest, error) {
@@ -447,7 +598,7 @@ func buildRequestForCommand(input buildRequestInput) (ReleaseGarbleBuildRequest,
 	if err != nil {
 		return ReleaseGarbleBuildRequest{}, err
 	}
-	output, err := ParseBuildOutputPath(strings.Join([]string{input.OutputRoot.String(), input.Platform.String(), binary.String()}, "/"))
+	output, err := releaseRootPath(input.Layout.Platforms.String(), input.Platform.String(), binary.String())
 	if err != nil {
 		return ReleaseGarbleBuildRequest{}, err
 	}
@@ -458,6 +609,10 @@ func buildRequestForCommand(input buildRequestInput) (ReleaseGarbleBuildRequest,
 		Platform: input.Platform,
 		Policy:   input.Spec.Policy,
 	}, nil
+}
+
+func specMatchesLayout(s ProductReleaseSpec, layout ReleaseRootLayout) bool {
+	return s.Product == layout.Product && s.Version.String() == layout.Version.String()
 }
 
 func validateSpecCommands(s ProductReleaseSpec) error {
@@ -512,10 +667,6 @@ func NewReleaseCommand(name, importPath string) (ReleaseCommand, error) {
 		return ReleaseCommand{}, err
 	}
 	return ReleaseCommand{Name: artifactName, ImportPath: parsedPath}, nil
-}
-
-func DefaultOutputRoot() (ArtifactName, error) {
-	return ParseArtifactName(DistDirName)
 }
 
 func validateBuildToken(value string, maxRunes int) error {

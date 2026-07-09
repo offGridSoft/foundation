@@ -3,6 +3,7 @@ package release
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/offGridSoft/foundation/v2026/core"
@@ -24,6 +25,12 @@ const (
 	ArchiveMetadataFileMode = 0o644
 	ArchiveMaxEntryBytes    = 256 << 20
 	ArchiveMaxTotalBytes    = 512 << 20
+	EvidenceRefMaxRunes     = 512
+	GarbleSeedRefMaxRunes   = 512
+	ToolModuleMaxRunes      = 256
+	ToolVersionMaxRunes     = 128
+	GoSumHashMaxRunes       = 256
+	GoSumHashPrefix         = "h1:"
 )
 
 type ReleaseID struct {
@@ -271,5 +278,214 @@ func (u *DownloadURL) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*u = parsed
+	return nil
+}
+
+type EvidenceRef struct {
+	value string
+}
+
+func ParseEvidenceRef(value string) (EvidenceRef, error) {
+	if err := core.ValidateOpaqueToken(value, EvidenceRefMaxRunes); err != nil {
+		return EvidenceRef{}, wrapReleaseContract(ErrFmtEvidenceRef, err)
+	}
+	return EvidenceRef{value: value}, nil
+}
+
+func (r EvidenceRef) String() string {
+	return r.value
+}
+
+func (r EvidenceRef) Validate() error {
+	_, err := ParseEvidenceRef(r.value)
+	return err
+}
+
+func (r EvidenceRef) MarshalJSON() ([]byte, error) {
+	if err := r.Validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(r.value)
+}
+
+func (r *EvidenceRef) UnmarshalJSON(data []byte) error {
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return fmt.Errorf(ErrFmtEvidenceRef, core.ErrReleaseContract)
+	}
+	parsed, err := ParseEvidenceRef(value)
+	if err != nil {
+		return err
+	}
+	*r = parsed
+	return nil
+}
+
+type GarbleSeedRef struct {
+	value string
+}
+
+func ParseGarbleSeedRef(value string) (GarbleSeedRef, error) {
+	if err := core.ValidateOpaqueToken(value, GarbleSeedRefMaxRunes); err != nil {
+		return GarbleSeedRef{}, wrapReleaseContract(ErrFmtGarbleSeedRef, err)
+	}
+	if strings.ContainsAny(value, " \t") {
+		return GarbleSeedRef{}, fmt.Errorf(ErrFmtGarbleSeedRef, core.ErrReleaseContract)
+	}
+	return GarbleSeedRef{value: value}, nil
+}
+
+func (r GarbleSeedRef) String() string {
+	return r.value
+}
+
+func (r GarbleSeedRef) Validate() error {
+	_, err := ParseGarbleSeedRef(r.value)
+	return err
+}
+
+func (r GarbleSeedRef) MarshalJSON() ([]byte, error) {
+	if err := r.Validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(r.value)
+}
+
+func (r *GarbleSeedRef) UnmarshalJSON(data []byte) error {
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return fmt.Errorf(ErrFmtGarbleSeedRef, core.ErrReleaseContract)
+	}
+	parsed, err := ParseGarbleSeedRef(value)
+	if err != nil {
+		return err
+	}
+	*r = parsed
+	return nil
+}
+
+type ToolVersion struct {
+	value string
+}
+
+func ParseToolVersion(value string) (ToolVersion, error) {
+	if err := core.ValidateOpaqueToken(value, ToolVersionMaxRunes); err != nil {
+		return ToolVersion{}, wrapReleaseContract(ErrFmtToolVersion, err)
+	}
+	return ToolVersion{value: value}, nil
+}
+
+func (v ToolVersion) String() string {
+	return v.value
+}
+
+func (v ToolVersion) Validate() error {
+	_, err := ParseToolVersion(v.value)
+	return err
+}
+
+func (v ToolVersion) MarshalJSON() ([]byte, error) {
+	if err := v.Validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(v.value)
+}
+
+func (v *ToolVersion) UnmarshalJSON(data []byte) error {
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return fmt.Errorf(ErrFmtToolVersion, core.ErrReleaseContract)
+	}
+	parsed, err := ParseToolVersion(value)
+	if err != nil {
+		return err
+	}
+	*v = parsed
+	return nil
+}
+
+type ToolModule struct {
+	value string
+}
+
+func ParseToolModule(value string) (ToolModule, error) {
+	if err := core.ValidateOpaqueToken(value, ToolModuleMaxRunes); err != nil {
+		return ToolModule{}, wrapReleaseContract(ErrFmtToolModule, err)
+	}
+	if strings.ContainsAny(value, " \t") {
+		return ToolModule{}, fmt.Errorf(ErrFmtToolModule, core.ErrReleaseContract)
+	}
+	return ToolModule{value: value}, nil
+}
+
+func (m ToolModule) String() string {
+	return m.value
+}
+
+func (m ToolModule) Validate() error {
+	_, err := ParseToolModule(m.value)
+	return err
+}
+
+func (m ToolModule) MarshalJSON() ([]byte, error) {
+	if err := m.Validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(m.value)
+}
+
+func (m *ToolModule) UnmarshalJSON(data []byte) error {
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return fmt.Errorf(ErrFmtToolModule, core.ErrReleaseContract)
+	}
+	parsed, err := ParseToolModule(value)
+	if err != nil {
+		return err
+	}
+	*m = parsed
+	return nil
+}
+
+type GoSumHash struct {
+	value string
+}
+
+func ParseGoSumHash(value string) (GoSumHash, error) {
+	if err := core.ValidateOpaqueToken(value, GoSumHashMaxRunes); err != nil {
+		return GoSumHash{}, wrapReleaseContract(ErrFmtGoSumHash, err)
+	}
+	if !strings.HasPrefix(value, GoSumHashPrefix) || value == GoSumHashPrefix {
+		return GoSumHash{}, fmt.Errorf(ErrFmtGoSumHash, core.ErrReleaseContract)
+	}
+	return GoSumHash{value: value}, nil
+}
+
+func (h GoSumHash) String() string {
+	return h.value
+}
+
+func (h GoSumHash) Validate() error {
+	_, err := ParseGoSumHash(h.value)
+	return err
+}
+
+func (h GoSumHash) MarshalJSON() ([]byte, error) {
+	if err := h.Validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(h.value)
+}
+
+func (h *GoSumHash) UnmarshalJSON(data []byte) error {
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return fmt.Errorf(ErrFmtGoSumHash, core.ErrReleaseContract)
+	}
+	parsed, err := ParseGoSumHash(value)
+	if err != nil {
+		return err
+	}
+	*h = parsed
 	return nil
 }

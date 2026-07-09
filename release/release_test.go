@@ -763,6 +763,94 @@ func TestReleasePlanningJSONHostileTable(t *testing.T) {
 	}
 }
 
+func TestReleaseContractJSONOwnershipTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		run  func(*testing.T)
+		name string
+	}{
+		{name: "build import path marshals and unmarshals", run: func(t *testing.T) {
+			requireJSONRoundTrip(t, mustBuildImportPath(t, "./cmd/witness"), new(BuildImportPath))
+		}},
+		{name: "build tag marshals and unmarshals", run: func(t *testing.T) {
+			requireJSONRoundTrip(t, mustBuildTag(t, "netgo"), new(BuildTag))
+		}},
+		{name: "linker symbol marshals and unmarshals", run: func(t *testing.T) {
+			requireJSONRoundTrip(t, mustLinkerSymbol(t, "github.com/offGridSoft/witness/internal/release.BuildCommit"), new(LinkerSymbol))
+		}},
+		{name: "commit stamp marshals", run: func(t *testing.T) {
+			requireMarshalOK(t, validWitnessBuildPolicy(t).CommitStamp)
+		}},
+		{name: "build policy marshals", run: func(t *testing.T) {
+			requireMarshalOK(t, validWitnessBuildPolicy(t))
+		}},
+		{name: "release command marshals", run: func(t *testing.T) {
+			requireMarshalOK(t, mustReleaseCommand(t, core.ProductTokenWitness, "./cmd/witness"))
+		}},
+		{name: "garble build request marshals", run: func(t *testing.T) {
+			requireMarshalOK(t, validWitnessBuildRequest(t, mustGarbleSeed(t)))
+		}},
+		{name: "product release spec marshals", run: func(t *testing.T) {
+			requireMarshalOK(t, validWitnessReleaseSpec(t))
+		}},
+		{name: "release plan marshals and canonicalizes", run: func(t *testing.T) {
+			plan := validReleasePlan(t)
+			requireMarshalOK(t, plan)
+			if _, err := plan.Canonical(nil); err != nil {
+				t.Fatalf("ReleasePlan.Canonical() error = %v", err)
+			}
+		}},
+		{name: "build toolchain marshals", run: func(t *testing.T) {
+			requireMarshalOK(t, validBuildToolchain(t))
+		}},
+		{name: "vuln db snapshot marshals", run: func(t *testing.T) {
+			requireMarshalOK(t, validVulnDBSnapshot(t))
+		}},
+		{name: "release gate evidence marshals", run: func(t *testing.T) {
+			requireMarshalOK(t, validReleaseGateEvidence(t))
+		}},
+		{name: "tool provenance marshals", run: func(t *testing.T) {
+			requireMarshalOK(t, validToolProvenance(t)[0])
+		}},
+		{name: "evidence ref string marshals and unmarshals", run: func(t *testing.T) {
+			ref := mustEvidenceRef(t, "witness://release/final/green")
+			if ref.String() == "" {
+				t.Fatalf("EvidenceRef.String() blank")
+			}
+			requireJSONRoundTrip(t, ref, new(EvidenceRef))
+		}},
+		{name: "seed ref string marshals and unmarshals", run: func(t *testing.T) {
+			ref := mustGarbleSeedRef(t, "release/2026/07/08/seed")
+			if ref.String() == "" {
+				t.Fatalf("GarbleSeedRef.String() blank")
+			}
+			requireJSONRoundTrip(t, ref, new(GarbleSeedRef))
+		}},
+		{name: "tool version string marshals and unmarshals", run: func(t *testing.T) {
+			version := mustToolVersion(t, "v2026.0.0")
+			if version.String() == "" {
+				t.Fatalf("ToolVersion.String() blank")
+			}
+			requireJSONRoundTrip(t, version, new(ToolVersion))
+		}},
+		{name: "tool module marshals and unmarshals", run: func(t *testing.T) {
+			requireJSONRoundTrip(t, mustToolModule(t, "github.com/offGridSoft/deadcode"), new(ToolModule))
+		}},
+		{name: "go sum string marshals and unmarshals", run: func(t *testing.T) {
+			sum := mustGoSumHash(t, "h1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=")
+			if sum.String() == "" {
+				t.Fatalf("GoSumHash.String() blank")
+			}
+			requireJSONRoundTrip(t, sum, new(GoSumHash))
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tc.run(t)
+		})
+	}
+}
+
 func TestReleaseBuildSpecHostileTable(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -903,31 +991,32 @@ func TestGarbleBuildArgsHostileTable(t *testing.T) {
 func TestProductReleaseSpecBuildRequestsHostileTable(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		mutate    func(*ProductReleaseSpec, *GarbleSeed, *ArtifactName)
+		mutate    func(*ProductReleaseSpec, *GarbleSeed, *ReleaseRootLayout)
 		name      string
 		wantCount int
 	}{
-		{name: "bug matrix expands one command across release platforms", wantCount: len(BuildPlatforms()), mutate: func(s *ProductReleaseSpec, _ *GarbleSeed, _ *ArtifactName) {
+		{name: "bug matrix expands one command across release platforms", wantCount: len(BuildPlatforms()), mutate: func(s *ProductReleaseSpec, _ *GarbleSeed, layout *ReleaseRootLayout) {
 			*s = validBugReleaseSpec(t)
+			*layout = validBugReleaseRootLayout(t)
 		}},
-		{name: "witness matrix expands all commands", wantCount: len(BuildPlatforms()) * 2, mutate: func(*ProductReleaseSpec, *GarbleSeed, *ArtifactName) {}},
-		{name: "random seed rejected before output planning", mutate: func(_ *ProductReleaseSpec, seed *GarbleSeed, _ *ArtifactName) {
+		{name: "witness matrix expands all commands", wantCount: len(BuildPlatforms()) * 2, mutate: func(*ProductReleaseSpec, *GarbleSeed, *ReleaseRootLayout) {}},
+		{name: "random seed rejected before output planning", mutate: func(_ *ProductReleaseSpec, seed *GarbleSeed, _ *ReleaseRootLayout) {
 			*seed = GarbleSeed{value: GarbleSeedRandom}
 		}},
-		{name: "bad output root rejected", mutate: func(_ *ProductReleaseSpec, _ *GarbleSeed, root *ArtifactName) {
-			*root = ArtifactName{value: ".."}
+		{name: "tampered release root rejected", mutate: func(_ *ProductReleaseSpec, _ *GarbleSeed, layout *ReleaseRootLayout) {
+			layout.Platforms = mustBuildOutputPath(t, "dist/wrong")
+		}},
+		{name: "layout product drift rejected", mutate: func(_ *ProductReleaseSpec, _ *GarbleSeed, layout *ReleaseRootLayout) {
+			layout.Product = core.ProductBug
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			spec := validWitnessReleaseSpec(t)
 			seed := mustGarbleSeed(t)
-			root, err := DefaultOutputRoot()
-			if err != nil {
-				t.Fatal(err)
-			}
-			tc.mutate(&spec, &seed, &root)
-			got, err := spec.GarbleBuildRequests(seed, root)
+			layout := validWitnessReleaseRootLayout(t)
+			tc.mutate(&spec, &seed, &layout)
+			got, err := spec.GarbleBuildRequests(seed, layout)
 			if tc.wantCount == 0 {
 				if !errors.Is(err, core.ErrReleaseContract) {
 					t.Fatalf("GarbleBuildRequests() error = %v, want ErrReleaseContract", err)
@@ -940,8 +1029,181 @@ func TestProductReleaseSpecBuildRequestsHostileTable(t *testing.T) {
 			if len(got) != tc.wantCount {
 				t.Fatalf("GarbleBuildRequests() len = %d, want %d", len(got), tc.wantCount)
 			}
-			if got[len(got)-1].Output.String() != "dist/windows-amd64/witness-sign.exe" && spec.Product == core.ProductWitness {
+			wantSuffix := "dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/platforms/windows-amd64/witness-sign.exe"
+			if got[len(got)-1].Output.String() != wantSuffix && spec.Product == core.ProductWitness {
 				t.Fatalf("last witness output = %q, want windows executable suffix", got[len(got)-1].Output.String())
+			}
+		})
+	}
+}
+
+func TestReleaseMetadataScalarsHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		run  func() error
+		name string
+	}{
+		{name: "evidence ref accepts witness uri", run: func() error { _, err := ParseEvidenceRef("witness://release/final/gate"); return err }},
+		{name: "evidence ref rejects newline", run: func() error { _, err := ParseEvidenceRef("witness://release\nshadow"); return err }},
+		{name: "seed ref rejects embedded space", run: func() error { _, err := ParseGarbleSeedRef("release seed/path"); return err }},
+		{name: "tool version rejects tab", run: func() error { _, err := ParseToolVersion("go1.25\tshadow"); return err }},
+		{name: "tool module rejects space", run: func() error { _, err := ParseToolModule("github.com/off Grid/tool"); return err }},
+		{name: "go sum rejects missing hash prefix", run: func() error { _, err := ParseGoSumHash("sha256:abc"); return err }},
+		{name: "go sum accepts module hash", run: func() error { _, err := ParseGoSumHash("h1:abcdefghijklmnopqrstuvwxyz0123456789+/="); return err }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := tc.run()
+			if strings.Contains(tc.name, " accepts ") {
+				if err != nil {
+					t.Fatalf("%s error = %v", tc.name, err)
+				}
+				return
+			}
+			if !errors.Is(err, core.ErrReleaseContract) && !errors.Is(err, core.ErrFoundationContract) {
+				t.Fatalf("%s error = %v, want release/foundation contract", tc.name, err)
+			}
+		})
+	}
+}
+
+func TestReleasePreflightHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		mutate func(*ReleasePreflightInput)
+		name   string
+	}{
+		{name: "clean requested commit with release seed accepted", mutate: func(*ReleasePreflightInput) {}},
+		{name: "dirty tree rejected before build", mutate: func(in *ReleasePreflightInput) { in.TreeState = TreeStateDirty }},
+		{name: "head commit drift rejected", mutate: func(in *ReleasePreflightInput) { in.HeadCommit = mustOtherCommit(t) }},
+		{name: "random seed rejected", mutate: func(in *ReleasePreflightInput) { in.Seed = GarbleSeed{value: GarbleSeedRandom} }},
+		{name: "bad go version rejected", mutate: func(in *ReleasePreflightInput) { in.Toolchain.GoVersion = ToolVersion{value: "go1.25\nshadow"} }},
+		{name: "zero vuln snapshot rejected", mutate: func(in *ReleasePreflightInput) { in.VulnDB.SnapshotAt = core.UnixNanoTime{} }},
+		{name: "blank final gate ref rejected", mutate: func(in *ReleasePreflightInput) { in.Evidence.FinalEvidenceRef = EvidenceRef{} }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			input := validReleasePreflightInput(t)
+			tc.mutate(&input)
+			err := Preflight(input)
+			if strings.Contains(tc.name, " accepted") {
+				if err != nil {
+					t.Fatalf("Preflight() = %v", err)
+				}
+				return
+			}
+			if !errors.Is(err, core.ErrReleaseContract) && !errors.Is(err, core.ErrFoundationContract) {
+				t.Fatalf("Preflight() error = %v, want release/foundation contract", err)
+			}
+		})
+	}
+}
+
+func TestReleasePlanHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		mutate func(*ReleasePlan)
+		name   string
+	}{
+		{name: "valid witness plan accepted", mutate: func(*ReleasePlan) {}},
+		{name: "layout product drift rejected", mutate: func(p *ReleasePlan) { p.Layout.Product = core.ProductBug }},
+		{name: "spec version drift rejected", mutate: func(p *ReleasePlan) { p.Spec.Version = mustOtherVersion(t) }},
+		{name: "commit stamp drift rejected", mutate: func(p *ReleasePlan) { p.Spec.Policy.CommitStamp.Commit = mustOtherCommit(t) }},
+		{name: "bad seed ref rejected", mutate: func(p *ReleasePlan) { p.SeedRef = GarbleSeedRef{value: "seed ref"} }},
+		{name: "garble random seed rejected", mutate: func(p *ReleasePlan) { p.Seed = GarbleSeed{value: GarbleSeedRandom} }},
+		{name: "tool duplicate rejected", mutate: func(p *ReleasePlan) { p.Tools[1].Module = p.Tools[0].Module }},
+		{name: "tool unsorted rejected", mutate: func(p *ReleasePlan) { p.Tools[0], p.Tools[1] = p.Tools[1], p.Tools[0] }},
+		{name: "tool count mismatch rejected", mutate: func(p *ReleasePlan) { p.ToolCount++ }},
+		{name: "fast gate ref newline rejected", mutate: func(p *ReleasePlan) { p.Evidence.FastGateRef = EvidenceRef{value: "fast\nshadow"} }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			plan := validReleasePlan(t)
+			tc.mutate(&plan)
+			err := plan.Validate()
+			if strings.Contains(tc.name, " accepted") {
+				if err != nil {
+					t.Fatalf("ReleasePlan.Validate() = %v", err)
+				}
+				return
+			}
+			if !errors.Is(err, core.ErrReleaseContract) && !errors.Is(err, core.ErrFoundationContract) {
+				t.Fatalf("ReleasePlan.Validate() error = %v, want release/foundation contract", err)
+			}
+		})
+	}
+}
+
+func TestReleasePlanGarbleBuildRequestsUseReleaseRootHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name       string
+		mutate     func(*ReleasePlan)
+		wantOutput string
+		wantCount  int
+	}{
+		{
+			name:       "release root produces windows executable output",
+			mutate:     func(*ReleasePlan) {},
+			wantCount:  len(BuildPlatforms()) * 2,
+			wantOutput: "dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/platforms/windows-amd64/witness-sign.exe",
+		},
+		{name: "tampered platforms dir rejected", mutate: func(p *ReleasePlan) { p.Layout.Platforms = mustBuildOutputPath(t, "dist/platforms") }},
+		{name: "unsupported platform rejected", mutate: func(p *ReleasePlan) { p.Spec.Platforms[0] = core.PlatformDarwinAMD64 }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			plan := validReleasePlan(t)
+			tc.mutate(&plan)
+			got, err := plan.GarbleBuildRequests()
+			if tc.wantCount == 0 {
+				if !errors.Is(err, core.ErrReleaseContract) && !errors.Is(err, core.ErrFoundationContract) {
+					t.Fatalf("GarbleBuildRequests() error = %v, want release/foundation contract", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("GarbleBuildRequests() error = %v", err)
+			}
+			if len(got) != tc.wantCount {
+				t.Fatalf("GarbleBuildRequests() len = %d, want %d", len(got), tc.wantCount)
+			}
+			if got[len(got)-1].Output.String() != tc.wantOutput {
+				t.Fatalf("last output = %q, want %q", got[len(got)-1].Output.String(), tc.wantOutput)
+			}
+		})
+	}
+}
+
+func TestDeployPlanHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		mutate func(*DeployPlan)
+		name   string
+	}{
+		{name: "valid deploy plan accepted", mutate: func(*DeployPlan) {}},
+		{name: "manifest product drift rejected", mutate: func(p *DeployPlan) { p.Manifest.Product = core.ProductBug }},
+		{name: "layout release id drift rejected", mutate: func(p *DeployPlan) { p.Layout.ReleaseID = mustOtherReleaseID(t) }},
+		{name: "manifest sha missing rejected", mutate: func(p *DeployPlan) { p.ManifestSHA256 = core.SHA256Hex{} }},
+		{name: "duplicate upload target rejected", mutate: func(p *DeployPlan) {
+			p.Targets = append(p.Targets, p.Targets[0])
+			p.TargetCount = uint32(len(p.Targets))
+		}},
+		{name: "target count mismatch rejected", mutate: func(p *DeployPlan) { p.TargetCount++ }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			plan := validDeployPlan(t)
+			tc.mutate(&plan)
+			err := plan.Validate()
+			if strings.Contains(tc.name, " accepted") {
+				if err != nil {
+					t.Fatalf("DeployPlan.Validate() = %v", err)
+				}
+				return
+			}
+			if !errors.Is(err, core.ErrReleaseContract) && !errors.Is(err, core.ErrFoundationContract) {
+				t.Fatalf("DeployPlan.Validate() error = %v, want release/foundation contract", err)
 			}
 		})
 	}
@@ -1081,6 +1343,94 @@ func validWitnessReleaseSpec(t *testing.T) ProductReleaseSpec {
 	}
 }
 
+func validReleasePlan(t *testing.T) ReleasePlan {
+	t.Helper()
+	tools := validToolProvenance(t)
+	return ReleasePlan{
+		Product:   core.ProductWitness,
+		Version:   mustVersion(t),
+		ReleaseID: mustReleaseID(t),
+		Date:      mustReleaseDate(t),
+		Commit:    mustCommit(t),
+		Seed:      mustGarbleSeed(t),
+		SeedRef:   mustGarbleSeedRef(t, "release/2026/07/08/seed"),
+		Layout:    validWitnessReleaseRootLayout(t),
+		Spec:      validWitnessReleaseSpec(t),
+		Toolchain: validBuildToolchain(t),
+		Evidence:  validReleaseGateEvidence(t),
+		VulnDB:    validVulnDBSnapshot(t),
+		Tools:     tools,
+		ToolCount: uint32(len(tools)),
+	}
+}
+
+func validReleasePreflightInput(t *testing.T) ReleasePreflightInput {
+	t.Helper()
+	return ReleasePreflightInput{
+		RequestedCommit: mustCommit(t),
+		HeadCommit:      mustCommit(t),
+		TreeState:       TreeStateClean,
+		Seed:            mustGarbleSeed(t),
+		Toolchain:       validBuildToolchain(t),
+		VulnDB:          validVulnDBSnapshot(t),
+		Evidence:        validReleaseGateEvidence(t),
+	}
+}
+
+func validBuildToolchain(t *testing.T) BuildToolchain {
+	t.Helper()
+	return BuildToolchain{
+		GoVersion:     mustToolVersion(t, "go1.25.0"),
+		GarbleVersion: mustToolVersion(t, "v0.15.0"),
+	}
+}
+
+func validVulnDBSnapshot(t *testing.T) VulnDBSnapshot {
+	t.Helper()
+	return VulnDBSnapshot{
+		DBVersion:  mustToolVersion(t, "2026-07-08T00:00:00Z"),
+		SnapshotAt: core.UnixNanoTimeFromInt64(1782302400000000000),
+	}
+}
+
+func validReleaseGateEvidence(t *testing.T) ReleaseGateEvidence {
+	t.Helper()
+	return ReleaseGateEvidence{
+		FastGateRef:      mustEvidenceRef(t, "witness://release/fast/green"),
+		FinalEvidenceRef: mustEvidenceRef(t, "witness://release/final/green"),
+	}
+}
+
+func validToolProvenance(t *testing.T) []ToolProvenance {
+	t.Helper()
+	return []ToolProvenance{
+		{
+			Module:  mustToolModule(t, "github.com/offGridSoft/deadcode"),
+			Version: mustToolVersion(t, "v2026.0.0"),
+			GoSum:   mustGoSumHash(t, "h1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa="),
+		},
+		{
+			Module:  mustToolModule(t, "honnef.co/go/tools"),
+			Version: mustToolVersion(t, "v0.6.1"),
+			GoSum:   mustGoSumHash(t, "h1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb="),
+		},
+	}
+}
+
+func validDeployPlan(t *testing.T) DeployPlan {
+	t.Helper()
+	return DeployPlan{
+		Product:        core.ProductWitness,
+		Version:        mustVersion(t),
+		ReleaseID:      mustReleaseID(t),
+		Manifest:       validManifest(t),
+		ManifestSHA256: mustSHA256(t, "f"),
+		Layout:         validWitnessReleaseRootLayout(t),
+		Targets:        []UploadTarget{validUploadTarget(t)},
+		TargetCount:    1,
+	}
+}
+
 func validBugBuildRequest(t *testing.T, seed GarbleSeed) ReleaseGarbleBuildRequest {
 	t.Helper()
 	return ReleaseGarbleBuildRequest{
@@ -1164,6 +1514,26 @@ func validReleaseRootInput(t *testing.T) ReleaseRootInput {
 	}
 }
 
+func validWitnessReleaseRootLayout(t *testing.T) ReleaseRootLayout {
+	t.Helper()
+	layout, err := BuildReleaseRootLayout(validReleaseRootInput(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return layout
+}
+
+func validBugReleaseRootLayout(t *testing.T) ReleaseRootLayout {
+	t.Helper()
+	input := validReleaseRootInput(t)
+	input.Product = core.ProductBug
+	layout, err := BuildReleaseRootLayout(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return layout
+}
+
 func tamperedReleaseRootPath(t *testing.T, finalSegment string) BuildOutputPath {
 	t.Helper()
 	segments := []string{
@@ -1187,6 +1557,51 @@ func mustGarbleSeed(t *testing.T) GarbleSeed {
 	return seed
 }
 
+func mustEvidenceRef(t *testing.T, value string) EvidenceRef {
+	t.Helper()
+	ref, err := ParseEvidenceRef(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ref
+}
+
+func mustGarbleSeedRef(t *testing.T, value string) GarbleSeedRef {
+	t.Helper()
+	ref, err := ParseGarbleSeedRef(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ref
+}
+
+func mustToolVersion(t *testing.T, value string) ToolVersion {
+	t.Helper()
+	version, err := ParseToolVersion(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return version
+}
+
+func mustToolModule(t *testing.T, value string) ToolModule {
+	t.Helper()
+	module, err := ParseToolModule(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return module
+}
+
+func mustGoSumHash(t *testing.T, value string) GoSumHash {
+	t.Helper()
+	hash, err := ParseGoSumHash(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return hash
+}
+
 func mustReleaseCommand(t *testing.T, name string, importPath string) ReleaseCommand {
 	t.Helper()
 	command, err := NewReleaseCommand(name, importPath)
@@ -1194,6 +1609,15 @@ func mustReleaseCommand(t *testing.T, name string, importPath string) ReleaseCom
 		t.Fatal(err)
 	}
 	return command
+}
+
+func mustBuildImportPath(t *testing.T, value string) BuildImportPath {
+	t.Helper()
+	path, err := ParseBuildImportPath(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
 
 func mustBuildOutputPath(t *testing.T, value string) BuildOutputPath {
@@ -1310,9 +1734,27 @@ func mustVersion(t *testing.T) core.ProductVersion {
 	return version
 }
 
+func mustOtherVersion(t *testing.T) core.ProductVersion {
+	t.Helper()
+	version, err := core.ParseProductVersion("2027.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return version
+}
+
 func mustReleaseID(t *testing.T) ReleaseID {
 	t.Helper()
 	id, err := ParseReleaseID(testReleaseToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func mustOtherReleaseID(t *testing.T) ReleaseID {
+	t.Helper()
+	id, err := ParseReleaseID("2026-07-09-2026.0.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1334,6 +1776,15 @@ func mustReleaseDate(t *testing.T) ReleaseDate {
 func mustCommit(t *testing.T) core.BuildCommit {
 	t.Helper()
 	commit, err := core.ParseBuildCommit(strings.Repeat("a", 40))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return commit
+}
+
+func mustOtherCommit(t *testing.T) core.BuildCommit {
+	t.Helper()
+	commit, err := core.ParseBuildCommit(strings.Repeat("b", 40))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1365,4 +1816,22 @@ func mustSHA256(t *testing.T, digit string) core.SHA256Hex {
 		t.Fatal(err)
 	}
 	return sum
+}
+
+func requireMarshalOK(t *testing.T, value any) {
+	t.Helper()
+	if _, err := json.Marshal(value); err != nil {
+		t.Fatalf("json.Marshal(%T) error = %v", value, err)
+	}
+}
+
+func requireJSONRoundTrip(t *testing.T, value any, target any) {
+	t.Helper()
+	data, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("json.Marshal(%T) error = %v", value, err)
+	}
+	if err := json.Unmarshal(data, target); err != nil {
+		t.Fatalf("json.Unmarshal(%T) error = %v", target, err)
+	}
 }
