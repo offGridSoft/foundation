@@ -46,10 +46,7 @@ func (s VulnDBSnapshot) Validate() error {
 	if err := s.DBVersion.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtVulnDB, err)
 	}
-	if s.SnapshotAt.IsZero() {
-		return fmt.Errorf(ErrFmtVulnDB, core.ErrReleaseContract)
-	}
-	if err := s.SnapshotAt.Validate(); err != nil {
+	if err := core.ValidateRequiredUnixNanoTime(s.SnapshotAt); err != nil {
 		return wrapReleaseContract(ErrFmtVulnDB, err)
 	}
 	return nil

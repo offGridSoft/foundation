@@ -33,6 +33,7 @@ func TestUnixNanoTimeHostileTable(t *testing.T) {
 		{raw: `1782302400000000000.0`},
 		{raw: `+1782302400000000000`},
 		{raw: `01782302400000000000`},
+		{raw: `-0`},
 		{raw: `-1`},
 		{raw: `9223372036854775808`},
 		{raw: `{}`},
@@ -57,6 +58,16 @@ func TestUnixNanoTimeHostileTable(t *testing.T) {
 	}
 	if _, err := json.Marshal(UnixNanoTimeFromInt64(-1)); !errors.Is(err, ErrFoundationContract) {
 		t.Fatalf("UnixNanoTime.MarshalJSON(negative) error = %v, want ErrFoundationContract", err)
+	}
+	epoch := UnixNanoTimeFromInt64(0)
+	if err := epoch.Validate(); err != nil {
+		t.Fatalf("UnixNanoTime epoch Validate() = %v", err)
+	}
+	if got := epoch.Add(time.Nanosecond).UnixNano(); got != 1 {
+		t.Fatalf("UnixNanoTime epoch Add(1ns) = %d, want 1", got)
+	}
+	if _, err := json.Marshal(UnixNanoTime{}); !errors.Is(err, ErrFoundationContract) {
+		t.Fatalf("UnixNanoTime unset MarshalJSON error = %v, want ErrFoundationContract", err)
 	}
 }
 
@@ -106,9 +117,6 @@ func TestMoneyPenniesHostileTable(t *testing.T) {
 	}
 
 	for _, amount := range []MoneyPennies{NewMoneyPennies(0), NewMoneyPennies(1), NewMoneyPennies(100)} {
-		if err := amount.Validate(); err != nil {
-			t.Fatalf("MoneyPennies(%d).Validate() = %v, want nil", amount.Uint64(), err)
-		}
 		data, err := json.Marshal(amount)
 		if err != nil {
 			t.Fatalf("MoneyPennies(%d).MarshalJSON() = %v", amount.Uint64(), err)
@@ -269,6 +277,88 @@ func TestEd25519SignatureHexHostileTable(t *testing.T) {
 	}
 }
 
+func TestFixedHexJSONRejectsNullAndEmptyHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		raw  string
+		name string
+		kind fixedHexJSONKind
+	}{
+		{name: "sha256 rejects null", kind: fixedHexJSONKindSHA256, raw: `null`},
+		{name: "sha256 rejects empty string", kind: fixedHexJSONKindSHA256, raw: `""`},
+		{name: "blake3 rejects null", kind: fixedHexJSONKindBLAKE3, raw: `null`},
+		{name: "blake3 rejects empty string", kind: fixedHexJSONKindBLAKE3, raw: `""`},
+		{name: "ed25519 public key rejects null", kind: fixedHexJSONKindEd25519PublicKey, raw: `null`},
+		{name: "ed25519 public key rejects empty string", kind: fixedHexJSONKindEd25519PublicKey, raw: `""`},
+		{name: "ed25519 signature rejects null", kind: fixedHexJSONKindEd25519Signature, raw: `null`},
+		{name: "ed25519 signature rejects empty string", kind: fixedHexJSONKindEd25519Signature, raw: `""`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if err := unmarshalFixedHexForTest(tc.kind, []byte(tc.raw)); !errors.Is(err, ErrFoundationContract) {
+				t.Fatalf("%s error = %v, want ErrFoundationContract", tc.name, err)
+			}
+		})
+	}
+}
+
+func TestAppendJSONFieldRejectsInvalidFieldNameHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		fieldName string
+	}{
+		{name: "control byte rejected", fieldName: "bad\x01field"},
+		{name: "newline rejected", fieldName: "bad\nfield"},
+		{name: "edge space rejected", fieldName: " field"},
+		{name: "empty rejected", fieldName: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if _, err := AppendJSONField(nil, tc.fieldName, "value"); !errors.Is(err, ErrFoundationContract) {
+				t.Fatalf("AppendJSONField(%q) error = %v, want ErrFoundationContract", tc.fieldName, err)
+			}
+		})
+	}
+}
+
+type fixedHexJSONKind uint8
+
+const (
+	fixedHexJSONKindSHA256 fixedHexJSONKind = iota + 1
+	fixedHexJSONKindBLAKE3
+	fixedHexJSONKindEd25519PublicKey
+	fixedHexJSONKindEd25519Signature
+)
+
+func unmarshalFixedHexForTest(kind fixedHexJSONKind, data []byte) error {
+	switch kind {
+	case fixedHexJSONKindSHA256:
+		value := NewSHA256Hex(sha256.Sum256([]byte("foundation")))
+		return value.UnmarshalJSON(data)
+	case fixedHexJSONKindBLAKE3:
+		value, err := ParseBLAKE3Hex(strings.Repeat("b", BLAKE3DigestBytes*2))
+		if err != nil {
+			return err
+		}
+		return value.UnmarshalJSON(data)
+	case fixedHexJSONKindEd25519PublicKey:
+		public, err := NewEd25519PublicKeyHex(make([]byte, ed25519.PublicKeySize))
+		if err != nil {
+			return err
+		}
+		return public.UnmarshalJSON(data)
+	case fixedHexJSONKindEd25519Signature:
+		value, err := NewEd25519SignatureHex(make([]byte, ed25519.SignatureSize))
+		if err != nil {
+			return err
+		}
+		return value.UnmarshalJSON(data)
+	default:
+		return ErrFoundationContract
+	}
+}
+
 func TestBuildCommitHostileTable(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -377,10 +467,12 @@ func TestOpaqueTokenBoundariesRejectControlsAndEdges(t *testing.T) {
 		name string
 	}{
 		{name: "api request id rejects crlf", run: func() error {
-			return NewAPIRequestID("evil\r\nX-Injected: 1").Validate()
+			_, err := ParseAPIRequestID("evil\r\nX-Injected: 1")
+			return err
 		}},
 		{name: "api request id rejects leading space", run: func() error {
-			return NewAPIRequestID(" req-1").Validate()
+			_, err := ParseAPIRequestID(" req-1")
+			return err
 		}},
 		{name: "signing key id rejects nul", run: func() error {
 			_, err := ParseSigningKeyID("key\x001")
@@ -394,6 +486,10 @@ func TestOpaqueTokenBoundariesRejectControlsAndEdges(t *testing.T) {
 			_, err := ParseLeaseID("lease\t1")
 			return err
 		}},
+		{name: "lease id rejects empty string", run: func() error {
+			var id LeaseID
+			return id.UnmarshalJSON([]byte(`""`))
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -401,6 +497,85 @@ func TestOpaqueTokenBoundariesRejectControlsAndEdges(t *testing.T) {
 				t.Fatalf("%s error = %v, want ErrFoundationContract", tc.name, err)
 			}
 		})
+	}
+}
+
+func TestLeaseIDNullRoundTripHostileTable(t *testing.T) {
+	t.Parallel()
+	var id LeaseID
+	if err := id.UnmarshalJSON([]byte(`null`)); err != nil {
+		t.Fatalf("LeaseID.UnmarshalJSON(null) error = %v", err)
+	}
+	data, err := id.MarshalJSON()
+	if err != nil {
+		t.Fatalf("LeaseID.MarshalJSON(zero) error = %v", err)
+	}
+	if string(data) != `null` {
+		t.Fatalf("LeaseID zero JSON = %s, want null", data)
+	}
+}
+
+func TestAPIRequestIDConstructorSanitizesHostileHeaderTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		input string
+		want  string
+		name  string
+	}{
+		{name: "blank header becomes missing", input: "", want: APIRequestIDMissing},
+		{name: "edge spaces trimmed", input: " req-1 ", want: "req-1"},
+		{name: "crlf injection loses controls", input: "evil\r\nX-Injected: 1", want: "evilX-Injected: 1"},
+		{name: "only controls becomes missing", input: "\r\n\t", want: APIRequestIDMissing},
+		{name: "oversized header truncates to contract", input: strings.Repeat("a", APIRequestIDMaxRunes+1), want: strings.Repeat("a", APIRequestIDMaxRunes)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			requestID := NewAPIRequestID(tc.input)
+			if requestID.String() != tc.want {
+				t.Fatalf("NewAPIRequestID() = %q, want %q", requestID.String(), tc.want)
+			}
+			envelope := APIEnvelope[string]{
+				RequestID: requestID,
+				Error:     &APIErrorBody{Code: APICodeInvalidInput, Message: "bad request"},
+			}
+			if _, err := json.Marshal(envelope); err != nil {
+				t.Fatalf("json.Marshal(APIEnvelope) error = %v", err)
+			}
+		})
+	}
+}
+
+func TestAPIRequestIDUnmarshalRejectsWithoutMutationHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		raw  string
+		name string
+	}{
+		{name: "crlf rejected", raw: `"evil\r\nX-Injected: 1"`},
+		{name: "edge space rejected", raw: `" req-1"`},
+		{name: "number rejected", raw: `1`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			requestID := NewAPIRequestID("original")
+			if err := json.Unmarshal([]byte(tc.raw), &requestID); !errors.Is(err, ErrFoundationContract) {
+				t.Fatalf("APIRequestID.UnmarshalJSON() error = %v, want ErrFoundationContract", err)
+			}
+			if requestID.String() != "original" {
+				t.Fatalf("APIRequestID after failed unmarshal = %q, want original", requestID.String())
+			}
+		})
+	}
+}
+
+func TestUniqueStringSetZeroValueHostileTable(t *testing.T) {
+	t.Parallel()
+	var set UniqueStringSet
+	if err := set.Add("first"); err != nil {
+		t.Fatalf("UniqueStringSet zero Add(first) error = %v", err)
+	}
+	if err := set.Add("first"); !errors.Is(err, ErrFoundationContract) {
+		t.Fatalf("UniqueStringSet duplicate error = %v, want ErrFoundationContract", err)
 	}
 }
 
@@ -446,6 +621,9 @@ func TestBackoffPolicyValidateHostileTable(t *testing.T) {
 	} {
 		if err := policy.Validate(); !errors.Is(err, ErrFoundationContract) {
 			t.Fatalf("BackoffPolicy.Validate error = %v, want ErrFoundationContract", err)
+		}
+		if _, err := policy.Delay(0, 1); !errors.Is(err, ErrFoundationContract) {
+			t.Fatalf("BackoffPolicy.Delay error = %v, want ErrFoundationContract", err)
 		}
 	}
 }
@@ -527,6 +705,8 @@ func TestDecodeStrictJSONHostileTable(t *testing.T) {
 		{name: "unknown field", raw: `{"name":"a","extra":"b"}`},
 		{name: "trailing object", raw: `{"name":"a"}{"name":"b"}`},
 		{name: "array instead of object", raw: `[]`},
+		{name: "top-level null rejected before zero struct fabrication", raw: `null`},
+		{name: "whitespace padded top-level null rejected before zero struct fabrication", raw: "\n\t null \r\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -619,6 +799,14 @@ func TestAPIEnvelopeHostileTable(t *testing.T) {
 				RequestID: NewAPIRequestID("req-1"),
 				Data:      &value,
 				Error:     &errBody,
+			},
+			wantError: ErrFoundationContract,
+		},
+		{
+			name: "failure rejects whitespace message",
+			envelope: APIEnvelope[string]{
+				RequestID: NewAPIRequestID("req-1"),
+				Error:     &APIErrorBody{Code: APICodeForbidden, Message: " \t "},
 			},
 			wantError: ErrFoundationContract,
 		},

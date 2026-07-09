@@ -200,10 +200,14 @@ func TestLeaseBodySchemaMutationRejectsSignedLease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	signature, err := core.NewEd25519SignatureHex(ed25519.Sign(private, message))
+	if err != nil {
+		t.Fatal(err)
+	}
 	body.Schema = core.SchemaWitnessSubscription
 	signed := core.Signed[SeatLeaseBody]{
 		KeyID:     keyID,
-		Signature: ed25519.Sign(private, message),
+		Signature: signature,
 		Body:      body,
 	}
 	keyring := core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
@@ -221,6 +225,9 @@ func TestSeatLeaseBodyWindowHostileTable(t *testing.T) {
 		{name: "zero issued", mutate: func(b *SeatLeaseBody) { b.IssuedAt = core.UnixNanoTime{} }},
 		{name: "expires at issued", mutate: func(b *SeatLeaseBody) { b.TokenExpiresAt = b.IssuedAt }},
 		{name: "check-in before issued", mutate: func(b *SeatLeaseBody) { b.CheckInAfterAt = b.IssuedAt.Add(-time.Nanosecond) }},
+		{name: "four-week check-in before paid-through", mutate: func(b *SeatLeaseBody) {
+			b.CheckInAfterAt = b.PaidUntil.Add(-time.Nanosecond)
+		}},
 		{name: "check-in after by", mutate: func(b *SeatLeaseBody) { b.CheckInAfterAt = b.CheckInByAt.Add(time.Nanosecond) }},
 		{name: "check-in by after expiry", mutate: func(b *SeatLeaseBody) { b.CheckInByAt = b.TokenExpiresAt.Add(time.Nanosecond) }},
 		{name: "negative write grace", mutate: func(b *SeatLeaseBody) {
@@ -247,6 +254,9 @@ func TestSubscriptionLeaseBodyWindowHostileTable(t *testing.T) {
 		{name: "zero paid until", mutate: func(b *SubscriptionLeaseBody) { b.PaidUntil = core.UnixNanoTime{} }},
 		{name: "zero token expiry", mutate: func(b *SubscriptionLeaseBody) { b.TokenExpiresAt = core.UnixNanoTime{} }},
 		{name: "missing check-in after", mutate: func(b *SubscriptionLeaseBody) { b.CheckInAfterAt = core.UnixNanoTime{} }},
+		{name: "four-week check-in before paid-through", mutate: func(b *SubscriptionLeaseBody) {
+			b.CheckInAfterAt = b.PaidUntil.Add(-time.Nanosecond)
+		}},
 		{name: "check-in after by", mutate: func(b *SubscriptionLeaseBody) { b.CheckInAfterAt = b.CheckInByAt.Add(time.Nanosecond) }},
 		{name: "check-in by after expiry", mutate: func(b *SubscriptionLeaseBody) {
 			b.CheckInByAt = b.TokenExpiresAt.Add(time.Nanosecond)

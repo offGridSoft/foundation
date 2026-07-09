@@ -26,6 +26,7 @@ const (
 	LDFlagStripDebug        = "-w"
 	LDFlagClearBuildID      = "-buildid="
 	LDFlagSetVariable       = "-X"
+	BuildCommandDirPrefix   = "./cmd/"
 	WindowsExecutableSuffix = ".exe"
 	DistDirName             = "dist"
 	BuildImportPathMaxRunes = 256
@@ -68,18 +69,26 @@ func parseConcreteGarbleSeed(value string) (GarbleSeed, error) {
 		return GarbleSeed{}, fmt.Errorf(ErrFmtGarbleSeed, core.ErrReleaseContract)
 	}
 	raw, err := base64.StdEncoding.DecodeString(value)
-	if err != nil || len(raw) < GarbleSeedBytes {
+	if err != nil || len(raw) != GarbleSeedBytes {
 		return GarbleSeed{}, fmt.Errorf(ErrFmtGarbleSeed, core.ErrReleaseContract)
 	}
-	return GarbleSeed{value: base64.StdEncoding.EncodeToString(raw[:GarbleSeedBytes])}, nil
+	return GarbleSeed{value: base64.StdEncoding.EncodeToString(raw)}, nil
 }
 
 func (s GarbleSeed) String() string {
-	return s.value
+	if s.IsRandom() {
+		return GarbleSeedRandom
+	}
+	parsed, err := ParseGarbleSeed(s.value)
+	if err != nil {
+		return s.value
+	}
+	return parsed.value
 }
 
 func (s GarbleSeed) IsRandom() bool {
-	return s.value == GarbleSeedRandom
+	trimmed := strings.TrimSpace(s.value)
+	return trimmed == "" || trimmed == GarbleSeedRandom
 }
 
 func (s GarbleSeed) Validate() error {
@@ -88,10 +97,11 @@ func (s GarbleSeed) Validate() error {
 }
 
 func (s GarbleSeed) MarshalJSON() ([]byte, error) {
-	if err := s.Validate(); err != nil {
+	parsed, err := ParseGarbleSeed(s.value)
+	if err != nil {
 		return nil, err
 	}
-	return json.Marshal(s.value)
+	return json.Marshal(parsed.value)
 }
 
 func (s *GarbleSeed) UnmarshalJSON(data []byte) error {
@@ -115,7 +125,10 @@ func ParseBuildImportPath(value string) (BuildImportPath, error) {
 	if err := validateBuildToken(value, BuildImportPathMaxRunes); err != nil {
 		return BuildImportPath{}, fmt.Errorf(ErrFmtBuildCommand, core.ErrReleaseContract)
 	}
-	if !strings.HasPrefix(value, "./cmd/") {
+	if !strings.HasPrefix(value, BuildCommandDirPrefix) {
+		return BuildImportPath{}, fmt.Errorf(ErrFmtBuildCommand, core.ErrReleaseContract)
+	}
+	if err := validateBuildImportPathSegments(value); err != nil {
 		return BuildImportPath{}, fmt.Errorf(ErrFmtBuildCommand, core.ErrReleaseContract)
 	}
 	return BuildImportPath{value: value}, nil
@@ -195,10 +208,20 @@ type BuildTag struct {
 }
 
 func ParseBuildTag(value string) (BuildTag, error) {
-	if err := core.ValidateFileNameToken(value, BuildTagMaxRunes); err != nil {
+	if err := validateBuildTagToken(value); err != nil {
 		return BuildTag{}, fmt.Errorf(ErrFmtBuildTag, core.ErrReleaseContract)
 	}
 	return BuildTag{value: value}, nil
+}
+
+func validateBuildTagToken(value string) error {
+	if err := core.ValidateFileNameToken(value, BuildTagMaxRunes); err != nil {
+		return err
+	}
+	if strings.Contains(value, ",") || strings.ContainsAny(value, " \t\n\r") {
+		return core.ErrReleaseContract
+	}
+	return nil
 }
 
 func (t BuildTag) String() string {
@@ -239,6 +262,9 @@ func ParseLinkerSymbol(value string) (LinkerSymbol, error) {
 		return LinkerSymbol{}, fmt.Errorf(ErrFmtLinkerSymbol, core.ErrReleaseContract)
 	}
 	if !strings.Contains(value, ".") {
+		return LinkerSymbol{}, fmt.Errorf(ErrFmtLinkerSymbol, core.ErrReleaseContract)
+	}
+	if strings.Contains(value, "=") {
 		return LinkerSymbol{}, fmt.Errorf(ErrFmtLinkerSymbol, core.ErrReleaseContract)
 	}
 	return LinkerSymbol{value: value}, nil
@@ -297,7 +323,7 @@ func (s BuildCommitStamp) Validate() error {
 
 func (s BuildCommitStamp) MarshalJSON() ([]byte, error) {
 	if s.IsZero() {
-		return []byte("null"), nil
+		return []byte(core.JSONLiteralNull), nil
 	}
 	if err := s.Validate(); err != nil {
 		return nil, err
@@ -683,6 +709,23 @@ func validateLocalOutputPath(value string) error {
 	if err := core.ValidateOpaqueToken(value, core.PathTokenMaxRunes); err != nil {
 		return err
 	}
+	return validatePathSegments(value)
+}
+
+func validateBuildImportPathSegments(value string) error {
+	relative, ok := strings.CutPrefix(value, BuildCommandDirPrefix)
+	if !ok || relative == "" {
+		return core.ErrFoundationContract
+	}
+	for segment := range strings.SplitSeq(relative, "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			return core.ErrFoundationContract
+		}
+	}
+	return nil
+}
+
+func validatePathSegments(value string) error {
 	clean := strings.ReplaceAll(value, `\`, "/")
 	for segment := range strings.SplitSeq(clean, "/") {
 		if segment == "" {

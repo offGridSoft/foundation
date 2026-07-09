@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"strings"
+	"unicode"
 
 	"encoding/json"
 )
@@ -32,14 +33,52 @@ type APIRequestID struct {
 }
 
 func NewAPIRequestID(value string) APIRequestID {
+	value = normalizeAPIRequestID(value)
+	if value == "" {
+		value = APIRequestIDMissing
+	}
+	id := APIRequestID{value: value}
+	if err := id.Validate(); err != nil {
+		return APIRequestID{value: APIRequestIDMissing}
+	}
+	return id
+}
+
+func ParseAPIRequestID(value string) (APIRequestID, error) {
+	id := APIRequestID{value: value}
+	if err := id.Validate(); err != nil {
+		return APIRequestID{}, err
+	}
+	return id, nil
+}
+
+func normalizeAPIRequestID(value string) string {
+	value = strings.TrimSpace(dropControlRunes(value))
 	runes := []rune(value)
 	if len(runes) > APIRequestIDMaxRunes {
 		value = string(runes[:APIRequestIDMaxRunes])
 	}
-	if value == "" {
-		value = APIRequestIDMissing
+	return value
+}
+
+func dropControlRunes(value string) string {
+	for _, r := range value {
+		if unicode.IsControl(r) {
+			return dropControlRunesSlow(value)
+		}
 	}
-	return APIRequestID{value: value}
+	return value
+}
+
+func dropControlRunesSlow(value string) string {
+	var builder strings.Builder
+	builder.Grow(len(value))
+	for _, r := range value {
+		if !unicode.IsControl(r) {
+			builder.WriteRune(r)
+		}
+	}
+	return builder.String()
 }
 
 func (id APIRequestID) String() string {
@@ -60,13 +99,18 @@ func (id APIRequestID) MarshalJSON() ([]byte, error) {
 	return json.Marshal(id.value)
 }
 
+//validate:unmarshal_ignore reason="ParseAPIRequestID validates a temporary before assignment so rejected input cannot mutate the receiver."
 func (id *APIRequestID) UnmarshalJSON(data []byte) error {
 	var value string
 	if err := json.Unmarshal(data, &value); err != nil {
 		return fmt.Errorf(ErrFmtAPIRequestID, ErrFoundationContract)
 	}
-	*id = NewAPIRequestID(value)
-	return id.Validate()
+	parsed, err := ParseAPIRequestID(value)
+	if err != nil {
+		return err
+	}
+	*id = parsed
+	return nil
 }
 
 type APICode uint8
@@ -151,7 +195,7 @@ func (b APIErrorBody) Validate() error {
 	if err := b.Code.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtAPIErrorBody, err)
 	}
-	if b.Message == "" {
+	if strings.TrimSpace(b.Message) == "" {
 		return fmt.Errorf(ErrFmtAPIErrorBody, ErrFoundationContract)
 	}
 	if b.Tip != "" && strings.TrimSpace(b.Tip) == "" {

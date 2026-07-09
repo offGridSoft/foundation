@@ -13,9 +13,12 @@ func NewUniqueStringSet(capacity int) UniqueStringSet {
 	return UniqueStringSet{seen: make(map[string]struct{}, capacity)}
 }
 
-func (s UniqueStringSet) Add(value string) error {
+func (s *UniqueStringSet) Add(value string) error {
 	if value == "" {
 		return fmt.Errorf(ErrFmtUniqueToken, ErrFoundationContract)
+	}
+	if s.seen == nil {
+		s.seen = make(map[string]struct{})
 	}
 	if _, exists := s.seen[value]; exists {
 		return fmt.Errorf(ErrFmtUniqueToken, ErrFoundationContract)

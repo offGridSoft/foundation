@@ -83,6 +83,9 @@ func onlyJSONWhitespace(data []byte) bool {
 }
 
 func scanStrictJSONToken(stack []strictJSONContainer, token json.Token) ([]strictJSONContainer, error) {
+	if len(stack) == 0 && token == nil {
+		return nil, fmt.Errorf(ErrFmtJSONUnexpectedValue, ErrJSONContract)
+	}
 	if delim, ok := token.(json.Delim); ok {
 		return scanStrictJSONDelim(stack, delim)
 	}

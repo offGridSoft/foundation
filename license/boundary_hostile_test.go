@@ -195,6 +195,88 @@ func TestCheckInEndpointWireContract(t *testing.T) {
 	}
 }
 
+func TestCheckInEndpointForBaseURLHostileTable(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		baseURL   string
+		want      string
+		product   core.Product
+		wantError bool
+	}{
+		{name: "production bug endpoint", baseURL: OffgridAPIBaseURL, product: core.ProductBug, want: OffgridAPIBaseURL + OffgridBugCheckInPath},
+		{name: "production witness endpoint", baseURL: OffgridAPIBaseURL, product: core.ProductWitness, want: OffgridAPIBaseURL + OffgridWitnessCheckInPath},
+		{name: "production trailing slash trimmed", baseURL: OffgridAPIBaseURL + "/", product: core.ProductBug, want: OffgridAPIBaseURL + OffgridBugCheckInPath},
+		{name: "dev localhost bug endpoint", baseURL: "http://localhost:40123", product: core.ProductBug, want: "http://localhost:40123" + OffgridBugCheckInPath},
+		{name: "dev loopback witness endpoint", baseURL: "http://127.0.0.1:40123", product: core.ProductWitness, want: "http://127.0.0.1:40123" + OffgridWitnessCheckInPath},
+		{name: "dev ipv6 loopback endpoint", baseURL: "http://[::1]:40123", product: core.ProductWitness, want: "http://[::1]:40123" + OffgridWitnessCheckInPath},
+		{name: "empty base rejected", baseURL: "", product: core.ProductBug, wantError: true},
+		{name: "http production rejected", baseURL: "http://api.offgridsoftware.ca", product: core.ProductBug, wantError: true},
+		{name: "http localhost lookalike rejected", baseURL: "http://localhost.evil.example:40123", product: core.ProductBug, wantError: true},
+		{name: "base path rejected", baseURL: OffgridAPIBaseURL + "/api", product: core.ProductBug, wantError: true},
+		{name: "query rejected", baseURL: OffgridAPIBaseURL + "?x=1", product: core.ProductBug, wantError: true},
+		{name: "fragment rejected", baseURL: OffgridAPIBaseURL + "#x", product: core.ProductBug, wantError: true},
+		{name: "userinfo rejected", baseURL: "https://user@api.offgridsoftware.ca", product: core.ProductBug, wantError: true},
+		{name: "oversized base rejected", baseURL: "https://" + strings.Repeat("a", core.HTTPSURLDefaultMaxRunes), product: core.ProductBug, wantError: true},
+		{name: "unknown product rejected", baseURL: OffgridAPIBaseURL, product: core.ProductUnknown, wantError: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := CheckInEndpointForBaseURL(tc.baseURL, tc.product)
+			if tc.wantError {
+				if !errors.Is(err, core.ErrLicenseContract) {
+					t.Fatalf("CheckInEndpointForBaseURL() error = %v, want ErrLicenseContract", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("CheckInEndpointForBaseURL() error = %v", err)
+			}
+			if got.String() != tc.want {
+				t.Fatalf("CheckInEndpointForBaseURL() = %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestLocalCheckInEndpointHostileTable(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		value     string
+		wantError bool
+	}{
+		{name: "localhost http accepted", value: "http://localhost:40123" + OffgridBugCheckInPath},
+		{name: "ipv4 loopback http accepted", value: "http://127.0.0.1:40123" + OffgridBugCheckInPath},
+		{name: "ipv6 loopback http accepted", value: "http://[::1]:40123" + OffgridWitnessCheckInPath},
+		{name: "http production rejected", value: "http://api.offgridsoftware.ca" + OffgridBugCheckInPath, wantError: true},
+		{name: "http non-loopback rejected", value: "http://192.0.2.1:40123" + OffgridBugCheckInPath, wantError: true},
+		{name: "local userinfo rejected", value: "http://user@localhost:40123" + OffgridBugCheckInPath, wantError: true},
+		{name: "local missing path rejected", value: "http://localhost:40123", wantError: true},
+		{name: "local query rejected", value: "http://localhost:40123" + OffgridBugCheckInPath + "?x=1", wantError: true},
+		{name: "local fragment rejected", value: "http://localhost:40123" + OffgridBugCheckInPath + "#x", wantError: true},
+		{name: "local whitespace rejected", value: "http://localhost:40123" + OffgridBugCheckInPath + "\n", wantError: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := ParseCheckInEndpoint(tc.value)
+			if tc.wantError {
+				if !errors.Is(err, core.ErrLicenseContract) {
+					t.Fatalf("ParseCheckInEndpoint(%q) error = %v, want ErrLicenseContract", tc.value, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ParseCheckInEndpoint(%q) error = %v", tc.value, err)
+			}
+		})
+	}
+}
+
 func TestCoreDeviceFingerprintHostileTable(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

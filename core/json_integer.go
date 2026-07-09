@@ -42,6 +42,9 @@ func validJSONInteger(data []byte) bool {
 		return false
 	}
 	if data[0] == '-' {
+		if len(data) == 2 && data[1] == '0' {
+			return false
+		}
 		return validJSONUnsignedInteger(data[1:])
 	}
 	return validJSONUnsignedInteger(data)

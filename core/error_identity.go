@@ -45,5 +45,6 @@ const (
 	ErrFmtJSONDuplicateField  = "core.JSON.DuplicateField: %w"
 	ErrFmtJSONUnexpectedField = "core.JSON.UnexpectedField: %w"
 	ErrFmtJSONUnexpectedDelim = "core.JSON.UnexpectedDelimiter: %w"
+	ErrFmtJSONUnexpectedValue = "core.JSON.UnexpectedValue: %w"
 	ErrFmtJSONDecode          = "core.JSON.Decode: %w"
 )

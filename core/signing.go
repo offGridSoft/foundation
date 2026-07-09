@@ -113,17 +113,17 @@ func (r SigningKeyring) Lookup(id SigningKeyID) (ed25519.PublicKey, error) {
 }
 
 type Signed[B CanonicalBody] struct {
-	Body      B            `json:"body"`
-	KeyID     SigningKeyID `json:"key_id"`
-	Signature []byte       `json:"signature"`
+	Body      B                   `json:"body"`
+	KeyID     SigningKeyID        `json:"key_id"`
+	Signature Ed25519SignatureHex `json:"signature"`
 }
 
 func (s Signed[B]) Validate() error {
 	if err := s.KeyID.Validate(); err != nil {
 		return err
 	}
-	if len(s.Signature) != ed25519.SignatureSize {
-		return fmt.Errorf(ErrFmtSignedSignature, ErrFoundationContract)
+	if err := s.Signature.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtSignedSignature, err)
 	}
 	return s.Body.Validate()
 }
@@ -140,7 +140,11 @@ func (s Signed[B]) Verify(keyring SigningKeyring) error {
 	if err != nil {
 		return err
 	}
-	if !ed25519.Verify(key, message, s.Signature) {
+	signature, err := s.Signature.Bytes()
+	if err != nil {
+		return fmt.Errorf(ErrFmtSignedSignature, err)
+	}
+	if !ed25519.Verify(key, message, signature) {
 		return fmt.Errorf(ErrFmtSignedSignature, ErrFoundationContract)
 	}
 	return nil

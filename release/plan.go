@@ -227,6 +227,26 @@ func (p DeployPlan) Validate() error {
 	return validateDeployTargets(p.Targets, p.TargetCount)
 }
 
+func (p DeployPlan) MarshalJSON() ([]byte, error) {
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+	dst := []byte{'{'}
+	var err error
+	dst, err = core.AppendJSONField(dst, jsonFieldProduct, p.Product)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldVersion, p.Version)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldReleaseID, p.ReleaseID)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldManifestSHA256, p.ManifestSHA256)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldLayout, p.Layout)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldTargets, p.Targets)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldTargetCount, p.TargetCount)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldManifest, p.Manifest)
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, '}'), nil
+}
+
 func validateDeployPlanIdentity(p DeployPlan) error {
 	if err := p.Product.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtDeployPlan, err)

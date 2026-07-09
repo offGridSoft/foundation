@@ -146,7 +146,7 @@ type GateInput[B Body] struct {
 	ClockHighWater core.UnixNanoTime
 	WarnWindow     time.Duration
 	Trust          LeaseTrust
-	Armed          bool
+	Disarmed       bool
 	TeachingShown  bool
 }
 
@@ -157,8 +157,11 @@ type GateDecision struct {
 }
 
 func Gate[B Body](in GateInput[B]) GateDecision {
-	if !in.Armed {
+	if in.Disarmed {
 		return GateDecision{Reason: GateReasonDisarmed}
+	}
+	if in.Now.IsZero() {
+		return GateDecision{Reason: GateReasonInvalidClock}
 	}
 	if in.ClockHighWater.After(in.Now) {
 		return GateDecision{Reason: GateReasonClockRollback}
@@ -210,6 +213,7 @@ type GateReason uint8
 const (
 	gateReasonInvalid GateReason = iota
 	GateReasonDisarmed
+	GateReasonInvalidClock
 	GateReasonClockRollback
 	GateReasonInvalidTrust
 	GateReasonTeaching
@@ -222,6 +226,7 @@ const (
 
 var gateReasonNames = [...]string{
 	GateReasonDisarmed:            "disarmed",
+	GateReasonInvalidClock:        "invalid_clock",
 	GateReasonClockRollback:       "clock_rollback",
 	GateReasonInvalidTrust:        "invalid_trust_resolution",
 	GateReasonTeaching:            "teaching",
@@ -258,7 +263,7 @@ func (r GateReason) Outcome() GateOutcome {
 		return GateWarn
 	case GateReasonTeaching:
 		return GateTeach
-	case GateReasonClockRollback, GateReasonInvalidTrust, GateReasonMissingTrustedLease, GateReasonLeaseExpired:
+	case GateReasonInvalidClock, GateReasonClockRollback, GateReasonInvalidTrust, GateReasonMissingTrustedLease, GateReasonLeaseExpired:
 		return GateRefuse
 	default:
 		return gateOutcomeInvalid

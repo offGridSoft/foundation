@@ -11,6 +11,7 @@ import (
 const (
 	BugStandardPricePennies         = 5000
 	BugEnterpriseMonthlyPennies     = 10000
+	BugEnterpriseOfflinePennies     = 10000
 	WitnessBronzePricePennies       = 350000
 	WitnessSilverPricePennies       = 1250000
 	WitnessGoldStartingPricePennies = 4000000
@@ -40,7 +41,7 @@ type LeaseWindow struct {
 }
 
 func BuildLeaseWindow(issued core.UnixNanoTime, offer Offer, prepaidYears uint8) (LeaseWindow, error) {
-	if issued.IsZero() {
+	if err := core.ValidateRequiredUnixNanoTime(issued); err != nil {
 		return LeaseWindow{}, fmt.Errorf(ErrFmtLeaseWindow, core.ErrLicenseContract)
 	}
 	if err := offer.Validate(); err != nil {
@@ -54,31 +55,31 @@ func BuildLeaseWindow(issued core.UnixNanoTime, offer Offer, prepaidYears uint8)
 
 func buildLeaseWindow(issued core.UnixNanoTime, offer Offer, prepaidYears uint8) LeaseWindow {
 	if offer.BillingPeriod == BillingPeriodPrepaidYears {
-		return buildPrepaidLeaseWindow(issued, prepaidYears)
+		return buildPrepaidLeaseWindow(issued, offer, prepaidYears)
 	}
-	return buildConnectedLeaseWindow(issued)
+	return buildConnectedLeaseWindow(issued, offer)
 }
 
-func buildConnectedLeaseWindow(issued core.UnixNanoTime) LeaseWindow {
+func buildConnectedLeaseWindow(issued core.UnixNanoTime, offer Offer) LeaseWindow {
 	return LeaseWindow{
 		IssuedAt:           issued,
 		PaidUntil:          issued.Add(BillingPeriodFourWeeksDuration),
-		CheckInAfterAt:     issued.Add(ConnectedCheckInAfterDuration),
-		CheckInByAt:        issued.Add(ConnectedCheckInByDuration),
-		TokenExpiresAt:     issued.Add(ConnectedCheckInByDuration),
-		WriteGraceDuration: core.NewNanosecondsDuration(DefaultWriteGraceDuration),
+		CheckInAfterAt:     issued.Add(offer.CheckInAfter.Duration()),
+		CheckInByAt:        issued.Add(offer.CheckInBy.Duration()),
+		TokenExpiresAt:     issued.Add(offer.LeaseDuration.Duration()),
+		WriteGraceDuration: offer.WriteGrace,
 	}
 }
 
-func buildPrepaidLeaseWindow(issued core.UnixNanoTime, prepaidYears uint8) LeaseWindow {
+func buildPrepaidLeaseWindow(issued core.UnixNanoTime, offer Offer, prepaidYears uint8) LeaseWindow {
 	term := time.Duration(prepaidYears) * PrepaidYearDuration
 	return LeaseWindow{
 		IssuedAt:           issued,
 		PaidUntil:          issued.Add(term),
-		CheckInAfterAt:     issued.Add(term),
-		CheckInByAt:        issued.Add(term),
-		TokenExpiresAt:     issued.Add(term),
-		WriteGraceDuration: core.NewNanosecondsDuration(DefaultWriteGraceDuration),
+		CheckInAfterAt:     issued.Add(offer.CheckInAfter.Duration()),
+		CheckInByAt:        issued.Add(offer.CheckInBy.Duration()),
+		TokenExpiresAt:     issued.Add(offer.LeaseDuration.Duration()),
+		WriteGraceDuration: offer.WriteGrace,
 	}
 }
 
@@ -101,6 +102,7 @@ const (
 	offerCodeInvalid OfferCode = iota
 	OfferBugStandard
 	OfferBugEnterprise
+	OfferBugEnterpriseOffline
 	OfferBugOSS
 	OfferWitnessBronze
 	OfferWitnessSilver
@@ -108,12 +110,13 @@ const (
 )
 
 var offerCodeNames = [...]string{
-	OfferBugStandard:   "bug_standard",
-	OfferBugEnterprise: "bug_enterprise",
-	OfferBugOSS:        "bug_oss",
-	OfferWitnessBronze: "witness_bronze",
-	OfferWitnessSilver: "witness_silver",
-	OfferWitnessGold:   "witness_gold",
+	OfferBugStandard:          "bug_standard",
+	OfferBugEnterprise:        "bug_enterprise",
+	OfferBugEnterpriseOffline: "bug_enterprise_offline",
+	OfferBugOSS:               "bug_oss",
+	OfferWitnessBronze:        "witness_bronze",
+	OfferWitnessSilver:        "witness_silver",
+	OfferWitnessGold:          "witness_gold",
 }
 
 func (c OfferCode) String() string {
@@ -192,8 +195,10 @@ func OfferForSeatPlan(plan SeatPlan) (Offer, error) {
 	switch plan {
 	case SeatPlanStandard:
 		return bugStandardOffer(), nil
-	case SeatPlanEnterprise, SeatPlanEnterpriseOffline:
+	case SeatPlanEnterprise:
 		return bugEnterpriseOffer(), nil
+	case SeatPlanEnterpriseOffline:
+		return bugEnterpriseOfflineOffer(), nil
 	case SeatPlanOSS:
 		return bugOSSOffer(), nil
 	default:
@@ -219,7 +224,11 @@ func bugStandardOffer() Offer {
 }
 
 func bugEnterpriseOffer() Offer {
-	offer := connectedOffer(OfferBugEnterprise, core.ProductBug, BugEnterpriseMonthlyPennies, 0)
+	return connectedOffer(OfferBugEnterprise, core.ProductBug, BugEnterpriseMonthlyPennies, 0)
+}
+
+func bugEnterpriseOfflineOffer() Offer {
+	offer := connectedOffer(OfferBugEnterpriseOffline, core.ProductBug, BugEnterpriseOfflinePennies, 0)
 	offer.BillingPeriod = BillingPeriodPrepaidYears
 	offer.LeaseDuration = core.NewNanosecondsDuration(BugOfflineCheckInByDuration)
 	offer.CheckInAfter = core.NewNanosecondsDuration(BugOfflineCheckInAfterDuration)
@@ -270,7 +279,7 @@ func validateOfferIdentity(o Offer) error {
 
 func offerProductMatches(code OfferCode, product core.Product) bool {
 	switch code {
-	case OfferBugStandard, OfferBugEnterprise, OfferBugOSS:
+	case OfferBugStandard, OfferBugEnterprise, OfferBugEnterpriseOffline, OfferBugOSS:
 		return product == core.ProductBug
 	case OfferWitnessBronze, OfferWitnessSilver, OfferWitnessGold:
 		return product == core.ProductWitness

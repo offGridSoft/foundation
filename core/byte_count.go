@@ -30,6 +30,7 @@ func (c ByteCount) MarshalJSON() ([]byte, error) {
 	return appendUint64JSON(c.value), nil
 }
 
+//validate:unmarshal_ignore reason="ByteCount validates a temporary before assignment so rejected input cannot mutate the receiver."
 func (c *ByteCount) UnmarshalJSON(data []byte) error {
 	value, err := parseStrictUint64JSON(data)
 	if err != nil {
@@ -40,8 +41,5 @@ func (c *ByteCount) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*c = decoded
-	if err := c.Validate(); err != nil {
-		return err
-	}
 	return nil
 }

@@ -32,6 +32,7 @@ func (c BuildCommit) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.value)
 }
 
+//validate:unmarshal_ignore reason="ParseBuildCommit validates a temporary before assignment so rejected input cannot mutate the receiver."
 func (c *BuildCommit) UnmarshalJSON(data []byte) error {
 	var value string
 	if err := json.Unmarshal(data, &value); err != nil {
@@ -42,9 +43,6 @@ func (c *BuildCommit) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*c = parsed
-	if err := c.Validate(); err != nil {
-		return err
-	}
 	return nil
 }
 

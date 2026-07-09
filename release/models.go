@@ -158,7 +158,7 @@ func validateManifestIdentity(m Manifest) error {
 	if err := m.Commit.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtManifest, err)
 	}
-	if m.CreatedAt.IsZero() {
+	if err := core.ValidateRequiredUnixNanoTime(m.CreatedAt); err != nil {
 		return fmt.Errorf(ErrFmtManifest, core.ErrReleaseContract)
 	}
 	return nil
@@ -287,7 +287,7 @@ func validateReceiptIdentity(r UploadReceipt) error {
 	if err := r.ReleaseID.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtUploadReceipt, err)
 	}
-	if r.UploadedAt.IsZero() {
+	if err := core.ValidateRequiredUnixNanoTime(r.UploadedAt); err != nil {
 		return fmt.Errorf(ErrFmtUploadReceipt, core.ErrReleaseContract)
 	}
 	return nil
@@ -350,7 +350,7 @@ func validateDownloadIndexIdentity(i DownloadIndex) error {
 	if err := i.ReleaseID.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtDownloadIndex, err)
 	}
-	if i.GeneratedAt.IsZero() {
+	if err := core.ValidateRequiredUnixNanoTime(i.GeneratedAt); err != nil {
 		return fmt.Errorf(ErrFmtDownloadIndex, core.ErrReleaseContract)
 	}
 	return nil

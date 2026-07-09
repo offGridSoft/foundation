@@ -11,12 +11,18 @@ import (
 )
 
 const (
-	HTTPHeaderContentType   = "Content-Type"
-	HTTPHeaderRetryAfter    = "Retry-After"
-	HTTPContentTypeJSON     = "application/json"
-	URLSchemeHTTPS          = "https"
-	HTTPSURLDefaultMaxRunes = 2048
-	BackoffMaxDuration      = 24 * time.Hour
+	HTTPHeaderContentType               = "Content-Type"
+	HTTPHeaderRetryAfter                = "Retry-After"
+	HTTPContentTypeJSON                 = "application/json"
+	URLSchemeHTTP                       = "http"
+	URLSchemeHTTPS                      = "https"
+	HostLocalhost                       = "localhost"
+	HTTPSURLDefaultMaxRunes             = 2048
+	BackoffMaxDuration                  = 24 * time.Hour
+	HTTPStatusOK                        = 200
+	HTTPStatusTooManyRequests           = 429
+	HTTPStatusInternalServerError       = 500
+	HTTPStatusServerErrorUpperExclusive = 600
 )
 
 type HTTPSURLPolicy struct {
@@ -174,11 +180,11 @@ func (o *HTTPOutcome) UnmarshalJSON(data []byte) error {
 func ClassifyHTTPStatus(status int) HTTPOutcome {
 	// Offgrid API success responses are pinned to HTTP 200 with an APIEnvelope.
 	switch {
-	case status == 200:
+	case status == HTTPStatusOK:
 		return HTTPOutcomeSuccess
-	case status == 429:
+	case status == HTTPStatusTooManyRequests:
 		return HTTPOutcomeRetryable
-	case status >= 500 && status <= 599:
+	case status >= HTTPStatusInternalServerError && status < HTTPStatusServerErrorUpperExclusive:
 		return HTTPOutcomeRetryable
 	default:
 		return HTTPOutcomeTerminal
@@ -201,7 +207,10 @@ func (p BackoffPolicy) Validate() error {
 	return nil
 }
 
-func (p BackoffPolicy) Delay(attempt int, jitterFrac float64) time.Duration {
+func (p BackoffPolicy) Delay(attempt int, jitterFrac float64) (time.Duration, error) {
+	if err := p.Validate(); err != nil {
+		return 0, err
+	}
 	if attempt < 0 {
 		attempt = 0
 	}
@@ -212,7 +221,7 @@ func (p BackoffPolicy) Delay(attempt int, jitterFrac float64) time.Duration {
 	if ceiling > p.Max {
 		ceiling = p.Max
 	}
-	return time.Duration(clampUnit(jitterFrac) * float64(ceiling))
+	return time.Duration(clampUnit(jitterFrac) * float64(ceiling)), nil
 }
 
 func clampUnit(value float64) float64 {

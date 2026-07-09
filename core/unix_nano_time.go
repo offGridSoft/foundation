@@ -4,28 +4,36 @@ import "time"
 
 type UnixNanoTime struct {
 	nanos int64
+	set   bool
 }
 
 func NewUnixNanoTime(t time.Time) UnixNanoTime {
 	if t.IsZero() {
 		return UnixNanoTime{}
 	}
-	return UnixNanoTime{nanos: t.UTC().UnixNano()}
+	return UnixNanoTime{nanos: t.UTC().UnixNano(), set: true}
 }
 
 func UnixNanoTimeFromInt64(nanos int64) UnixNanoTime {
-	return UnixNanoTime{nanos: nanos}
+	return UnixNanoTime{nanos: nanos, set: true}
 }
 
 func (t UnixNanoTime) Validate() error {
+	if !t.set {
+		return wrapFoundationContract(ErrFmtUnixNanoTime)
+	}
 	if t.nanos < 0 {
 		return wrapFoundationContract(ErrFmtUnixNanoTime)
 	}
 	return nil
 }
 
+func ValidateRequiredUnixNanoTime(t UnixNanoTime) error {
+	return t.Validate()
+}
+
 func (t UnixNanoTime) IsZero() bool {
-	return t.nanos == 0
+	return !t.set
 }
 
 func (t UnixNanoTime) Time() time.Time {
@@ -73,6 +81,7 @@ func (t UnixNanoTime) MarshalJSON() ([]byte, error) {
 	return appendInt64JSON(t.nanos), nil
 }
 
+//validate:unmarshal_ignore reason="UnixNanoTime validates a temporary before assignment so rejected input cannot mutate the receiver."
 func (t *UnixNanoTime) UnmarshalJSON(data []byte) error {
 	nanos, err := parseStrictInt64JSON(data)
 	if err != nil {
@@ -83,5 +92,5 @@ func (t *UnixNanoTime) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*t = decoded
-	return t.Validate()
+	return nil
 }

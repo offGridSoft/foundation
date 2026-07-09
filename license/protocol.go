@@ -3,6 +3,9 @@ package license
 import (
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
+	"strings"
 
 	"encoding/json"
 	"github.com/offGridSoft/foundation/v2026/core"
@@ -27,11 +30,31 @@ func MustCheckInEndpoint(value string) CheckInEndpoint {
 	return endpoint
 }
 
+func CheckInPath(product core.Product) (string, error) {
+	switch product {
+	case core.ProductBug:
+		return OffgridBugCheckInPath, nil
+	case core.ProductWitness:
+		return OffgridWitnessCheckInPath, nil
+	default:
+		return "", fmt.Errorf(ErrFmtCheckInEndpoint, core.ErrLicenseContract)
+	}
+}
+
+func CheckInEndpointForBaseURL(baseURL string, product core.Product) (CheckInEndpoint, error) {
+	path, err := CheckInPath(product)
+	if err != nil {
+		return CheckInEndpoint{}, err
+	}
+	base, err := normalizeCheckInBaseURL(baseURL)
+	if err != nil {
+		return CheckInEndpoint{}, err
+	}
+	return ParseCheckInEndpoint(base + path)
+}
+
 func ParseCheckInEndpoint(value string) (CheckInEndpoint, error) {
-	if err := core.ValidateHTTPSURL(value, core.HTTPSURLPolicy{
-		MaxRunes:    core.HTTPSURLDefaultMaxRunes,
-		RequirePath: true,
-	}); err != nil {
+	if err := validateCheckInEndpoint(value); err != nil {
 		return CheckInEndpoint{}, fmt.Errorf(ErrFmtCheckInEndpoint, errors.Join(core.ErrLicenseContract, err))
 	}
 	return CheckInEndpoint{value: value}, nil
@@ -70,3 +93,64 @@ var (
 	BugCheckInEndpoint     = MustCheckInEndpoint(OffgridAPIBaseURL + OffgridBugCheckInPath)
 	WitnessCheckInEndpoint = MustCheckInEndpoint(OffgridAPIBaseURL + OffgridWitnessCheckInPath)
 )
+
+func normalizeCheckInBaseURL(value string) (string, error) {
+	if err := core.ValidateOpaqueToken(value, core.HTTPSURLDefaultMaxRunes); err != nil {
+		return "", fmt.Errorf(ErrFmtCheckInEndpoint, core.ErrLicenseContract)
+	}
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return "", fmt.Errorf(ErrFmtCheckInEndpoint, core.ErrLicenseContract)
+	}
+	if parsed.User != nil || parsed.Host == "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", fmt.Errorf(ErrFmtCheckInEndpoint, core.ErrLicenseContract)
+	}
+	if strings.Trim(parsed.Path, "/") != "" {
+		return "", fmt.Errorf(ErrFmtCheckInEndpoint, core.ErrLicenseContract)
+	}
+	if err := validateCheckInEndpointScheme(parsed); err != nil {
+		return "", fmt.Errorf(ErrFmtCheckInEndpoint, errors.Join(core.ErrLicenseContract, err))
+	}
+	parsed.Path = ""
+	return strings.TrimRight(parsed.String(), "/"), nil
+}
+
+func validateCheckInEndpoint(value string) error {
+	if err := core.ValidateOpaqueToken(value, core.HTTPSURLDefaultMaxRunes); err != nil {
+		return fmt.Errorf(core.ErrFmtHTTPSURL, core.ErrFoundationContract)
+	}
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return fmt.Errorf(core.ErrFmtHTTPSURL, core.ErrFoundationContract)
+	}
+	if err := validateCheckInEndpointScheme(parsed); err != nil {
+		return err
+	}
+	if parsed.User != nil || parsed.Host == "" {
+		return fmt.Errorf(core.ErrFmtHTTPSURL, core.ErrFoundationContract)
+	}
+	if strings.TrimSpace(parsed.Path) == "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return fmt.Errorf(core.ErrFmtHTTPSURL, core.ErrFoundationContract)
+	}
+	return nil
+}
+
+func validateCheckInEndpointScheme(parsed *url.URL) error {
+	switch parsed.Scheme {
+	case core.URLSchemeHTTPS:
+		return nil
+	case core.URLSchemeHTTP:
+		if localCheckInHost(parsed.Hostname()) {
+			return nil
+		}
+	}
+	return fmt.Errorf(core.ErrFmtHTTPSURL, core.ErrFoundationContract)
+}
+
+func localCheckInHost(host string) bool {
+	if host == core.HostLocalhost {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}

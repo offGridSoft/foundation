@@ -43,29 +43,30 @@ func (h SHA256Hex) Validate() error {
 }
 
 func (h SHA256Hex) MarshalJSON() ([]byte, error) {
-	if !h.IsZero() {
-		if err := h.Validate(); err != nil {
-			return nil, err
-		}
+	if err := h.Validate(); err != nil {
+		return nil, err
 	}
 	return json.Marshal(h.String())
 }
 
+//validate:unmarshal_ignore reason="ParseSHA256Hex validates a temporary before assignment so rejected input cannot mutate the receiver."
 func (h *SHA256Hex) UnmarshalJSON(data []byte) error {
+	if bytes.Equal(bytes.TrimSpace(data), []byte(JSONLiteralNull)) {
+		return fmt.Errorf(ErrFmtSHA256, ErrFoundationContract)
+	}
 	var value string
 	if err := json.Unmarshal(data, &value); err != nil {
 		return fmt.Errorf(ErrFmtSHA256, ErrFoundationContract)
 	}
 	if value == "" {
-		*h = SHA256Hex{}
-		return nil
+		return fmt.Errorf(ErrFmtSHA256, ErrFoundationContract)
 	}
 	parsed, err := ParseSHA256Hex(value)
 	if err != nil {
 		return err
 	}
 	*h = parsed
-	return h.Validate()
+	return nil
 }
 
 type BLAKE3Hex struct {
@@ -95,29 +96,30 @@ func (h BLAKE3Hex) Validate() error {
 }
 
 func (h BLAKE3Hex) MarshalJSON() ([]byte, error) {
-	if !h.IsZero() {
-		if err := h.Validate(); err != nil {
-			return nil, err
-		}
+	if err := h.Validate(); err != nil {
+		return nil, err
 	}
 	return json.Marshal(h.String())
 }
 
+//validate:unmarshal_ignore reason="ParseBLAKE3Hex validates a temporary before assignment so rejected input cannot mutate the receiver."
 func (h *BLAKE3Hex) UnmarshalJSON(data []byte) error {
+	if bytes.Equal(bytes.TrimSpace(data), []byte(JSONLiteralNull)) {
+		return fmt.Errorf(ErrFmtBLAKE3, ErrFoundationContract)
+	}
 	var value string
 	if err := json.Unmarshal(data, &value); err != nil {
 		return fmt.Errorf(ErrFmtBLAKE3, ErrFoundationContract)
 	}
 	if value == "" {
-		*h = BLAKE3Hex{}
-		return nil
+		return fmt.Errorf(ErrFmtBLAKE3, ErrFoundationContract)
 	}
 	parsed, err := ParseBLAKE3Hex(value)
 	if err != nil {
 		return err
 	}
 	*h = parsed
-	return h.Validate()
+	return nil
 }
 
 type Ed25519PublicKeyHex struct {
@@ -165,29 +167,30 @@ func (h Ed25519PublicKeyHex) Validate() error {
 }
 
 func (h Ed25519PublicKeyHex) MarshalJSON() ([]byte, error) {
-	if !h.IsZero() {
-		if err := h.Validate(); err != nil {
-			return nil, err
-		}
+	if err := h.Validate(); err != nil {
+		return nil, err
 	}
 	return json.Marshal(h.String())
 }
 
+//validate:unmarshal_ignore reason="ParseEd25519PublicKeyHex validates a temporary before assignment so rejected input cannot mutate the receiver."
 func (h *Ed25519PublicKeyHex) UnmarshalJSON(data []byte) error {
+	if bytes.Equal(bytes.TrimSpace(data), []byte(JSONLiteralNull)) {
+		return fmt.Errorf(ErrFmtEd25519PublicKey, ErrFoundationContract)
+	}
 	var value string
 	if err := json.Unmarshal(data, &value); err != nil {
 		return fmt.Errorf(ErrFmtEd25519PublicKey, ErrFoundationContract)
 	}
 	if value == "" {
-		*h = Ed25519PublicKeyHex{}
-		return nil
+		return fmt.Errorf(ErrFmtEd25519PublicKey, ErrFoundationContract)
 	}
 	parsed, err := ParseEd25519PublicKeyHex(value)
 	if err != nil {
 		return err
 	}
 	*h = parsed
-	return h.Validate()
+	return nil
 }
 
 type Ed25519SignatureHex struct {
@@ -231,16 +234,15 @@ func (h Ed25519SignatureHex) Validate() error {
 }
 
 func (h Ed25519SignatureHex) MarshalJSON() ([]byte, error) {
-	if !h.IsZero() {
-		if err := h.Validate(); err != nil {
-			return nil, err
-		}
+	if err := h.Validate(); err != nil {
+		return nil, err
 	}
 	return json.Marshal(h.String())
 }
 
+//validate:unmarshal_ignore reason="ParseEd25519SignatureHex validates a temporary before assignment so rejected input cannot mutate the receiver."
 func (h *Ed25519SignatureHex) UnmarshalJSON(data []byte) error {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+	if bytes.Equal(bytes.TrimSpace(data), []byte(JSONLiteralNull)) {
 		return fmt.Errorf(ErrFmtEd25519Signature, ErrFoundationContract)
 	}
 	var value string
@@ -248,15 +250,14 @@ func (h *Ed25519SignatureHex) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf(ErrFmtEd25519Signature, ErrFoundationContract)
 	}
 	if value == "" {
-		*h = Ed25519SignatureHex{}
-		return nil
+		return fmt.Errorf(ErrFmtEd25519Signature, ErrFoundationContract)
 	}
 	parsed, err := ParseEd25519SignatureHex(value)
 	if err != nil {
 		return err
 	}
 	*h = parsed
-	return h.Validate()
+	return nil
 }
 
 func validateFixedHex(value string, byteLen int) error {

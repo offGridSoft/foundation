@@ -96,6 +96,7 @@ func TestClientDecodesOffgridEnvelope(t *testing.T) {
 		HTTP:     server.Client(),
 		Endpoint: endpoint,
 		APIKey:   testAPICallKey(t),
+		Keyring:  core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}},
 	}
 
 	response, err := client.Do(context.Background(), testBugCheckIn(t))
@@ -118,7 +119,7 @@ func TestClientDecodesOffgridEnvelope(t *testing.T) {
 
 func TestClientSendsFirstCheckInWithoutUsage(t *testing.T) {
 	t.Parallel()
-	keyID, _, signature := signedSeatLeaseParts(t)
+	keyID, publicKey, signature := signedSeatLeaseParts(t)
 	lease := &core.Signed[SeatLeaseBody]{
 		KeyID:     keyID,
 		Signature: signature,
@@ -157,6 +158,7 @@ func TestClientSendsFirstCheckInWithoutUsage(t *testing.T) {
 	client := Client[BugCheckIn, SeatLeaseBody]{
 		HTTP:     server.Client(),
 		Endpoint: endpoint,
+		Keyring:  core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}},
 	}
 
 	if _, err := client.Do(context.Background(), payload); err != nil {
@@ -196,6 +198,7 @@ func TestWitnessClientDecodesSubscriptionEnvelope(t *testing.T) {
 	client := Client[WitnessCheckIn, SubscriptionLeaseBody]{
 		HTTP:     server.Client(),
 		Endpoint: endpoint,
+		Keyring:  core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}},
 	}
 
 	response, err := client.Do(context.Background(), testWitnessCheckIn(t))
@@ -209,6 +212,109 @@ func TestWitnessClientDecodesSubscriptionEnvelope(t *testing.T) {
 	if err := response.Lease.Verify(keyring); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestClientRejectsForgedLeaseSignatureHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		kind forgedLeaseKind
+	}{
+		{name: "bug forged seat lease rejected", kind: forgedLeaseKindSeat},
+		{name: "witness forged subscription lease rejected", kind: forgedLeaseKindSubscription},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if err := runForgedLeaseSignatureCheckIn(t, tc.kind); !errors.Is(err, core.ErrLicenseContract) {
+				t.Fatalf("forged lease client.Do error = %v, want ErrLicenseContract", err)
+			}
+		})
+	}
+}
+
+type forgedLeaseKind uint8
+
+const (
+	forgedLeaseKindSeat forgedLeaseKind = iota + 1
+	forgedLeaseKindSubscription
+)
+
+func runForgedLeaseSignatureCheckIn(t *testing.T, kind forgedLeaseKind) error {
+	t.Helper()
+	switch kind {
+	case forgedLeaseKindSeat:
+		return runForgedSeatLeaseCheckIn(t)
+	case forgedLeaseKindSubscription:
+		return runForgedSubscriptionLeaseCheckIn(t)
+	default:
+		return core.ErrLicenseContract
+	}
+}
+
+func runForgedSeatLeaseCheckIn(t *testing.T) error {
+	t.Helper()
+	keyID, publicKey, _ := signedSeatLeaseParts(t)
+	lease := &core.Signed[SeatLeaseBody]{
+		KeyID:     keyID,
+		Signature: testSignatureHex(t),
+		Body:      testSeatLeaseBody(t),
+	}
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
+		_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[SeatLeaseBody]]{
+			RequestID: core.NewAPIRequestID("req-forged-seat"),
+			Data: &CheckInResponse[SeatLeaseBody]{
+				Granted: true,
+				Refusal: RefusalNone,
+				Lease:   lease,
+			},
+		})
+	}))
+	defer server.Close()
+	endpoint, err := ParseCheckInEndpoint(server.URL + OffgridBugCheckInPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := Client[BugCheckIn, SeatLeaseBody]{
+		HTTP:     server.Client(),
+		Endpoint: endpoint,
+		Keyring:  core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}},
+	}
+	_, err = client.Do(context.Background(), testBugCheckIn(t))
+	return err
+}
+
+func runForgedSubscriptionLeaseCheckIn(t *testing.T) error {
+	t.Helper()
+	keyID, publicKey, _ := signedSubscriptionLeaseParts(t)
+	lease := &core.Signed[SubscriptionLeaseBody]{
+		KeyID:     keyID,
+		Signature: testSignatureHex(t),
+		Body:      testSubscriptionLeaseBody(),
+	}
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
+		_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[SubscriptionLeaseBody]]{
+			RequestID: core.NewAPIRequestID("req-forged-subscription"),
+			Data: &CheckInResponse[SubscriptionLeaseBody]{
+				Granted: true,
+				Refusal: RefusalNone,
+				Lease:   lease,
+			},
+		})
+	}))
+	defer server.Close()
+	endpoint, err := ParseCheckInEndpoint(server.URL + OffgridWitnessCheckInPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := Client[WitnessCheckIn, SubscriptionLeaseBody]{
+		HTTP:     server.Client(),
+		Endpoint: endpoint,
+		Keyring:  core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}},
+	}
+	_, err = client.Do(context.Background(), testWitnessCheckIn(t))
+	return err
 }
 
 func TestClientRejectsRawResponseWithoutEnvelope(t *testing.T) {
@@ -229,6 +335,7 @@ func TestClientRejectsRawResponseWithoutEnvelope(t *testing.T) {
 	client := Client[BugCheckIn, SeatLeaseBody]{
 		HTTP:     server.Client(),
 		Endpoint: endpoint,
+		Keyring:  testClientKeyring(t),
 	}
 
 	if _, err := client.Do(context.Background(), testBugCheckIn(t)); err == nil {
@@ -258,6 +365,7 @@ func TestClientDecodesTerminalErrorEnvelope(t *testing.T) {
 	client := Client[BugCheckIn, SeatLeaseBody]{
 		HTTP:     server.Client(),
 		Endpoint: endpoint,
+		Keyring:  testClientKeyring(t),
 	}
 
 	_, err = client.Do(context.Background(), testBugCheckIn(t))
@@ -273,9 +381,34 @@ func TestClientDecodesTerminalErrorEnvelope(t *testing.T) {
 	}
 }
 
+func TestClientRejectsCredentialRedirectHostile(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get(OffgridAPICallKeyHeader) == "" {
+			http.Error(w, "missing key", http.StatusBadRequest)
+			return
+		}
+		http.Redirect(w, r, "https://evil.example/check-in", http.StatusTemporaryRedirect)
+	}))
+	defer server.Close()
+	endpoint, err := ParseCheckInEndpoint(server.URL + OffgridBugCheckInPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := Client[BugCheckIn, SeatLeaseBody]{
+		HTTP:     server.Client(),
+		Endpoint: endpoint,
+		APIKey:   testAPICallKey(t),
+		Keyring:  testClientKeyring(t),
+	}
+	if _, err := client.Do(context.Background(), testBugCheckIn(t)); !errors.Is(err, core.ErrLicenseContract) {
+		t.Fatalf("client.Do redirect error = %v, want ErrLicenseContract", err)
+	}
+}
+
 func TestRetryLoopRetriesThenAcceptsEnvelope(t *testing.T) {
 	t.Parallel()
-	keyID, _, signature := signedSeatLeaseParts(t)
+	keyID, publicKey, signature := signedSeatLeaseParts(t)
 	lease := &core.Signed[SeatLeaseBody]{
 		KeyID:     keyID,
 		Signature: signature,
@@ -315,6 +448,7 @@ func TestRetryLoopRetriesThenAcceptsEnvelope(t *testing.T) {
 		Endpoint: endpoint,
 		Jitter:   func() float64 { return 1 },
 		Backoff:  core.BackoffPolicy{Base: time.Nanosecond, Max: time.Nanosecond, MaxAttempts: 3},
+		Keyring:  core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}},
 	}
 
 	if _, err := client.Do(context.Background(), testBugCheckIn(t)); err != nil {
@@ -327,7 +461,7 @@ func TestRetryLoopRetriesThenAcceptsEnvelope(t *testing.T) {
 
 func TestWitnessClientRetryThenAcceptsSubscriptionEnvelope(t *testing.T) {
 	t.Parallel()
-	keyID, _, signature := signedSubscriptionLeaseParts(t)
+	keyID, publicKey, signature := signedSubscriptionLeaseParts(t)
 	lease := &core.Signed[SubscriptionLeaseBody]{
 		KeyID:     keyID,
 		Signature: signature,
@@ -367,6 +501,7 @@ func TestWitnessClientRetryThenAcceptsSubscriptionEnvelope(t *testing.T) {
 		Endpoint: endpoint,
 		Jitter:   func() float64 { return 1 },
 		Backoff:  core.BackoffPolicy{Base: time.Nanosecond, Max: time.Nanosecond, MaxAttempts: 2},
+		Keyring:  core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}},
 	}
 
 	if _, err := client.Do(context.Background(), testWitnessCheckIn(t)); err != nil {
@@ -401,6 +536,7 @@ func TestRetryExhaustionCarriesServerRetryAfter(t *testing.T) {
 		Endpoint: endpoint,
 		Jitter:   func() float64 { return 1 },
 		Backoff:  core.BackoffPolicy{Base: time.Nanosecond, Max: time.Nanosecond, MaxAttempts: 1},
+		Keyring:  testClientKeyring(t),
 	}
 
 	_, err = client.Do(context.Background(), testBugCheckIn(t))
@@ -431,6 +567,7 @@ func TestRetryExhaustedTransportErrorCarriesLicenseIdentity(t *testing.T) {
 		Endpoint: endpoint,
 		Jitter:   func() float64 { return 1 },
 		Backoff:  core.BackoffPolicy{Base: time.Nanosecond, Max: time.Nanosecond, MaxAttempts: 1},
+		Keyring:  testClientKeyring(t),
 	}
 
 	_, err = client.Do(context.Background(), testBugCheckIn(t))
@@ -454,6 +591,9 @@ func TestClientValidateChecksAPIKeyAndBackoffTable(t *testing.T) {
 		{name: "invalid backoff with valid api key", wantErr: true, mutate: func(c *Client[BugCheckIn, SeatLeaseBody]) {
 			c.Backoff.MaxAttempts = 0
 		}},
+		{name: "missing keyring rejected", wantErr: true, mutate: func(c *Client[BugCheckIn, SeatLeaseBody]) {
+			c.Keyring = core.SigningKeyring{}
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -462,6 +602,7 @@ func TestClientValidateChecksAPIKeyAndBackoffTable(t *testing.T) {
 				Endpoint: BugCheckInEndpoint,
 				APIKey:   testAPICallKey(t),
 				Backoff:  core.BackoffPolicy{Base: time.Nanosecond, Max: time.Nanosecond, MaxAttempts: 1},
+				Keyring:  testClientKeyring(t),
 			}
 			tc.mutate(&client)
 			err := client.Validate()
@@ -490,7 +631,11 @@ func TestJitterFractionZeroFailsToMaxDelay(t *testing.T) {
 	if got := conservativeJitterFraction(1.1); got != 1 {
 		t.Fatalf("conservativeJitterFraction >1 = %v, want 1", got)
 	}
-	if got := CheckInBackoff.Delay(0, client.jitterFraction()); got != CheckInBackoff.Base {
+	got, err := CheckInBackoff.Delay(0, client.jitterFraction())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != CheckInBackoff.Base {
 		t.Fatalf("zero jitter delay = %s, want %s", got, CheckInBackoff.Base)
 	}
 }
@@ -499,7 +644,7 @@ func TestCheckInResponseHostileCombinations(t *testing.T) {
 	t.Parallel()
 	lease := &core.Signed[SeatLeaseBody]{
 		KeyID:     mustSigningKeyID(t),
-		Signature: make([]byte, ed25519.SignatureSize),
+		Signature: testSignatureHex(t),
 		Body:      testSeatLeaseBody(t),
 	}
 	for _, tc := range []struct {
@@ -541,6 +686,31 @@ func TestCheckInResponseHostileCombinations(t *testing.T) {
 	}
 }
 
+func TestCheckInResponseSatisfiesNativeTransportBodyContract(t *testing.T) {
+	t.Parallel()
+
+	type transportBody interface {
+		Validate() error
+		APIBody()
+	}
+
+	tests := []struct {
+		body transportBody
+		name string
+	}{
+		{name: "bug seat check-in response", body: CheckInResponse[SeatLeaseBody]{}},
+		{name: "witness subscription check-in response", body: CheckInResponse[SubscriptionLeaseBody]{}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if tc.body == nil {
+				t.Fatalf("body = nil, want concrete Foundation transport body")
+			}
+		})
+	}
+}
+
 func TestCheckInResponseMalformedLeaseCarriesLicenseIdentity(t *testing.T) {
 	t.Parallel()
 	response := CheckInResponse[SeatLeaseBody]{
@@ -548,7 +718,7 @@ func TestCheckInResponseMalformedLeaseCarriesLicenseIdentity(t *testing.T) {
 		Refusal: RefusalNone,
 		Lease: &core.Signed[SeatLeaseBody]{
 			KeyID:     mustSigningKeyID(t),
-			Signature: nil,
+			Signature: core.Ed25519SignatureHex{},
 			Body:      testSeatLeaseBody(t),
 		},
 	}
@@ -569,12 +739,17 @@ func TestClientBoundaryErrorsCarryLicenseIdentityTable(t *testing.T) {
 		}},
 		{name: "success envelope decode failure", run: func() error {
 			reply := &http.Response{Body: io.NopCloser(strings.NewReader("<html>"))}
-			_, err := readResponse[SeatLeaseBody](reply)
+			_, err := readResponse[SeatLeaseBody](reply, testClientKeyring(t))
 			return err
 		}},
 		{name: "failure envelope decode failure", run: func() error {
 			reply := &http.Response{Body: io.NopCloser(strings.NewReader("<html>"))}
-			return readFailureResponse[SeatLeaseBody](reply, http.StatusBadGateway, 0)
+			err := readFailureResponse[SeatLeaseBody](reply, http.StatusBadGateway, 0)
+			var statusErr CheckInHTTPError
+			if !errors.As(err, &statusErr) || statusErr.StatusCode != http.StatusBadGateway {
+				return fmt.Errorf("status error = %v, want CheckInHTTPError 502", err)
+			}
+			return err
 		}},
 		{name: "request build failure", run: func() error {
 			client := Client[BugCheckIn, SeatLeaseBody]{
@@ -608,6 +783,7 @@ func TestRetryAfterClampedToBackoffMax(t *testing.T) {
 	for _, header := range []string{
 		"8640000",
 		"9223372036854775807",
+		"184467440737095516160",
 		now.Add(24 * time.Hour).Format(http.TimeFormat),
 	} {
 		if got := parseRetryAfter(header, now, maxWait); got.Wait != maxWait {
@@ -624,7 +800,7 @@ func TestRetryAfterClampedToBackoffMax(t *testing.T) {
 	}
 }
 
-func signedSeatLeaseParts(t *testing.T) (core.SigningKeyID, core.Ed25519PublicKeyHex, []byte) {
+func signedSeatLeaseParts(t *testing.T) (core.SigningKeyID, core.Ed25519PublicKeyHex, core.Ed25519SignatureHex) {
 	t.Helper()
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -643,10 +819,14 @@ func signedSeatLeaseParts(t *testing.T) (core.SigningKeyID, core.Ed25519PublicKe
 	if err != nil {
 		t.Fatal(err)
 	}
-	return keyID, publicHex, ed25519.Sign(private, message)
+	signature, err := core.NewEd25519SignatureHex(ed25519.Sign(private, message))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return keyID, publicHex, signature
 }
 
-func signedSubscriptionLeaseParts(t *testing.T) (core.SigningKeyID, core.Ed25519PublicKeyHex, []byte) {
+func signedSubscriptionLeaseParts(t *testing.T) (core.SigningKeyID, core.Ed25519PublicKeyHex, core.Ed25519SignatureHex) {
 	t.Helper()
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -665,7 +845,26 @@ func signedSubscriptionLeaseParts(t *testing.T) (core.SigningKeyID, core.Ed25519
 	if err != nil {
 		t.Fatal(err)
 	}
-	return keyID, publicHex, ed25519.Sign(private, message)
+	signature, err := core.NewEd25519SignatureHex(ed25519.Sign(private, message))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return keyID, publicHex, signature
+}
+
+func testClientKeyring(t *testing.T) core.SigningKeyring {
+	t.Helper()
+	keyID, publicKey, _ := signedSeatLeaseParts(t)
+	return core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
+}
+
+func testSignatureHex(t *testing.T) core.Ed25519SignatureHex {
+	t.Helper()
+	signature, err := core.NewEd25519SignatureHex(make([]byte, ed25519.SignatureSize))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return signature
 }
 
 type failingRoundTripper struct{}

@@ -11,7 +11,9 @@ import (
 
 const (
 	ULIDTextLen                = 26
+	ULIDMaxFirstRune           = '7'
 	ULIDUpperCrockfordAlphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+	ErrFmtLedgerSeq            = "custody.LedgerSeq: %w"
 )
 
 type CustomerID struct {
@@ -98,12 +100,56 @@ func validULIDText(value string) bool {
 	if len(value) != ULIDTextLen {
 		return false
 	}
-	for _, r := range value {
+	for index, r := range value {
+		if index == 0 && r > ULIDMaxFirstRune {
+			return false
+		}
 		if !validULIDRune(r) {
 			return false
 		}
 	}
 	return true
+}
+
+type LedgerSeq int64
+
+func NewLedgerSeq(value int64) (LedgerSeq, error) {
+	seq := LedgerSeq(value)
+	if err := seq.Validate(); err != nil {
+		return 0, err
+	}
+	return seq, nil
+}
+
+func (s LedgerSeq) Int64() int64 {
+	return int64(s)
+}
+
+func (s LedgerSeq) Validate() error {
+	if s < 1 {
+		return fmt.Errorf(ErrFmtLedgerSeq, core.ErrCustodyContract)
+	}
+	return nil
+}
+
+func (s LedgerSeq) MarshalJSON() ([]byte, error) {
+	if err := s.Validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(int64(s))
+}
+
+func (s *LedgerSeq) UnmarshalJSON(data []byte) error {
+	var value int64
+	if err := json.Unmarshal(data, &value); err != nil {
+		return fmt.Errorf(ErrFmtLedgerSeq, core.ErrCustodyContract)
+	}
+	parsed, err := NewLedgerSeq(value)
+	if err != nil {
+		return err
+	}
+	*s = parsed
+	return nil
 }
 
 func validULIDRune(r rune) bool {
@@ -116,7 +162,7 @@ type ArtifactName struct {
 
 func ParseArtifactName(value string) (ArtifactName, error) {
 	if err := core.ValidateFileNameToken(value, core.FileNameTokenMaxRunes); err != nil {
-		return ArtifactName{}, fmt.Errorf(ErrFmtArtifactName, core.ErrCustodyContract)
+		return ArtifactName{}, fmt.Errorf(ErrFmtArtifactName, errors.Join(core.ErrCustodyContract, err))
 	}
 	return ArtifactName{value: value}, nil
 }
@@ -156,7 +202,7 @@ type ObjectPath struct {
 
 func ParseObjectPath(value string) (ObjectPath, error) {
 	if err := core.ValidatePathToken(value, core.PathTokenMaxRunes); err != nil {
-		return ObjectPath{}, fmt.Errorf(ErrFmtObjectPath, core.ErrCustodyContract)
+		return ObjectPath{}, fmt.Errorf(ErrFmtObjectPath, errors.Join(core.ErrCustodyContract, err))
 	}
 	return ObjectPath{value: value}, nil
 }
@@ -272,7 +318,7 @@ type Generation struct {
 
 func ParseGeneration(value string) (Generation, error) {
 	if err := core.ValidateOpaqueToken(value, core.OpaqueTokenDefaultMaxRunes); err != nil {
-		return Generation{}, fmt.Errorf(ErrFmtGeneration, core.ErrCustodyContract)
+		return Generation{}, fmt.Errorf(ErrFmtGeneration, errors.Join(core.ErrCustodyContract, err))
 	}
 	return Generation{value: value}, nil
 }

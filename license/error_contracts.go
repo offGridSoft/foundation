@@ -15,7 +15,7 @@ const (
 	ErrFmtLeaseTrust         = "license.LeaseTrust: %w"
 	ErrFmtGateOutcome        = "license.GateOutcome: %w"
 	ErrFmtGateReason         = "license.GateReason: %w"
-	ErrFmtGateState          = "license.GateState: %w"
+	ErrFmtLeaseState         = "license.LeaseState: %w"
 	ErrFmtCheckInPayload     = "license.CheckIn.Payload: %w"
 	ErrFmtCheckInClient      = "license.CheckIn.Client: %w"
 	ErrFmtCheckInEndpoint    = "license.CheckIn.Endpoint: %w"

@@ -82,6 +82,8 @@ func TestStorageScalarsRejectHostileInputs(t *testing.T) {
 		}},
 		{name: "customer id lowercase", run: func() error { _, err := ParseCustomerID(strings.Repeat("a", ULIDTextLen)); return err }},
 		{name: "customer id illegal rune", run: func() error { _, err := ParseCustomerID("01HZZZZZZZZZZZZZZZZZZZZZZI"); return err }},
+		{name: "customer id non-canonical first rune", run: func() error { _, err := ParseCustomerID("81HZZZZZZZZZZZZZZZZZZZZZZZ"); return err }},
+		{name: "session id non-canonical first rune", run: func() error { _, err := ParseSessionID("81J00000000000000000000000"); return err }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -231,9 +233,35 @@ func TestReceiptCanonicalRoundTripTable(t *testing.T) {
 func TestReceiptRejectsNegativeLedgerSeq(t *testing.T) {
 	t.Parallel()
 	body := validReceipt(t)
-	body.LedgerSeq = -7
+	body.LedgerSeq = LedgerSeq(-7)
 	if err := body.Validate(); !errors.Is(err, core.ErrCustodyContract) {
 		t.Fatalf("ReceiptBody.Validate error = %v, want ErrCustodyContract", err)
+	}
+}
+
+func TestUploadTargetRejectsDuplicateHeadersHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		headers []UploadHeader
+	}{
+		{name: "duplicate exact header name", headers: []UploadHeader{
+			{Name: core.HTTPHeaderContentType, Value: core.HTTPContentTypeJSON},
+			{Name: core.HTTPHeaderContentType, Value: "application/octet-stream"},
+		}},
+		{name: "duplicate case-folded header name", headers: []UploadHeader{
+			{Name: "Content-Type", Value: core.HTTPContentTypeJSON},
+			{Name: "content-type", Value: "application/octet-stream"},
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			target := validUploadTarget(t)
+			target.Headers = tc.headers
+			if err := target.Validate(); !errors.Is(err, core.ErrCustodyContract) {
+				t.Fatalf("UploadTarget.Validate() error = %v, want ErrCustodyContract", err)
+			}
+		})
 	}
 }
 
@@ -302,7 +330,7 @@ func validReceipt(t *testing.T) ReceiptBody {
 		Objects:   []UploadedObject{mustUploadedObject(t)},
 		Retention: mustRetention(),
 		Provider:  core.StorageProviderGCS,
-		LedgerSeq: 7,
+		LedgerSeq: mustLedgerSeq(t, 7),
 		ChainHash: mustSHA256(t, "e"),
 		IssuedAt:  core.UnixNanoTimeFromInt64(1782302400000000000),
 	}
@@ -346,7 +374,7 @@ func mustArtifact(t *testing.T) ArtifactDescriptor {
 func artifactWithNameAndSize(t *testing.T, name string, size uint64) ArtifactDescriptor {
 	t.Helper()
 	return ArtifactDescriptor{
-		Name:   mustArtifactNameValue(name),
+		Name:   mustArtifactNameValue(t, name),
 		Size:   core.NewByteCount(size),
 		SHA256: mustSHA256(t, "c"),
 		BLAKE3: mustBLAKE3(t, "d"),
@@ -360,7 +388,7 @@ func mustUploadedObject(t *testing.T) UploadedObject {
 		t.Fatal(err)
 	}
 	return UploadedObject{
-		Artifact:   mustArtifactNameValue("bundle.tar"),
+		Artifact:   mustArtifactNameValue(t, "bundle.tar"),
 		Object:     object,
 		Generation: mustGeneration(t),
 		Size:       core.NewByteCount(12),
@@ -372,7 +400,7 @@ func mustUploadedObject(t *testing.T) UploadedObject {
 func validUploadTarget(t *testing.T) UploadTarget {
 	t.Helper()
 	return UploadTarget{
-		Artifact: mustArtifactNameValue("bundle.tar"),
+		Artifact: mustArtifactNameValue(t, "bundle.tar"),
 		Object:   mustObjectPath(t),
 		URL:      mustSignedUploadURL(t),
 		Headers: []UploadHeader{{
@@ -411,6 +439,15 @@ func mustGeneration(t *testing.T) Generation {
 	return generation
 }
 
+func mustLedgerSeq(t *testing.T, value int64) LedgerSeq {
+	t.Helper()
+	seq, err := NewLedgerSeq(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return seq
+}
+
 func mustRetention() RetentionPolicy {
 	return RetentionPolicy{
 		Class:       RetentionClassConditional,
@@ -436,10 +473,11 @@ func mustSessionID(t *testing.T) SessionID {
 	return id
 }
 
-func mustArtifactNameValue(value string) ArtifactName {
+func mustArtifactNameValue(t *testing.T, value string) ArtifactName {
+	t.Helper()
 	name, err := ParseArtifactName(value)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 	return name
 }

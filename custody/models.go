@@ -3,6 +3,7 @@ package custody
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/offGridSoft/foundation/v2026/core"
 )
@@ -89,7 +90,7 @@ func (r SessionOpenResponse) Validate() error {
 	if err := r.Retention.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtOpenResponse, err)
 	}
-	if r.ExpiresAt.IsZero() {
+	if err := core.ValidateRequiredUnixNanoTime(r.ExpiresAt); err != nil {
 		return fmt.Errorf(ErrFmtOpenResponse, core.ErrCustodyContract)
 	}
 	return nil
@@ -140,9 +141,13 @@ func (t UploadTarget) Validate() error {
 	if err := t.Method.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtStorage, err)
 	}
+	names := core.NewUniqueStringSet(len(t.Headers))
 	for _, header := range t.Headers {
 		if err := header.Validate(); err != nil {
 			return fmt.Errorf(ErrFmtStorage, err)
+		}
+		if err := names.Add(strings.ToLower(header.Name)); err != nil {
+			return fmt.Errorf(ErrFmtStorage, core.ErrCustodyContract)
 		}
 	}
 	return nil
@@ -173,7 +178,7 @@ func (p RetentionPolicy) Validate() error {
 	if err := p.Class.Validate(); err != nil {
 		return err
 	}
-	if p.RetainUntil.IsZero() {
+	if err := core.ValidateRequiredUnixNanoTime(p.RetainUntil); err != nil {
 		return fmt.Errorf(ErrFmtRetention, core.ErrCustodyContract)
 	}
 	return nil
@@ -244,7 +249,7 @@ type ReceiptBody struct {
 	Objects   []UploadedObject     `json:"objects"`
 	Retention RetentionPolicy      `json:"retention"`
 	IssuedAt  core.UnixNanoTime    `json:"issued_at"`
-	LedgerSeq int64                `json:"ledger_seq"`
+	LedgerSeq LedgerSeq            `json:"ledger_seq"`
 	Schema    core.SchemaID        `json:"schema"`
 	Provider  core.StorageProvider `json:"provider"`
 }
@@ -313,8 +318,11 @@ func validateReceiptStorage(b ReceiptBody) error {
 }
 
 func validateReceiptLedger(b ReceiptBody) error {
-	if b.LedgerSeq < 1 || b.IssuedAt.IsZero() {
+	if err := core.ValidateRequiredUnixNanoTime(b.IssuedAt); err != nil {
 		return fmt.Errorf(ErrFmtReceipt, core.ErrCustodyContract)
+	}
+	if err := b.LedgerSeq.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtReceipt, err)
 	}
 	if err := b.ChainHash.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtReceipt, err)
@@ -336,16 +344,16 @@ func (b ReceiptBody) MarshalJSON() ([]byte, error) {
 func appendReceiptBodyJSON(dst []byte, b ReceiptBody) ([]byte, error) {
 	dst = append(dst, '{')
 	var err error
-	dst, err = core.AppendJSONField(dst, "release", b.Release)
+	dst, err = core.AppendJSONField(dst, core.JSONFieldRelease, b.Release)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldSchema, b.Schema)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "customer_id", b.Customer)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "session_id", b.Session)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "chain_hash", b.ChainHash)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "objects", b.Objects)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "retention", b.Retention)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "issued_at", b.IssuedAt)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "ledger_seq", b.LedgerSeq)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, "provider", b.Provider)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldCustomerID, b.Customer)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldSessionID, b.Session)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldChainHash, b.ChainHash)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldObjects, b.Objects)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldRetention, b.Retention)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldIssuedAt, b.IssuedAt)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldLedgerSeq, b.LedgerSeq)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldProvider, b.Provider)
 	if err != nil {
 		return nil, err
 	}

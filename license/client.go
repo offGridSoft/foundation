@@ -20,9 +20,6 @@ import (
 const (
 	CheckInResponseByteCap = 1 << 16
 	CheckInBudget          = 8 * time.Second
-	CheckInMinInterval     = 24 * time.Hour
-	WarnWindow             = 7 * 24 * time.Hour
-	ClockSkewAllowance     = 60 * time.Minute
 	CheckInMaxRetryAfter   = 24 * time.Hour
 )
 
@@ -39,6 +36,19 @@ func (e CheckInAPIError) Error() string {
 
 func (e CheckInAPIError) Unwrap() error {
 	return core.ErrLicenseContract
+}
+
+type CheckInHTTPError struct {
+	Cause      error
+	StatusCode int
+}
+
+func (e CheckInHTTPError) Error() string {
+	return fmt.Sprintf("license check-in HTTP failure: status=%d: %v", e.StatusCode, e.Cause)
+}
+
+func (e CheckInHTTPError) Unwrap() error {
+	return errors.Join(core.ErrLicenseContract, e.Cause)
 }
 
 type CheckInRetryExhaustedError struct {
@@ -71,6 +81,11 @@ type CheckInResponse[B Body] struct {
 	Granted     bool            `json:"granted"`
 }
 
+// APIBody lets Foundation response contracts satisfy offgridsoftware and
+// kernel transport.JSON body interfaces structurally without importing either
+// transport package.
+func (CheckInResponse[B]) APIBody() {}
+
 func (r CheckInResponse[B]) Validate() error {
 	if r.Granted {
 		if r.Refusal != RefusalNone || r.Remediation != "" || r.Lease == nil {
@@ -98,6 +113,7 @@ type Client[P CheckInPayload, B Body] struct {
 	Jitter   func() float64
 	Endpoint CheckInEndpoint
 	APIKey   APICallKey
+	Keyring  core.SigningKeyring
 	Backoff  core.BackoffPolicy
 }
 
@@ -117,6 +133,9 @@ func (c Client[P, B]) Validate() error {
 		if err := c.Backoff.Validate(); err != nil {
 			return err
 		}
+	}
+	if err := c.Keyring.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtCheckInClient, errors.Join(core.ErrLicenseContract, err))
 	}
 	return nil
 }
@@ -144,7 +163,11 @@ func (c Client[P, B]) roundTrip(ctx context.Context, body []byte) (CheckInRespon
 	var retryAfterHint time.Duration
 	for attempt := 0; attempt < policy.MaxAttempts; attempt++ {
 		if attempt > 0 {
-			wait := maxDuration(policy.Delay(attempt-1, c.jitterFraction()), retryAfter)
+			delay, err := policy.Delay(attempt-1, c.jitterFraction())
+			if err != nil {
+				return CheckInResponse[B]{}, transportError(err)
+			}
+			wait := maxDuration(delay, retryAfter)
 			if err := sleepContext(ctx, wait); err != nil {
 				return CheckInResponse[B]{}, transportError(err)
 			}
@@ -183,7 +206,7 @@ func (c Client[P, B]) attempt(ctx context.Context, body []byte, maxRetryAfterWai
 	if err != nil {
 		return attemptResult[B]{Outcome: core.HTTPOutcomeTerminal, Err: err}
 	}
-	reply, err := c.HTTP.Do(request)
+	reply, err := c.do(request)
 	if err != nil {
 		return attemptResult[B]{Outcome: core.HTTPOutcomeRetryable, Err: transportError(err)}
 	}
@@ -205,11 +228,21 @@ func (c Client[P, B]) attempt(ctx context.Context, body []byte, maxRetryAfterWai
 			Err:            err,
 		}
 	}
-	decoded, err := readResponse[B](reply)
+	decoded, err := readResponse[B](reply, c.Keyring)
 	if err != nil {
 		return attemptResult[B]{Outcome: core.HTTPOutcomeTerminal, Err: err}
 	}
 	return attemptResult[B]{Response: decoded, Outcome: core.HTTPOutcomeSuccess}
+}
+
+func (c Client[P, B]) do(request *http.Request) (*http.Response, error) {
+	client := *c.HTTP
+	client.CheckRedirect = rejectCheckInRedirect
+	return client.Do(request) // #nosec G704 -- request URL comes from typed CheckInEndpoint validation and redirects are rejected.
+}
+
+func rejectCheckInRedirect(*http.Request, []*http.Request) error {
+	return fmt.Errorf(ErrFmtCheckInTransport, core.ErrLicenseContract)
 }
 
 func (c Client[P, B]) buildRequest(ctx context.Context, body []byte) (*http.Request, error) {
@@ -224,7 +257,7 @@ func (c Client[P, B]) buildRequest(ctx context.Context, body []byte) (*http.Requ
 	return request, nil
 }
 
-func readResponse[B Body](reply *http.Response) (CheckInResponse[B], error) {
+func readResponse[B Body](reply *http.Response, keyring core.SigningKeyring) (CheckInResponse[B], error) {
 	data, err := readCappedResponseBody(reply.Body)
 	if err != nil {
 		return CheckInResponse[B]{}, err
@@ -239,7 +272,23 @@ func readResponse[B Body](reply *http.Response) (CheckInResponse[B], error) {
 	if err := decoded.Data.Validate(); err != nil {
 		return CheckInResponse[B]{}, err
 	}
+	if err := verifyGrantedLease(*decoded.Data, keyring); err != nil {
+		return CheckInResponse[B]{}, err
+	}
 	return *decoded.Data, nil
+}
+
+func verifyGrantedLease[B Body](response CheckInResponse[B], keyring core.SigningKeyring) error {
+	if !response.Granted {
+		return nil
+	}
+	if response.Lease == nil {
+		return fmt.Errorf(ErrFmtCheckInResponse, core.ErrLicenseContract)
+	}
+	if err := response.Lease.Verify(keyring); err != nil {
+		return fmt.Errorf(ErrFmtCheckInResponse, errors.Join(core.ErrLicenseContract, err))
+	}
+	return nil
 }
 
 func readFailureResponse[B Body](reply *http.Response, statusCode int, retryAfter time.Duration) error {
@@ -249,7 +298,10 @@ func readFailureResponse[B Body](reply *http.Response, statusCode int, retryAfte
 	}
 	decoded, err := core.DecodeStrictJSON[core.APIEnvelope[CheckInResponse[B]]](data)
 	if err != nil {
-		return fmt.Errorf(ErrFmtCheckInResponse, errors.Join(core.ErrLicenseContract, err))
+		return CheckInHTTPError{
+			StatusCode: statusCode,
+			Cause:      fmt.Errorf(ErrFmtCheckInResponse, errors.Join(core.ErrLicenseContract, err)),
+		}
 	}
 	if err := decoded.ValidateFailure(); err != nil {
 		return fmt.Errorf(ErrFmtCheckInResponse, errors.Join(core.ErrLicenseContract, err))
@@ -347,11 +399,26 @@ func parseRetryAfter(header string, now time.Time, maxWait time.Duration) retryA
 	if _, err := strconv.ParseUint(header, 10, 64); err == nil {
 		return retryAfterDecision{Wait: maxWait, Hint: CheckInMaxRetryAfter}
 	}
+	if allDecimalDigits(header) {
+		return retryAfterDecision{Wait: maxWait, Hint: CheckInMaxRetryAfter}
+	}
 	when, err := http.ParseTime(header)
 	if err != nil || !when.After(now) {
 		return retryAfterDecision{}
 	}
 	return clampRetryAfter(when.Sub(now), maxWait)
+}
+
+func allDecimalDigits(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func clampRetryAfter(d time.Duration, maxWait time.Duration) retryAfterDecision {

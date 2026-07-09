@@ -42,6 +42,7 @@ func (d NanosecondsDuration) MarshalJSON() ([]byte, error) {
 	return appendInt64JSON(d.nanos), nil
 }
 
+//validate:unmarshal_ignore reason="NanosecondsDuration validates a temporary before assignment so rejected input cannot mutate the receiver."
 func (d *NanosecondsDuration) UnmarshalJSON(data []byte) error {
 	nanos, err := parseStrictInt64JSON(data)
 	if err != nil {
@@ -52,5 +53,5 @@ func (d *NanosecondsDuration) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*d = decoded
-	return d.Validate()
+	return nil
 }

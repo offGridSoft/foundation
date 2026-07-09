@@ -22,10 +22,16 @@ func TestGateHostileTable(t *testing.T) {
 		wantRemaining time.Duration
 	}{
 		{
-			name: "disarmed allows without trusting lease",
+			name:        "zero value fails closed before lease trust",
+			input:       GateInput[SeatLeaseBody]{},
+			wantOutcome: GateRefuse,
+			wantReason:  GateReasonInvalidClock,
+		},
+		{
+			name: "explicit disarmed allows without trusting lease",
 			input: GateInput[SeatLeaseBody]{
-				Now:   now,
-				Armed: false,
+				Now:      now,
+				Disarmed: true,
 			},
 			wantOutcome: GateAllow,
 			wantReason:  GateReasonDisarmed,
@@ -35,7 +41,6 @@ func TestGateHostileTable(t *testing.T) {
 			input: GateInput[SeatLeaseBody]{
 				Now:            now,
 				ClockHighWater: now.Add(time.Nanosecond),
-				Armed:          true,
 				Trust:          LeaseTrustTrusted,
 				Lease:          lease,
 			},
@@ -43,10 +48,9 @@ func TestGateHostileTable(t *testing.T) {
 			wantReason:  GateReasonClockRollback,
 		},
 		{
-			name: "armed invalid trust fails closed",
+			name: "invalid trust fails closed",
 			input: GateInput[SeatLeaseBody]{
-				Now:   now,
-				Armed: true,
+				Now: now,
 			},
 			wantOutcome: GateRefuse,
 			wantReason:  GateReasonInvalidTrust,
@@ -55,7 +59,6 @@ func TestGateHostileTable(t *testing.T) {
 			name: "untrusted first refusal teaches",
 			input: GateInput[SeatLeaseBody]{
 				Now:   now,
-				Armed: true,
 				Trust: LeaseTrustUntrusted,
 			},
 			wantOutcome: GateTeach,
@@ -65,7 +68,6 @@ func TestGateHostileTable(t *testing.T) {
 			name: "untrusted after teaching refuses",
 			input: GateInput[SeatLeaseBody]{
 				Now:           now,
-				Armed:         true,
 				Trust:         LeaseTrustUntrusted,
 				TeachingShown: true,
 			},
@@ -78,7 +80,6 @@ func TestGateHostileTable(t *testing.T) {
 				Now:        now,
 				Lease:      lease,
 				WarnWindow: 7 * 24 * time.Hour,
-				Armed:      true,
 				Trust:      LeaseTrustTrusted,
 			},
 			wantOutcome: GateAllow,
@@ -91,7 +92,6 @@ func TestGateHostileTable(t *testing.T) {
 				Now:        lease.ExpiresAt().Add(-time.Hour),
 				Lease:      lease,
 				WarnWindow: 7 * 24 * time.Hour,
-				Armed:      true,
 				Trust:      LeaseTrustTrusted,
 			},
 			wantOutcome:   GateWarn,
@@ -105,7 +105,6 @@ func TestGateHostileTable(t *testing.T) {
 				Now:        lease.ExpiresAt().Add(time.Hour),
 				Lease:      lease,
 				WarnWindow: 7 * 24 * time.Hour,
-				Armed:      true,
 				Trust:      LeaseTrustTrusted,
 			},
 			wantOutcome:   GateWarn,
@@ -119,7 +118,6 @@ func TestGateHostileTable(t *testing.T) {
 				Now:        lease.WriteGraceUntil(),
 				Lease:      lease,
 				WarnWindow: 7 * 24 * time.Hour,
-				Armed:      true,
 				Trust:      LeaseTrustTrusted,
 			},
 			wantOutcome: GateRefuse,
@@ -132,7 +130,6 @@ func TestGateHostileTable(t *testing.T) {
 				Now:        lease.WriteGraceUntil().Add(time.Hour),
 				Lease:      lease,
 				WarnWindow: -30 * 24 * time.Hour,
-				Armed:      true,
 				Trust:      LeaseTrustTrusted,
 			},
 			wantOutcome: GateRefuse,

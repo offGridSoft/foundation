@@ -34,7 +34,7 @@ func TestSignedVerifyHostileTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	signature := ed25519.Sign(privateKey, message)
+	signature := signTestMessage(t, privateKey, message)
 	for _, tc := range []struct {
 		name    string
 		signed  Signed[signedTestBody]
@@ -53,7 +53,7 @@ func TestSignedVerifyHostileTable(t *testing.T) {
 			name: "flipped signature rejected",
 			signed: Signed[signedTestBody]{
 				KeyID:     keyID,
-				Signature: flipSignature(signature),
+				Signature: flipSignature(t, signature),
 				Body:      body,
 			},
 			keyring: SigningKeyring{Keys: []SigningPublicKey{{ID: keyID, PublicKey: publicKey}}},
@@ -104,12 +104,25 @@ func TestSignedVerifyAcceptsValidSignature(t *testing.T) {
 	}
 	signed := Signed[signedTestBody]{
 		KeyID:     keyID,
-		Signature: ed25519.Sign(privateKey, message),
+		Signature: signTestMessage(t, privateKey, message),
 		Body:      body,
 	}
 	keyring := SigningKeyring{Keys: []SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
 	if err := signed.Verify(keyring); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAppendSignedMessageWireLayout(t *testing.T) {
+	t.Parallel()
+	keyID, _, _ := signingTestKey(t, "server-key-1")
+	got, err := AppendSignedMessage(nil, keyID, signedTestBody{Value: "ok"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "foundation-signed-v1\x00server-key-1\x00{\"value\":\"ok\"}"
+	if string(got) != want {
+		t.Fatalf("AppendSignedMessage() = %q, want %q", got, want)
 	}
 }
 
@@ -124,7 +137,7 @@ func TestSignedVerifyRejectsSignatureBoundToDifferentKeyID(t *testing.T) {
 	}
 	signed := Signed[signedTestBody]{
 		KeyID:     keyID,
-		Signature: ed25519.Sign(privateKey, message),
+		Signature: signTestMessage(t, privateKey, message),
 		Body:      body,
 	}
 	keyring := SigningKeyring{Keys: []SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
@@ -162,8 +175,26 @@ func signingTestKey(t *testing.T, id string) (SigningKeyID, Ed25519PublicKeyHex,
 	return keyID, publicHex, private
 }
 
-func flipSignature(signature []byte) []byte {
-	out := append([]byte(nil), signature...)
+func signTestMessage(t *testing.T, privateKey ed25519.PrivateKey, message []byte) Ed25519SignatureHex {
+	t.Helper()
+	signature, err := NewEd25519SignatureHex(ed25519.Sign(privateKey, message))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return signature
+}
+
+func flipSignature(t *testing.T, signature Ed25519SignatureHex) Ed25519SignatureHex {
+	t.Helper()
+	raw, err := signature.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := append([]byte(nil), raw...)
 	out[0] ^= 1
-	return out
+	flipped, err := NewEd25519SignatureHex(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return flipped
 }

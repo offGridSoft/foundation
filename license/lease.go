@@ -52,7 +52,13 @@ func (b SeatLeaseBody) Validate() error {
 	if err := validateCommonLeaseWindow(b); err != nil {
 		return err
 	}
-	return validateLeaseBillingTerm(b.BillingPeriod, b.PrepaidYears)
+	if err := validateCollectionLeaseWindow(b.BillingPeriod, b.CheckInAfterAt, b.PaidUntil); err != nil {
+		return err
+	}
+	if err := validateLeaseBillingTerm(b.BillingPeriod, b.PrepaidYears); err != nil {
+		return err
+	}
+	return validateSeatLeasePlanBilling(b.Plan, b.BillingPeriod)
 }
 
 func (b SeatLeaseBody) Canonical(dst []byte) ([]byte, error) {
@@ -108,14 +114,11 @@ type leaseWindowBody interface {
 }
 
 func validateCommonLeaseWindow[B leaseWindowBody](b B) error {
-	if b.Issued().IsZero() || b.PaidThrough().IsZero() || b.ExpiresAt().IsZero() {
-		return fmt.Errorf(ErrFmtLeaseWindow, core.ErrLicenseContract)
+	if err := validateRequiredLeaseTimes(b); err != nil {
+		return err
 	}
 	if !b.ExpiresAt().After(b.Issued()) || !b.PaidThrough().After(b.Issued()) {
 		return fmt.Errorf(ErrFmtLeaseWindow, core.ErrLicenseContract)
-	}
-	if b.CheckInAfter().Before(b.PaidThrough()) {
-		return fmt.Errorf(ErrFmtLeaseCheckInWindow, core.ErrLicenseContract)
 	}
 	if b.CheckInAfter().Before(b.Issued()) {
 		return fmt.Errorf(ErrFmtLeaseCheckInWindow, core.ErrLicenseContract)
@@ -125,6 +128,43 @@ func validateCommonLeaseWindow[B leaseWindowBody](b B) error {
 	}
 	if b.WriteGrace().Duration() < 0 {
 		return fmt.Errorf(ErrFmtLeaseWriteGrace, core.ErrLicenseContract)
+	}
+	return nil
+}
+
+func validateRequiredLeaseTimes[B leaseWindowBody](b B) error {
+	if err := validateRequiredLeaseBoundaryTime(b.Issued()); err != nil {
+		return err
+	}
+	if err := validateRequiredLeaseBoundaryTime(b.PaidThrough()); err != nil {
+		return err
+	}
+	if err := validateRequiredLeaseBoundaryTime(b.ExpiresAt()); err != nil {
+		return err
+	}
+	return validateRequiredCheckInTimes(b.CheckInAfter(), b.CheckInBy())
+}
+
+func validateRequiredLeaseBoundaryTime(value core.UnixNanoTime) error {
+	if err := core.ValidateRequiredUnixNanoTime(value); err != nil {
+		return fmt.Errorf(ErrFmtLeaseWindow, core.ErrLicenseContract)
+	}
+	return nil
+}
+
+func validateRequiredCheckInTimes(checkInAfter core.UnixNanoTime, checkInBy core.UnixNanoTime) error {
+	if err := core.ValidateRequiredUnixNanoTime(checkInAfter); err != nil {
+		return fmt.Errorf(ErrFmtLeaseCheckInWindow, core.ErrLicenseContract)
+	}
+	if err := core.ValidateRequiredUnixNanoTime(checkInBy); err != nil {
+		return fmt.Errorf(ErrFmtLeaseCheckInWindow, core.ErrLicenseContract)
+	}
+	return nil
+}
+
+func validateCollectionLeaseWindow(period BillingPeriod, checkInAfter core.UnixNanoTime, paidUntil core.UnixNanoTime) error {
+	if period == BillingPeriodFourWeeks && checkInAfter.Before(paidUntil) {
+		return fmt.Errorf(ErrFmtLeaseCheckInWindow, core.ErrLicenseContract)
 	}
 	return nil
 }
@@ -160,7 +200,13 @@ func (b SubscriptionLeaseBody) Validate() error {
 	if err := validateCommonLeaseWindow(b); err != nil {
 		return err
 	}
-	return validateLeaseBillingTerm(b.BillingPeriod, b.PrepaidYears)
+	if err := validateCollectionLeaseWindow(b.BillingPeriod, b.CheckInAfterAt, b.PaidUntil); err != nil {
+		return err
+	}
+	if err := validateLeaseBillingTerm(b.BillingPeriod, b.PrepaidYears); err != nil {
+		return err
+	}
+	return validateSubscriptionLeaseBilling(b.BillingPeriod)
 }
 
 func (b SubscriptionLeaseBody) Canonical(dst []byte) ([]byte, error) {
@@ -263,13 +309,34 @@ func validateLeaseBillingTerm(period BillingPeriod, prepaidYears uint8) error {
 		}
 		return nil
 	case BillingPeriodPrepaidYears:
-		if prepaidYears == 0 {
+		if prepaidYears < BugEnterpriseMinPrepaidYears || prepaidYears > BugEnterpriseMaxPrepaidYears {
 			return fmt.Errorf(ErrFmtBillingPeriod, core.ErrLicenseContract)
 		}
 		return nil
 	default:
 		return fmt.Errorf(ErrFmtBillingPeriod, core.ErrLicenseContract)
 	}
+}
+
+func validateSeatLeasePlanBilling(plan SeatPlan, period BillingPeriod) error {
+	switch plan {
+	case SeatPlanEnterpriseOffline:
+		if period == BillingPeriodPrepaidYears {
+			return nil
+		}
+	case SeatPlanStandard, SeatPlanEnterprise, SeatPlanOSS:
+		if period == BillingPeriodFourWeeks {
+			return nil
+		}
+	}
+	return fmt.Errorf(ErrFmtBillingPeriod, core.ErrLicenseContract)
+}
+
+func validateSubscriptionLeaseBilling(period BillingPeriod) error {
+	if period != BillingPeriodFourWeeks {
+		return fmt.Errorf(ErrFmtBillingPeriod, core.ErrLicenseContract)
+	}
+	return nil
 }
 
 type LeaseState uint8
@@ -302,7 +369,7 @@ func (s LeaseState) IsValid() bool {
 
 func (s LeaseState) Validate() error {
 	if !s.IsValid() {
-		return fmt.Errorf(ErrFmtGateState, core.ErrLicenseContract)
+		return fmt.Errorf(ErrFmtLeaseState, core.ErrLicenseContract)
 	}
 	return nil
 }
@@ -320,13 +387,13 @@ func ParseLeaseState(token string) (LeaseState, error) {
 			return state, nil
 		}
 	}
-	return leaseStateInvalid, fmt.Errorf(ErrFmtGateState, core.ErrLicenseContract)
+	return leaseStateInvalid, fmt.Errorf(ErrFmtLeaseState, core.ErrLicenseContract)
 }
 
 func (s *LeaseState) UnmarshalJSON(data []byte) error {
 	var token string
 	if err := json.Unmarshal(data, &token); err != nil {
-		return fmt.Errorf(ErrFmtGateState, core.ErrLicenseContract)
+		return fmt.Errorf(ErrFmtLeaseState, core.ErrLicenseContract)
 	}
 	parsed, err := ParseLeaseState(token)
 	if err != nil {

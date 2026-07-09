@@ -37,6 +37,7 @@ func (v ProductVersion) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v.value)
 }
 
+//validate:unmarshal_ignore reason="ParseProductVersion validates a temporary before assignment so rejected input cannot mutate the receiver."
 func (v *ProductVersion) UnmarshalJSON(data []byte) error {
 	var value string
 	if err := json.Unmarshal(data, &value); err != nil {
@@ -47,5 +48,5 @@ func (v *ProductVersion) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*v = parsed
-	return v.Validate()
+	return nil
 }

@@ -44,6 +44,7 @@ func (f DeviceFingerprint) MarshalJSON() ([]byte, error) {
 	return json.Marshal(f.value)
 }
 
+//validate:unmarshal_ignore reason="ParseDeviceFingerprint validates a temporary before assignment so rejected input cannot mutate the receiver."
 func (f *DeviceFingerprint) UnmarshalJSON(data []byte) error {
 	var value string
 	if err := json.Unmarshal(data, &value); err != nil {
@@ -54,7 +55,7 @@ func (f *DeviceFingerprint) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*f = parsed
-	return f.Validate()
+	return nil
 }
 
 type LeaseID struct {
@@ -89,23 +90,27 @@ func (id LeaseID) ValidateOptional() error {
 }
 
 func (id LeaseID) MarshalJSON() ([]byte, error) {
-	if !id.IsZero() {
-		if err := id.Validate(); err != nil {
-			return nil, err
-		}
+	if id.IsZero() {
+		return []byte(JSONLiteralNull), nil
+	}
+	if err := id.Validate(); err != nil {
+		return nil, err
 	}
 	return json.Marshal(id.value)
 }
 
 //validate:unmarshal_ignore reason="LeaseID is nullable on first check-in; owning structs validate requiredness."
 func (id *LeaseID) UnmarshalJSON(data []byte) error {
+	if strings.TrimSpace(string(data)) == JSONLiteralNull {
+		*id = LeaseID{}
+		return nil
+	}
 	var value string
 	if err := json.Unmarshal(data, &value); err != nil {
 		return fmt.Errorf(ErrFmtLeaseID, ErrFoundationContract)
 	}
 	if value == "" {
-		*id = LeaseID{}
-		return nil
+		return fmt.Errorf(ErrFmtLeaseID, ErrFoundationContract)
 	}
 	parsed, err := ParseLeaseID(value)
 	if err != nil {
