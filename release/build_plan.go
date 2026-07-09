@@ -135,7 +135,7 @@ type BuildOutputPath struct {
 }
 
 func ParseBuildOutputPath(value string) (BuildOutputPath, error) {
-	if err := core.ValidatePathToken(value, core.PathTokenMaxRunes); err != nil {
+	if err := validateLocalOutputPath(value); err != nil {
 		return BuildOutputPath{}, fmt.Errorf(ErrFmtBuildOutput, core.ErrReleaseContract)
 	}
 	return BuildOutputPath{value: value}, nil
@@ -504,6 +504,22 @@ func validateBuildToken(value string, maxRunes int) error {
 	}
 	if strings.ContainsAny(value, " \\") {
 		return core.ErrFoundationContract
+	}
+	return nil
+}
+
+func validateLocalOutputPath(value string) error {
+	if err := core.ValidateOpaqueToken(value, core.PathTokenMaxRunes); err != nil {
+		return err
+	}
+	clean := strings.ReplaceAll(value, `\`, "/")
+	for segment := range strings.SplitSeq(clean, "/") {
+		if segment == "" {
+			continue
+		}
+		if segment == "." || segment == ".." {
+			return core.ErrFoundationContract
+		}
 	}
 	return nil
 }

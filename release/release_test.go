@@ -765,6 +765,21 @@ func TestGarbleBuildArgsHostileTable(t *testing.T) {
 			"dist/linux-amd64/witness",
 			"./cmd/witness",
 		}},
+		{name: "absolute output path accepted for release temp roots", mutate: func(r *ReleaseGarbleBuildRequest) {
+			r.Output = mustBuildOutputPath(t, "/private/tmp/witness-release/linux-amd64/witness")
+		}, want: []string{
+			GarbleSeedFlagPrefix + seed.String(),
+			GarbleArgLiterals,
+			GarbleArgTiny,
+			GoArgBuild,
+			GoArgTrimPath,
+			GoArgBuildVCS,
+			GoBuildTagsPrefix + "osusergo,netgo,witness_production",
+			GoBuildLDFlagsPrefix + "-s -w -buildid= -X github.com/offGridSoft/witness/internal/release.BuildCommit=" + strings.Repeat("a", 40),
+			GoBuildOutputFlag,
+			"/private/tmp/witness-release/linux-amd64/witness",
+			"./cmd/witness",
+		}},
 		{name: "random seed cannot build release", mutate: func(r *ReleaseGarbleBuildRequest) {
 			r.Seed = GarbleSeed{value: GarbleSeedRandom}
 		}},
