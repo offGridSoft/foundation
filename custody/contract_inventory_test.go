@@ -16,3 +16,5 @@ type custodyContractInventory struct {
 	Receipt        custodySignedProjection[ReceiptBody]
 	ReceiptID      custodyProtocolFact[ReceiptID]
 }
+
+var _ = custodyContractInventory{}

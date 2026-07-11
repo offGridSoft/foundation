@@ -37,7 +37,7 @@ const (
 )
 
 const (
-	SigningDomainTokenBugSeatLease             = "bug-seat-lease-2026"
+	SigningDomainTokenBugSeatLease             = "bug-seat-lease-2026" // #nosec G101 -- public signing-domain token, not a credential.
 	SigningDomainTokenWitnessSubscriptionLease = "witness-subscription-lease-2026"
 	SigningDomainTokenWitnessCustodyReceipt    = "witness-custody-receipt-2026"
 	SigningDomainTokenReleaseManifest          = "release-manifest-2026"

@@ -10,3 +10,5 @@ type licenseContractInventory struct {
 	CheckInResponse   licenseProtocolFact[CheckInResponse[SeatLeaseBody]]
 	RefusalFailure    licenseTypedFailure[RefusalError]
 }
+
+var _ = licenseContractInventory{}

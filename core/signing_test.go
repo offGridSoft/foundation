@@ -10,7 +10,8 @@ import (
 )
 
 type signedTestBody struct {
-	Value string `json:"value"`
+	Value  string   `json:"value"`
+	Schema SchemaID `json:"-"`
 }
 
 const signedTestBodyJSONFieldValue = "value"
@@ -27,7 +28,7 @@ func (b signedTestBody) Validate() error {
 	if b.Value == "" {
 		return ErrFoundationContract
 	}
-	return nil
+	return b.Schema.ResolveSigningDomain().Validate()
 }
 
 func (b signedTestBody) Canonical(dst []byte) ([]byte, error) {
@@ -43,28 +44,14 @@ func (b signedTestBody) Canonical(dst []byte) ([]byte, error) {
 }
 
 func (b signedTestBody) SigningSchema() SchemaID {
-	return SchemaReleaseCommandRun
-}
-
-type signedOtherTestBody signedTestBody
-
-func (b signedOtherTestBody) Validate() error {
-	return signedTestBody(b).Validate()
-}
-
-func (b signedOtherTestBody) Canonical(dst []byte) ([]byte, error) {
-	return signedTestBody(b).Canonical(dst)
-}
-
-func (b signedOtherTestBody) SigningSchema() SchemaID {
-	return SchemaReleasePlan
+	return b.Schema
 }
 
 func TestSignedVerifyHostileTable(t *testing.T) {
 	t.Parallel()
 	keyID, publicKey, privateKey := signingTestKey(t, "server-key-1")
 	otherID, otherPublicKey, _ := signingTestKey(t, "server-key-2")
-	body := signedTestBody{Value: "ok"}
+	body := signedTestBody{Value: "ok", Schema: SchemaReleaseCommandRun}
 	message, err := AppendSignedMessage(nil, keyID, body)
 	if err != nil {
 		t.Fatal(err)
@@ -80,7 +67,7 @@ func TestSignedVerifyHostileTable(t *testing.T) {
 			signed: Signed[signedTestBody]{
 				KeyID:     keyID,
 				Signature: signature,
-				Body:      signedTestBody{Value: "changed"},
+				Body:      signedTestBody{Value: "changed", Schema: SchemaReleaseCommandRun},
 			},
 			keyring: SigningKeyring{Keys: []SigningPublicKey{{ID: keyID, PublicKey: publicKey}}},
 		},
@@ -132,7 +119,7 @@ func TestSignedVerifyHostileTable(t *testing.T) {
 func TestSignedVerifyAcceptsValidSignature(t *testing.T) {
 	t.Parallel()
 	keyID, publicKey, privateKey := signingTestKey(t, "server-key-1")
-	body := signedTestBody{Value: "ok"}
+	body := signedTestBody{Value: "ok", Schema: SchemaReleaseCommandRun}
 	message, err := AppendSignedMessage(nil, keyID, body)
 	if err != nil {
 		t.Fatal(err)
@@ -151,7 +138,7 @@ func TestSignedVerifyAcceptsValidSignature(t *testing.T) {
 func TestAppendSignedMessageWireLayout(t *testing.T) {
 	t.Parallel()
 	keyID, _, _ := signingTestKey(t, signedTestKeyIDToken)
-	got, err := AppendSignedMessage(nil, keyID, signedTestBody{Value: "ok"})
+	got, err := AppendSignedMessage(nil, keyID, signedTestBody{Value: "ok", Schema: SchemaReleaseCommandRun})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,9 +188,9 @@ func TestSchemaSigningDomainTable(t *testing.T) {
 func TestSigningDomainJSONHostileTable(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
+		token     string
 		name      string
 		domain    SigningDomain
-		token     string
 		wantError bool
 	}{
 		{name: "bug seat lease domain round trips", domain: SigningDomainBugSeatLease, token: SigningDomainTokenBugSeatLease},
@@ -323,7 +310,7 @@ func TestSignedVerifyRejectsSignatureBoundToDifferentKeyID(t *testing.T) {
 	t.Parallel()
 	keyID, publicKey, privateKey := signingTestKey(t, "server-key-1")
 	otherID, _, _ := signingTestKey(t, "server-key-2")
-	body := signedTestBody{Value: "ok"}
+	body := signedTestBody{Value: "ok", Schema: SchemaReleaseCommandRun}
 	message, err := AppendSignedMessage(nil, otherID, body)
 	if err != nil {
 		t.Fatal(err)
@@ -342,15 +329,15 @@ func TestSignedVerifyRejectsSignatureBoundToDifferentKeyID(t *testing.T) {
 func TestSignedVerifyRejectsSignatureBoundToDifferentDomain(t *testing.T) {
 	t.Parallel()
 	keyID, publicKey, privateKey := signingTestKey(t, "server-key-1")
-	body := signedTestBody{Value: "ok"}
+	body := signedTestBody{Value: "ok", Schema: SchemaReleaseCommandRun}
 	message, err := AppendSignedMessage(nil, keyID, body)
 	if err != nil {
 		t.Fatal(err)
 	}
-	signed := Signed[signedOtherTestBody]{
+	signed := Signed[signedTestBody]{
 		KeyID:     keyID,
 		Signature: signTestMessage(t, privateKey, message),
-		Body:      signedOtherTestBody(body),
+		Body:      signedTestBody{Value: body.Value, Schema: SchemaReleasePlan},
 	}
 	keyring := SigningKeyring{Keys: []SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
 	if err := signed.Verify(keyring); !errors.Is(err, ErrFoundationContract) {
@@ -361,7 +348,7 @@ func TestSignedVerifyRejectsSignatureBoundToDifferentDomain(t *testing.T) {
 func TestSignedVerifyRejectsRetiredFramingTable(t *testing.T) {
 	t.Parallel()
 	keyID, publicKey, privateKey := signingTestKey(t, signedTestKeyIDToken)
-	body := signedTestBody{Value: "ok"}
+	body := signedTestBody{Value: "ok", Schema: SchemaReleaseCommandRun}
 	separator := string([]byte{SignedMessageSep})
 	for _, tc := range []struct {
 		name    string
