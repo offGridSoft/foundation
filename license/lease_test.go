@@ -48,7 +48,7 @@ func TestSeatLeaseCanonicalWireForm(t *testing.T) {
 		DeviceFingerprint:  testDeviceFingerprint(t),
 		WriteGraceDuration: window.WriteGraceDuration,
 		Plan:               SeatPlanStandard,
-		BillingPeriod:      BillingPeriodFourWeeks,
+		BillingPeriod:      BillingPeriodMonthly,
 	}
 
 	got, err := body.Canonical(nil)
@@ -57,10 +57,10 @@ func TestSeatLeaseCanonicalWireForm(t *testing.T) {
 	}
 	want := `{"schema":"bug-license-lease-v1","developer_key_id":"OGS-DEV-alpha",` +
 		`"device_fingerprint":"sha256:` + strings.Repeat("a", 64) + `",` +
-		`"issued_at":1782302400000000000,"paid_until":1784721600000000000,` +
-		`"lease_not_after":1785067200000000000,` +
-		`"check_in_after":1784980800000000000,"check_in_by":1785067200000000000,` +
-		`"write_grace_ns":259200000000000,"plan":"standard","billing_period":"four_weeks","prepaid_years":0}`
+		`"issued_at":1782302400000000000,"paid_until":1784894400000000000,` +
+		`"lease_not_after":1785240000000000000,` +
+		`"check_in_after":1785153600000000000,"check_in_by":1785240000000000000,` +
+		`"write_grace_ns":259200000000000,"plan":"standard","billing_period":"monthly","prepaid_years":0}`
 	if string(got) != want {
 		t.Fatalf("canonical seat lease\n got: %s\nwant: %s", got, want)
 	}
@@ -79,7 +79,7 @@ func TestSubscriptionLeaseCanonicalWireForm(t *testing.T) {
 		WriteGraceDuration: window.WriteGraceDuration,
 		Schema:             core.SchemaWitnessSubscription,
 		Plan:               SubscriptionPlanSilver,
-		BillingPeriod:      BillingPeriodFourWeeks,
+		BillingPeriod:      BillingPeriodMonthly,
 	}
 
 	got, err := body.Canonical(nil)
@@ -88,10 +88,10 @@ func TestSubscriptionLeaseCanonicalWireForm(t *testing.T) {
 	}
 	want := `{"schema":"witness-subscription-lease-v1","device_fingerprint":"sha256:` +
 		strings.Repeat("a", 64) + `","issued_at":1782302400000000000,` +
-		`"paid_until":1784721600000000000,` +
-		`"lease_not_after":1785067200000000000,"check_in_after":1784980800000000000,` +
-		`"check_in_by":1785067200000000000,"write_grace_ns":259200000000000,` +
-		`"plan":"silver","billing_period":"four_weeks","prepaid_years":0}`
+		`"paid_until":1784894400000000000,` +
+		`"lease_not_after":1785240000000000000,"check_in_after":1785153600000000000,` +
+		`"check_in_by":1785240000000000000,"write_grace_ns":259200000000000,` +
+		`"plan":"silver","billing_period":"monthly","prepaid_years":0}`
 	if string(got) != want {
 		t.Fatalf("canonical subscription lease\n got: %s\nwant: %s", got, want)
 	}
@@ -151,10 +151,10 @@ func TestSubscriptionLeaseRejectsDeveloperKeyField(t *testing.T) {
 	t.Parallel()
 	raw := []byte(`{"device_fingerprint":"sha256:` + strings.Repeat("a", 64) + `",` +
 		`"issued_at":1782302400000000000,` +
-		`"paid_until":1784721600000000000,"lease_not_after":1785067200000000000,` +
-		`"check_in_after":1784980800000000000,"check_in_by":1785067200000000000,` +
+		`"paid_until":1784894400000000000,"lease_not_after":1785240000000000000,` +
+		`"check_in_after":1785153600000000000,"check_in_by":1785240000000000000,` +
 		`"write_grace_ns":259200000000000,` +
-		`"schema":"witness-subscription-lease-v1","plan":"silver","billing_period":"four_weeks",` +
+		`"schema":"witness-subscription-lease-v1","plan":"silver","billing_period":"monthly",` +
 		`"prepaid_years":0,"developer_key_id":"OGS-DEV-alpha"}`)
 
 	if _, err := core.DecodeStrictJSON[SubscriptionLeaseBody](raw); err == nil {
@@ -377,7 +377,7 @@ func testSubscriptionLeaseBody() SubscriptionLeaseBody {
 		WriteGraceDuration: window.WriteGraceDuration,
 		Schema:             core.SchemaWitnessSubscription,
 		Plan:               SubscriptionPlanSilver,
-		BillingPeriod:      BillingPeriodFourWeeks,
+		BillingPeriod:      BillingPeriodMonthly,
 		PrepaidYears:       0,
 	}
 }

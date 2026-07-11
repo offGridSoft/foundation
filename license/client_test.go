@@ -956,7 +956,7 @@ func testSeatLeaseBody(t *testing.T) SeatLeaseBody {
 		DeviceFingerprint:  testDeviceFingerprint(t),
 		WriteGraceDuration: window.WriteGraceDuration,
 		Plan:               SeatPlanStandard,
-		BillingPeriod:      BillingPeriodFourWeeks,
+		BillingPeriod:      BillingPeriodMonthly,
 	}
 }
 

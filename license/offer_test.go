@@ -18,13 +18,13 @@ func TestOfferCatalogHostileTable(t *testing.T) {
 		wantPeriod  BillingPeriod
 		wantCode    OfferCode
 	}{
-		{name: "bug standard is fifty dollars every four weeks", offer: mustSeatOfferForTest(t, SeatPlanStandard), wantProduct: core.ProductBug, wantPeriod: BillingPeriodFourWeeks, wantPrice: BugStandardPricePennies, wantCode: OfferBugStandard},
-		{name: "bug enterprise is every four weeks", offer: mustSeatOfferForTest(t, SeatPlanEnterprise), wantProduct: core.ProductBug, wantPeriod: BillingPeriodFourWeeks, wantPrice: BugEnterpriseMonthlyPennies, wantCode: OfferBugEnterprise},
+		{name: "bug standard is fifty dollars monthly", offer: mustSeatOfferForTest(t, SeatPlanStandard), wantProduct: core.ProductBug, wantPeriod: BillingPeriodMonthly, wantPrice: BugStandardPricePennies, wantCode: OfferBugStandard},
+		{name: "bug enterprise is monthly", offer: mustSeatOfferForTest(t, SeatPlanEnterprise), wantProduct: core.ProductBug, wantPeriod: BillingPeriodMonthly, wantPrice: BugEnterpriseMonthlyPennies, wantCode: OfferBugEnterprise},
 		{name: "bug enterprise offline is prepaid one to five years", offer: mustSeatOfferForTest(t, SeatPlanEnterpriseOffline), wantProduct: core.ProductBug, wantPeriod: BillingPeriodPrepaidYears, wantPrice: BugEnterpriseOfflinePennies, wantCode: OfferBugEnterpriseOffline},
-		{name: "bug oss keeps a separate zero-price identity", offer: mustSeatOfferForTest(t, SeatPlanOSS), wantProduct: core.ProductBug, wantPeriod: BillingPeriodFourWeeks, wantPrice: 0, wantCode: OfferBugOSS},
-		{name: "witness bronze is every four weeks", offer: mustSubscriptionOfferForTest(t, SubscriptionPlanBronze), wantProduct: core.ProductWitness, wantPeriod: BillingPeriodFourWeeks, wantPrice: WitnessBronzePricePennies, wantCode: OfferWitnessBronze},
-		{name: "witness silver is every four weeks", offer: mustSubscriptionOfferForTest(t, SubscriptionPlanSilver), wantProduct: core.ProductWitness, wantPeriod: BillingPeriodFourWeeks, wantPrice: WitnessSilverPricePennies, wantCode: OfferWitnessSilver},
-		{name: "witness gold is every four weeks", offer: mustSubscriptionOfferForTest(t, SubscriptionPlanGold), wantProduct: core.ProductWitness, wantPeriod: BillingPeriodFourWeeks, wantPrice: WitnessGoldStartingPricePennies, wantCode: OfferWitnessGold},
+		{name: "bug oss keeps a separate zero-price identity", offer: mustSeatOfferForTest(t, SeatPlanOSS), wantProduct: core.ProductBug, wantPeriod: BillingPeriodMonthly, wantPrice: 0, wantCode: OfferBugOSS},
+		{name: "witness bronze is monthly", offer: mustSubscriptionOfferForTest(t, SubscriptionPlanBronze), wantProduct: core.ProductWitness, wantPeriod: BillingPeriodMonthly, wantPrice: WitnessBronzePricePennies, wantCode: OfferWitnessBronze},
+		{name: "witness silver is monthly", offer: mustSubscriptionOfferForTest(t, SubscriptionPlanSilver), wantProduct: core.ProductWitness, wantPeriod: BillingPeriodMonthly, wantPrice: WitnessSilverPricePennies, wantCode: OfferWitnessSilver},
+		{name: "witness gold is monthly", offer: mustSubscriptionOfferForTest(t, SubscriptionPlanGold), wantProduct: core.ProductWitness, wantPeriod: BillingPeriodMonthly, wantPrice: WitnessGoldStartingPricePennies, wantCode: OfferWitnessGold},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -55,11 +55,11 @@ func TestOfferRejectsPolicyDriftHostileTable(t *testing.T) {
 	}{
 		{name: "unknown offer code rejected", mutate: func(_ *testing.T, o *Offer) { o.Code = offerCodeInvalid }},
 		{name: "wrong product rejected", mutate: func(_ *testing.T, o *Offer) { o.Product = core.ProductWitness }},
-		{name: "monthly spelling has no parser home", mutate: func(_ *testing.T, o *Offer) { o.BillingPeriod = billingPeriodInvalid }},
+		{name: "invalid billing period rejected", mutate: func(_ *testing.T, o *Offer) { o.BillingPeriod = billingPeriodInvalid }},
 		{name: "negative write grace rejected", mutate: func(_ *testing.T, o *Offer) { o.WriteGrace = core.NanosecondsDurationFromInt64(-1) }},
-		{name: "check-in after check-in by rejected", mutate: func(_ *testing.T, o *Offer) { o.CheckInAfter = core.NewNanosecondsDuration(33 * 24 * time.Hour) }},
-		{name: "check-in by after lease rejected", mutate: func(_ *testing.T, o *Offer) { o.CheckInBy = core.NewNanosecondsDuration(29 * 24 * time.Hour) }},
-		{name: "four-week offer cannot carry prepaid years", mutate: func(_ *testing.T, o *Offer) { o.MaxPrepaidYears = BugEnterpriseMaxPrepaidYears }},
+		{name: "check-in after check-in by rejected", mutate: func(_ *testing.T, o *Offer) { o.CheckInAfter = core.NewNanosecondsDuration(36 * 24 * time.Hour) }},
+		{name: "check-in by after lease rejected", mutate: func(_ *testing.T, o *Offer) { o.CheckInBy = core.NewNanosecondsDuration(36 * 24 * time.Hour) }},
+		{name: "monthly offer cannot carry prepaid years", mutate: func(_ *testing.T, o *Offer) { o.MaxPrepaidYears = BugEnterpriseMaxPrepaidYears }},
 		{name: "prepaid offer requires one to five years", mutate: func(t *testing.T, o *Offer) {
 			*o = mustSeatOfferForTest(t, SeatPlanEnterpriseOffline)
 			o.MaxPrepaidYears = 6
@@ -83,9 +83,9 @@ func TestBillingPeriodParserHostileTable(t *testing.T) {
 		name  string
 		want  BillingPeriod
 	}{
-		{name: "four weeks accepted", token: BillingPeriodTokenFourWeeks, want: BillingPeriodFourWeeks},
+		{name: "monthly accepted", token: BillingPeriodTokenMonthly, want: BillingPeriodMonthly},
 		{name: "prepaid years accepted", token: BillingPeriodTokenPrepaidYears, want: BillingPeriodPrepaidYears},
-		{name: "monthly rejected", token: "monthly"},
+		{name: "four weeks rejected", token: "four_weeks"},
 		{name: "blank rejected", token: ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -187,21 +187,21 @@ func TestBuildLeaseWindowHostileTable(t *testing.T) {
 		wantGrace    core.NanosecondsDuration
 	}{
 		{
-			name:        "bug standard waits four weeks plus collection grace",
+			name:        "bug standard waits one calendar month plus collection grace",
 			offer:       mustSeatOfferForTest(t, SeatPlanStandard),
-			wantPaid:    issued.Add(BillingPeriodFourWeeksDuration),
-			wantAfter:   issued.Add(ConnectedCheckInAfterDuration),
-			wantBy:      issued.Add(ConnectedCheckInByDuration),
-			wantExpires: issued.Add(ConnectedCheckInByDuration),
+			wantPaid:    monthlyPaidUntil(issued),
+			wantAfter:   monthlyPaidUntil(issued).Add(PaymentCollectionGraceDuration),
+			wantBy:      monthlyPaidUntil(issued).Add(PaymentCollectionGraceDuration + CheckInCollectionWindowDuration),
+			wantExpires: monthlyPaidUntil(issued).Add(PaymentCollectionGraceDuration + CheckInCollectionWindowDuration),
 			wantGrace:   core.NewNanosecondsDuration(DefaultWriteGraceDuration),
 		},
 		{
-			name:        "witness bronze waits four weeks plus collection grace",
+			name:        "witness bronze waits one calendar month plus collection grace",
 			offer:       mustSubscriptionOfferForTest(t, SubscriptionPlanBronze),
-			wantPaid:    issued.Add(BillingPeriodFourWeeksDuration),
-			wantAfter:   issued.Add(ConnectedCheckInAfterDuration),
-			wantBy:      issued.Add(ConnectedCheckInByDuration),
-			wantExpires: issued.Add(ConnectedCheckInByDuration),
+			wantPaid:    monthlyPaidUntil(issued),
+			wantAfter:   monthlyPaidUntil(issued).Add(PaymentCollectionGraceDuration),
+			wantBy:      monthlyPaidUntil(issued).Add(PaymentCollectionGraceDuration + CheckInCollectionWindowDuration),
+			wantExpires: monthlyPaidUntil(issued).Add(PaymentCollectionGraceDuration + CheckInCollectionWindowDuration),
 			wantGrace:   core.NewNanosecondsDuration(DefaultWriteGraceDuration),
 		},
 		{
@@ -237,6 +237,32 @@ func TestBuildLeaseWindowHostileTable(t *testing.T) {
 				t.Fatalf("BuildLeaseWindow() = paid %d after %d by %d expires %d grace %s, want paid %d after %d by %d expires %d grace %s",
 					window.PaidUntil.UnixNano(), window.CheckInAfterAt.UnixNano(), window.CheckInByAt.UnixNano(), window.TokenExpiresAt.UnixNano(), window.WriteGraceDuration.Duration(),
 					tc.wantPaid.UnixNano(), tc.wantAfter.UnixNano(), tc.wantBy.UnixNano(), tc.wantExpires.UnixNano(), tc.wantGrace.Duration())
+			}
+		})
+	}
+}
+
+func TestMonthlyPaidUntilClampsCalendarMonthEndsHostileTable(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		issued time.Time
+		want   time.Time
+		name   string
+	}{
+		{name: "non leap January 31 clamps to February 28", issued: time.Date(2025, time.January, 31, 12, 30, 45, 123, time.UTC), want: time.Date(2025, time.February, 28, 12, 30, 45, 123, time.UTC)},
+		{name: "leap January 31 clamps to February 29", issued: time.Date(2024, time.January, 31, 12, 30, 45, 123, time.UTC), want: time.Date(2024, time.February, 29, 12, 30, 45, 123, time.UTC)},
+		{name: "March 31 clamps to April 30", issued: time.Date(2025, time.March, 31, 12, 30, 45, 123, time.UTC), want: time.Date(2025, time.April, 30, 12, 30, 45, 123, time.UTC)},
+		{name: "April 30 remains May 30", issued: time.Date(2025, time.April, 30, 12, 30, 45, 123, time.UTC), want: time.Date(2025, time.May, 30, 12, 30, 45, 123, time.UTC)},
+		{name: "leap day remains March 29", issued: time.Date(2024, time.February, 29, 12, 30, 45, 123, time.UTC), want: time.Date(2024, time.March, 29, 12, 30, 45, 123, time.UTC)},
+		{name: "December 31 rolls into next year", issued: time.Date(2025, time.December, 31, 12, 30, 45, 123, time.UTC), want: time.Date(2026, time.January, 31, 12, 30, 45, 123, time.UTC)},
+		{name: "ordinary day preserves day and clock", issued: time.Date(2025, time.June, 24, 12, 30, 45, 123, time.UTC), want: time.Date(2025, time.July, 24, 12, 30, 45, 123, time.UTC)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := monthlyPaidUntil(core.NewUnixNanoTime(tc.issued))
+			if !got.Equal(core.NewUnixNanoTime(tc.want)) {
+				t.Fatalf("monthlyPaidUntil(%s) = %s, want %s", tc.issued, got.Time(), tc.want)
 			}
 		})
 	}

@@ -15,7 +15,7 @@ const (
 	SubscriptionPlanTokenBronze    = "bronze"
 	SubscriptionPlanTokenSilver    = "silver"
 	SubscriptionPlanTokenGold      = "gold"
-	BillingPeriodTokenFourWeeks    = "four_weeks"
+	BillingPeriodTokenMonthly      = "monthly"
 	BillingPeriodTokenPrepaidYears = "prepaid_years"
 )
 
@@ -153,13 +153,13 @@ type BillingPeriod uint8
 
 const (
 	billingPeriodInvalid BillingPeriod = iota
-	BillingPeriodFourWeeks
+	BillingPeriodMonthly
 	BillingPeriodPrepaidYears
 )
 
 func billingPeriodNames() [BillingPeriodPrepaidYears + 1]string {
 	return [...]string{
-		BillingPeriodFourWeeks:    BillingPeriodTokenFourWeeks,
+		BillingPeriodMonthly:      BillingPeriodTokenMonthly,
 		BillingPeriodPrepaidYears: BillingPeriodTokenPrepaidYears,
 	}
 }
@@ -183,7 +183,7 @@ func (p BillingPeriod) Validate() error {
 }
 
 func ParseBillingPeriod(token string) (BillingPeriod, error) {
-	for period := BillingPeriodFourWeeks; int(period) < len(billingPeriodNames()); period++ {
+	for period := BillingPeriodMonthly; int(period) < len(billingPeriodNames()); period++ {
 		if billingPeriodNames()[period] == token {
 			return period, nil
 		}

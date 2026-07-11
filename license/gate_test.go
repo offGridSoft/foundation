@@ -249,7 +249,7 @@ func gateLease(now core.UnixNanoTime) SeatLeaseBody {
 		DeviceFingerprint:  mustDeviceFingerprint(),
 		WriteGraceDuration: window.WriteGraceDuration,
 		Plan:               SeatPlanStandard,
-		BillingPeriod:      BillingPeriodFourWeeks,
+		BillingPeriod:      BillingPeriodMonthly,
 	}
 }
 

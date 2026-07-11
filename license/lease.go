@@ -166,7 +166,7 @@ func validateRequiredCheckInTimes(checkInAfter core.UnixNanoTime, checkInBy core
 }
 
 func validateCollectionLeaseWindow(period BillingPeriod, checkInAfter core.UnixNanoTime, paidUntil core.UnixNanoTime) error {
-	if period == BillingPeriodFourWeeks && checkInAfter.Before(paidUntil) {
+	if period == BillingPeriodMonthly && checkInAfter.Before(paidUntil) {
 		return fmt.Errorf(ErrFmtLeaseCheckInWindow, core.ErrLicenseContract)
 	}
 	return nil
@@ -309,7 +309,7 @@ func (b SubscriptionLeaseBody) WriteGrace() core.NanosecondsDuration {
 
 func validateLeaseBillingTerm(period BillingPeriod, prepaidYears uint8) error {
 	switch period {
-	case BillingPeriodFourWeeks:
+	case BillingPeriodMonthly:
 		if prepaidYears != 0 {
 			return fmt.Errorf(ErrFmtBillingPeriod, core.ErrLicenseContract)
 		}
@@ -331,7 +331,7 @@ func validateSeatLeasePlanBilling(plan SeatPlan, period BillingPeriod) error {
 			return nil
 		}
 	case SeatPlanStandard, SeatPlanEnterprise, SeatPlanOSS:
-		if period == BillingPeriodFourWeeks {
+		if period == BillingPeriodMonthly {
 			return nil
 		}
 	}
@@ -339,7 +339,7 @@ func validateSeatLeasePlanBilling(plan SeatPlan, period BillingPeriod) error {
 }
 
 func validateSubscriptionLeaseBilling(period BillingPeriod) error {
-	if period != BillingPeriodFourWeeks {
+	if period != BillingPeriodMonthly {
 		return fmt.Errorf(ErrFmtBillingPeriod, core.ErrLicenseContract)
 	}
 	return nil

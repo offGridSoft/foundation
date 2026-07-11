@@ -17,10 +17,10 @@ const (
 	WitnessGoldStartingPricePennies = 4000000
 	BugEnterpriseMinPrepaidYears    = 1
 	BugEnterpriseMaxPrepaidYears    = 5
-	BillingPeriodFourWeeksDuration  = 28 * 24 * time.Hour
+	BillingPeriodMonthlyMaxDuration = 31 * 24 * time.Hour
 	PaymentCollectionGraceDuration  = 72 * time.Hour
 	CheckInCollectionWindowDuration = 24 * time.Hour
-	ConnectedCheckInAfterDuration   = BillingPeriodFourWeeksDuration + PaymentCollectionGraceDuration
+	ConnectedCheckInAfterDuration   = BillingPeriodMonthlyMaxDuration + PaymentCollectionGraceDuration
 	ConnectedCheckInByDuration      = ConnectedCheckInAfterDuration + CheckInCollectionWindowDuration
 	PrepaidYearDuration             = 365 * 24 * time.Hour
 	BugOfflineCheckInAfterDuration  = 365 * 24 * time.Hour
@@ -61,14 +61,32 @@ func buildLeaseWindow(issued core.UnixNanoTime, offer Offer, prepaidYears uint8)
 }
 
 func buildConnectedLeaseWindow(issued core.UnixNanoTime, offer Offer) LeaseWindow {
+	paidUntil := monthlyPaidUntil(issued)
+	checkInAfter := paidUntil.Add(PaymentCollectionGraceDuration)
+	checkInBy := checkInAfter.Add(CheckInCollectionWindowDuration)
 	return LeaseWindow{
 		IssuedAt:           issued,
-		PaidUntil:          issued.Add(BillingPeriodFourWeeksDuration),
-		CheckInAfterAt:     issued.Add(offer.CheckInAfter.Duration()),
-		CheckInByAt:        issued.Add(offer.CheckInBy.Duration()),
-		TokenExpiresAt:     issued.Add(offer.LeaseDuration.Duration()),
+		PaidUntil:          paidUntil,
+		CheckInAfterAt:     checkInAfter,
+		CheckInByAt:        checkInBy,
+		TokenExpiresAt:     checkInBy,
 		WriteGraceDuration: offer.WriteGrace,
 	}
+}
+
+func monthlyPaidUntil(issued core.UnixNanoTime) core.UnixNanoTime {
+	return core.NewUnixNanoTime(addCalendarMonthClamped(issued.Time()))
+}
+
+func addCalendarMonthClamped(value time.Time) time.Time {
+	year, month, day := value.Date()
+	hour, minute, second := value.Clock()
+	targetMonth := time.Date(year, month+1, 1, hour, minute, second, value.Nanosecond(), value.Location())
+	lastTargetDay := targetMonth.AddDate(0, 1, -1).Day()
+	if day > lastTargetDay {
+		day = lastTargetDay
+	}
+	return time.Date(targetMonth.Year(), targetMonth.Month(), day, hour, minute, second, value.Nanosecond(), value.Location())
 }
 
 func buildPrepaidLeaseWindow(issued core.UnixNanoTime, offer Offer, prepaidYears uint8) LeaseWindow {
@@ -264,7 +282,7 @@ func connectedOffer(code OfferCode, product core.Product, price uint64, retentio
 		Code:          code,
 		Product:       product,
 		PricePennies:  core.NewMoneyPennies(price),
-		BillingPeriod: BillingPeriodFourWeeks,
+		BillingPeriod: BillingPeriodMonthly,
 		LeaseDuration: core.NewNanosecondsDuration(ConnectedCheckInByDuration),
 		CheckInAfter:  core.NewNanosecondsDuration(ConnectedCheckInAfterDuration),
 		CheckInBy:     core.NewNanosecondsDuration(ConnectedCheckInByDuration),
