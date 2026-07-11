@@ -4,12 +4,15 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"testing"
 )
 
 type signedTestBody struct {
 	Value string `json:"value"`
 }
+
+const signedTestBodyJSONFieldValue = "value"
 
 func (b signedTestBody) Validate() error {
 	if b.Value == "" {
@@ -22,7 +25,12 @@ func (b signedTestBody) Canonical(dst []byte) ([]byte, error) {
 	if err := b.Validate(); err != nil {
 		return nil, err
 	}
-	return AppendCanonicalJSON(dst, b)
+	dst = append(dst, '{')
+	dst, err := AppendJSONField(dst, signedTestBodyJSONFieldValue, b.Value)
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, '}'), nil
 }
 
 func TestSignedVerifyHostileTable(t *testing.T) {
@@ -155,6 +163,19 @@ func TestSigningKeyringRejectsDuplicateKeyID(t *testing.T) {
 	}}
 	if err := ring.Validate(); !errors.Is(err, ErrFoundationContract) {
 		t.Fatalf("SigningKeyring duplicate Validate error = %v, want ErrFoundationContract", err)
+	}
+}
+
+func TestSigningKeyringRejectsUnboundedKeySet(t *testing.T) {
+	t.Parallel()
+
+	keys := make([]SigningPublicKey, SigningKeyringMaxKeys+1)
+	for i := range keys {
+		keyID, publicKey, _ := signingTestKey(t, fmt.Sprintf("server-key-%d", i))
+		keys[i] = SigningPublicKey{ID: keyID, PublicKey: publicKey}
+	}
+	if err := (SigningKeyring{Keys: keys}).Validate(); !errors.Is(err, ErrFoundationContract) {
+		t.Fatalf("SigningKeyring(over cap).Validate() error = %v, want ErrFoundationContract", err)
 	}
 }
 

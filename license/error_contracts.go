@@ -15,6 +15,8 @@ const (
 	ErrFmtLeaseTrust         = "license.LeaseTrust: %w"
 	ErrFmtGateOutcome        = "license.GateOutcome: %w"
 	ErrFmtGateReason         = "license.GateReason: %w"
+	ErrFmtGateInput          = "license.GateInput: %w"
+	ErrFmtGateDecision       = "license.GateDecision: %w"
 	ErrFmtLeaseState         = "license.LeaseState: %w"
 	ErrFmtCheckInPayload     = "license.CheckIn.Payload: %w"
 	ErrFmtCheckInClient      = "license.CheckIn.Client: %w"
@@ -23,3 +25,5 @@ const (
 	ErrFmtCheckInResponse    = "license.CheckIn.Response: %w"
 	ErrFmtCheckInRefusal     = "license.CheckIn.Refusal: %w"
 )
+
+const ErrMsgGateInput = "license gate input rejected"

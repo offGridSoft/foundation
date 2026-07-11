@@ -3,13 +3,13 @@ package core
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"math"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
-
-	"encoding/json"
 )
 
 func TestUnixNanoTimeJSONIsBareNanoseconds(t *testing.T) {
@@ -534,7 +534,7 @@ func TestAPIRequestIDConstructorSanitizesHostileHeaderTable(t *testing.T) {
 			if requestID.String() != tc.want {
 				t.Fatalf("NewAPIRequestID() = %q, want %q", requestID.String(), tc.want)
 			}
-			envelope := APIEnvelope[string]{
+			envelope := APIEnvelope[apiEnvelopeHostileData]{
 				RequestID: requestID,
 				Error:     &APIErrorBody{Code: APICodeInvalidInput, Message: "bad request"},
 			}
@@ -543,6 +543,14 @@ func TestAPIRequestIDConstructorSanitizesHostileHeaderTable(t *testing.T) {
 			}
 		})
 	}
+}
+
+type apiEnvelopeHostileData struct {
+	Value string
+}
+
+func (d apiEnvelopeHostileData) Validate() error {
+	return ValidateOpaqueToken(d.Value, OpaqueTokenDefaultMaxRunes)
 }
 
 func TestAPIRequestIDUnmarshalRejectsWithoutMutationHostileTable(t *testing.T) {
@@ -568,14 +576,100 @@ func TestAPIRequestIDUnmarshalRejectsWithoutMutationHostileTable(t *testing.T) {
 	}
 }
 
-func TestUniqueStringSetZeroValueHostileTable(t *testing.T) {
+func TestCollectionCardinalityHostileTable(t *testing.T) {
 	t.Parallel()
-	var set UniqueStringSet
-	if err := set.Add("first"); err != nil {
-		t.Fatalf("UniqueStringSet zero Add(first) error = %v", err)
+	for _, tc := range []struct {
+		name     string
+		contract CollectionCardinality
+		wantErr  bool
+	}{
+		{name: "bounded length", contract: CollectionCardinality{Length: 1, Minimum: 1, Maximum: 2}},
+		{name: "declared count matches", contract: CollectionCardinality{Length: 2, DeclaredCount: 2, Maximum: 2, RequireDeclared: true}},
+		{name: "negative length", contract: CollectionCardinality{Length: -1, Maximum: 1}, wantErr: true},
+		{name: "zero maximum", contract: CollectionCardinality{Length: 0}, wantErr: true},
+		{name: "above maximum", contract: CollectionCardinality{Length: 2, Maximum: 1}, wantErr: true},
+		{name: "below minimum", contract: CollectionCardinality{Length: 0, Minimum: 1, Maximum: 1}, wantErr: true},
+		{name: "declared mismatch", contract: CollectionCardinality{Length: 1, DeclaredCount: 2, Maximum: 2, RequireDeclared: true}, wantErr: true},
+		{name: "undeclared ghost count", contract: CollectionCardinality{Length: 1, DeclaredCount: 1, Maximum: 2}, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := tc.contract.Validate()
+			if tc.wantErr {
+				if !errors.Is(err, ErrFoundationContract) {
+					t.Fatalf("CollectionCardinality.Validate() error = %v, want ErrFoundationContract", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("CollectionCardinality.Validate() error = %v", err)
+			}
+		})
 	}
-	if err := set.Add("first"); !errors.Is(err, ErrFoundationContract) {
-		t.Fatalf("UniqueStringSet duplicate error = %v, want ErrFoundationContract", err)
+}
+
+type artifactSetHostileItem struct {
+	name string
+	size ByteCount
+}
+
+func (i artifactSetHostileItem) Validate() error            { return i.size.Validate() }
+func (i artifactSetHostileItem) ArtifactSetName() string    { return i.name }
+func (i artifactSetHostileItem) ArtifactSetSize() ByteCount { return i.size }
+
+func TestArtifactSetRejectsUnboundedBytes(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		item  uint64
+		total uint64
+	}{
+		{name: "item above maximum", item: ArtifactMaximumBytes + 1, total: ArtifactMaximumBytes + 1},
+		{name: "total above maximum", item: ArtifactMaximumBytes, total: ArtifactSetMaximumBytes + 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			set := ArtifactSet[artifactSetHostileItem]{
+				Items:      []artifactSetHostileItem{{name: tc.name, size: NewByteCount(tc.item)}},
+				TotalBytes: NewByteCount(tc.total),
+				Count:      1,
+			}
+			if err := ValidateArtifactSet(set); !errors.Is(err, ErrFoundationContract) {
+				t.Fatalf("ValidateArtifactSet() error = %v, want ErrFoundationContract", err)
+			}
+		})
+	}
+}
+
+func TestDecodeStrictJSONRejectsUnboundedObjectFields(t *testing.T) {
+	t.Parallel()
+	var body strings.Builder
+	body.WriteString("{")
+	for index := range StrictJSONMaxObjectFields + 1 {
+		if index > 0 {
+			body.WriteString(",")
+		}
+		body.WriteString("\"field_" + strconv.Itoa(index) + "\":0")
+	}
+	body.WriteString("}")
+	if _, err := DecodeStrictJSON[strictJSONHostilePayload]([]byte(body.String())); !errors.Is(err, ErrJSONContract) {
+		t.Fatalf("DecodeStrictJSON oversized object error = %v, want ErrJSONContract", err)
+	}
+}
+
+func TestDecodeStrictJSONRejectsUnboundedArrayItems(t *testing.T) {
+	t.Parallel()
+	var body strings.Builder
+	body.WriteString("[")
+	for index := range CollectionMaximumDefault + 1 {
+		if index > 0 {
+			body.WriteString(",")
+		}
+		body.WriteString("0")
+	}
+	body.WriteString("]")
+	if _, err := DecodeStrictJSON[strictJSONHostilePayload]([]byte(body.String())); !errors.Is(err, ErrJSONContract) {
+		t.Fatalf("DecodeStrictJSON oversized array error = %v, want ErrJSONContract", err)
 	}
 }
 
@@ -588,8 +682,12 @@ func TestHTTPHeaderValidationHostileTable(t *testing.T) {
 		{name: "header name rejects edge spaces", run: func() error { return ValidateHTTPHeaderName(" X-Foo ") }},
 		{name: "header name rejects colon", run: func() error { return ValidateHTTPHeaderName("X-Foo: bar") }},
 		{name: "header name rejects newline", run: func() error { return ValidateHTTPHeaderName("X-Foo\n") }},
+		{name: "header name rejects oversized value", run: func() error { return ValidateHTTPHeaderName(strings.Repeat("a", HTTPHeaderNameMaxRunes+1)) }},
+		{name: "header name rejects invalid utf8", run: func() error { return ValidateHTTPHeaderName(string([]byte{0xff})) }},
 		{name: "header value rejects nul", run: func() error { return ValidateHTTPHeaderValue("a\x00b") }},
 		{name: "header value rejects newline", run: func() error { return ValidateHTTPHeaderValue("a\nb") }},
+		{name: "header value rejects oversized value", run: func() error { return ValidateHTTPHeaderValue(strings.Repeat("a", HTTPHeaderValueMaxRunes+1)) }},
+		{name: "header value rejects invalid utf8", run: func() error { return ValidateHTTPHeaderValue(string([]byte{0xff})) }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -625,6 +723,24 @@ func TestBackoffPolicyValidateHostileTable(t *testing.T) {
 		if _, err := policy.Delay(0, 1); !errors.Is(err, ErrFoundationContract) {
 			t.Fatalf("BackoffPolicy.Delay error = %v, want ErrFoundationContract", err)
 		}
+	}
+	for _, tc := range []struct {
+		name     string
+		attempt  int
+		fraction float64
+	}{
+		{name: "negative attempt", attempt: -1, fraction: 1},
+		{name: "attempt at maximum", attempt: valid.MaxAttempts, fraction: 1},
+		{name: "negative jitter", fraction: -0.1},
+		{name: "jitter above one", fraction: 1.1},
+		{name: "nan jitter", fraction: math.NaN()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if _, err := valid.Delay(tc.attempt, tc.fraction); !errors.Is(err, ErrFoundationContract) {
+				t.Fatalf("BackoffPolicy.Delay() error = %v, want ErrFoundationContract", err)
+			}
+		})
 	}
 }
 
@@ -692,11 +808,21 @@ func TestByteCountRejectsZero(t *testing.T) {
 	}
 }
 
+type strictJSONHostilePayload struct {
+	Name string `json:"name"`
+	At   int64  `json:"at"`
+	OK   bool   `json:"ok"`
+}
+
+func (p strictJSONHostilePayload) Validate() error {
+	if p.Name == "" || p.At < 0 {
+		return ErrFoundationContract
+	}
+	return nil
+}
+
 func TestDecodeStrictJSONHostileTable(t *testing.T) {
 	t.Parallel()
-	type payload struct {
-		Name string `json:"name"`
-	}
 	for _, tc := range []struct {
 		name string
 		raw  string
@@ -710,44 +836,80 @@ func TestDecodeStrictJSONHostileTable(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if _, err := DecodeStrictJSON[payload]([]byte(tc.raw)); !errors.Is(err, ErrJSONContract) {
+			if _, err := DecodeStrictJSON[strictJSONHostilePayload]([]byte(tc.raw)); !errors.Is(err, ErrJSONContract) {
 				t.Fatalf("DecodeStrictJSON error = %v, want ErrJSONContract", err)
 			}
 		})
 	}
 }
 
+func TestDecodeStrictJSONRejectsResourceExhaustionShapes(t *testing.T) {
+	t.Parallel()
+
+	t.Run("byte cap", func(t *testing.T) {
+		t.Parallel()
+		body := make([]byte, StrictJSONMaxBytes+1)
+		for i := range body {
+			body[i] = ' '
+		}
+		if _, err := DecodeStrictJSON[strictJSONHostilePayload](body); !errors.Is(err, ErrJSONContract) {
+			t.Fatalf("DecodeStrictJSON(over byte cap) error = %v, want ErrJSONContract", err)
+		}
+	})
+
+	t.Run("depth cap", func(t *testing.T) {
+		t.Parallel()
+		body := strings.Repeat("[", StrictJSONMaxDepth+1) + strings.Repeat("]", StrictJSONMaxDepth+1)
+		if _, err := DecodeStrictJSON[strictJSONHostilePayload]([]byte(body)); !errors.Is(err, ErrJSONContract) {
+			t.Fatalf("DecodeStrictJSON(over depth cap) error = %v, want ErrJSONContract", err)
+		}
+	})
+}
+
+func TestSpecializedContractIdentitiesPreserveRootClassification(t *testing.T) {
+	t.Parallel()
+
+	identities := []error{ErrLicenseContract, ErrCustodyContract, ErrReleaseContract, ErrJSONContract, ErrNilContext}
+	for _, identity := range identities {
+		if !errors.Is(identity, ErrFoundationContract) {
+			t.Fatalf("errors.Is(%v, ErrFoundationContract) = false", identity)
+		}
+	}
+	for i, identity := range identities {
+		for j, sibling := range identities {
+			if i != j && errors.Is(identity, sibling) {
+				t.Fatalf("specialized identities alias: errors.Is(%v, %v) = true", identity, sibling)
+			}
+		}
+	}
+}
+
 func TestDecodeStrictJSONValidLineTable(t *testing.T) {
 	t.Parallel()
-	type payload struct {
-		Name string `json:"name"`
-		At   int64  `json:"at"`
-		OK   bool   `json:"ok"`
-	}
 	for _, tc := range []struct {
 		name string
 		raw  string
-		want payload
+		want strictJSONHostilePayload
 	}{
 		{
 			name: "compact object without newline",
 			raw:  `{"name":"ok","at":1783484211688677000,"ok":true}`,
-			want: payload{Name: "ok", At: 1783484211688677000, OK: true},
+			want: strictJSONHostilePayload{Name: "ok", At: 1783484211688677000, OK: true},
 		},
 		{
 			name: "escaped angle brackets from operation log line",
 			raw:  `{"name":"Ase Deliri \u003cdeliri.ase@gmail.com\u003e","at":1783484211688677000,"ok":true}`,
-			want: payload{Name: "Ase Deliri <deliri.ase@gmail.com>", At: 1783484211688677000, OK: true},
+			want: strictJSONHostilePayload{Name: "Ase Deliri <deliri.ase@gmail.com>", At: 1783484211688677000, OK: true},
 		},
 		{
 			name: "valid object with trailing json whitespace",
 			raw:  "{\"name\":\"ok\",\"at\":1783484211688677000,\"ok\":true}\n\t ",
-			want: payload{Name: "ok", At: 1783484211688677000, OK: true},
+			want: strictJSONHostilePayload{Name: "ok", At: 1783484211688677000, OK: true},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := DecodeStrictJSON[payload]([]byte(tc.raw))
+			got, err := DecodeStrictJSON[strictJSONHostilePayload]([]byte(tc.raw))
 			if err != nil {
 				t.Fatalf("DecodeStrictJSON error = %v", err)
 			}
@@ -760,17 +922,18 @@ func TestDecodeStrictJSONValidLineTable(t *testing.T) {
 
 func TestAPIEnvelopeHostileTable(t *testing.T) {
 	t.Parallel()
-	value := "ok"
+	value := apiEnvelopeHostileData{Value: "ok"}
+	invalidValue := apiEnvelopeHostileData{}
 	errBody := APIErrorBody{Code: APICodeForbidden, Message: "no"}
 	for _, tc := range []struct {
 		wantError error
-		envelope  APIEnvelope[string]
+		envelope  APIEnvelope[apiEnvelopeHostileData]
 		name      string
 		success   bool
 	}{
 		{
 			name: "success envelope accepts data only",
-			envelope: APIEnvelope[string]{
+			envelope: APIEnvelope[apiEnvelopeHostileData]{
 				RequestID: NewAPIRequestID("req-1"),
 				Data:      &value,
 			},
@@ -778,7 +941,7 @@ func TestAPIEnvelopeHostileTable(t *testing.T) {
 		},
 		{
 			name: "success rejects error arm",
-			envelope: APIEnvelope[string]{
+			envelope: APIEnvelope[apiEnvelopeHostileData]{
 				RequestID: NewAPIRequestID("req-1"),
 				Data:      &value,
 				Error:     &errBody,
@@ -787,15 +950,24 @@ func TestAPIEnvelopeHostileTable(t *testing.T) {
 			wantError: ErrFoundationContract,
 		},
 		{
+			name: "success validates typed data",
+			envelope: APIEnvelope[apiEnvelopeHostileData]{
+				RequestID: NewAPIRequestID("req-1"),
+				Data:      &invalidValue,
+			},
+			success:   true,
+			wantError: ErrFoundationContract,
+		},
+		{
 			name: "failure envelope accepts error only",
-			envelope: APIEnvelope[string]{
+			envelope: APIEnvelope[apiEnvelopeHostileData]{
 				RequestID: NewAPIRequestID("req-1"),
 				Error:     &errBody,
 			},
 		},
 		{
 			name: "failure rejects data arm",
-			envelope: APIEnvelope[string]{
+			envelope: APIEnvelope[apiEnvelopeHostileData]{
 				RequestID: NewAPIRequestID("req-1"),
 				Data:      &value,
 				Error:     &errBody,
@@ -804,7 +976,7 @@ func TestAPIEnvelopeHostileTable(t *testing.T) {
 		},
 		{
 			name: "failure rejects whitespace message",
-			envelope: APIEnvelope[string]{
+			envelope: APIEnvelope[apiEnvelopeHostileData]{
 				RequestID: NewAPIRequestID("req-1"),
 				Error:     &APIErrorBody{Code: APICodeForbidden, Message: " \t "},
 			},
@@ -824,5 +996,20 @@ func TestAPIEnvelopeHostileTable(t *testing.T) {
 				t.Fatalf("envelope validation error = %v, want %v", err, tc.wantError)
 			}
 		})
+	}
+}
+
+func TestAPIErrorBodyRejectsUnboundedAndControlText(t *testing.T) {
+	t.Parallel()
+
+	for _, body := range []APIErrorBody{
+		{Code: APICodeInvalidInput, Message: strings.Repeat("m", APIErrorMessageMaxRunes+1)},
+		{Code: APICodeInvalidInput, Message: "line one\nline two"},
+		{Code: APICodeInvalidInput, Message: "invalid input", Tip: strings.Repeat("t", APIErrorTipMaxRunes+1)},
+		{Code: APICodeInvalidInput, Message: "invalid input", Tip: "retry\rlater"},
+	} {
+		if err := body.Validate(); !errors.Is(err, ErrFoundationContract) {
+			t.Fatalf("APIErrorBody.Validate() error = %v, want ErrFoundationContract", err)
+		}
 	}
 }

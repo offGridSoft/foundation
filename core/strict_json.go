@@ -5,10 +5,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 )
 
-func DecodeStrictJSON[T any](data []byte) (T, error) {
+const (
+	StrictJSONMaxBytes        = 1 << 20
+	StrictJSONMaxDepth        = 64
+	StrictJSONMaxObjectFields = 256
+)
+
+func DecodeStrictJSON[T Validatable](data []byte) (T, error) {
 	var value T
+	if len(data) == 0 || len(data) > StrictJSONMaxBytes {
+		return value, fmt.Errorf(ErrFmtJSONUnexpectedValue, ErrJSONContract)
+	}
 	if err := rejectDuplicateJSONFields(data); err != nil {
 		return value, err
 	}
@@ -19,6 +29,9 @@ func DecodeStrictJSON[T any](data []byte) (T, error) {
 	}
 	if err := rejectTrailingJSON(decoder, data); err != nil {
 		return value, err
+	}
+	if err := value.Validate(); err != nil {
+		return value, errors.Join(ErrJSONContract, err)
 	}
 	return value, nil
 }
@@ -38,7 +51,8 @@ const (
 )
 
 type strictJSONContainer struct {
-	keys      map[string]struct{}
+	keys      []string
+	itemCount uint32
 	kind      strictJSONContainerKind
 	expectKey bool
 }
@@ -46,7 +60,7 @@ type strictJSONContainer struct {
 func rejectDuplicateJSONFields(data []byte) error {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	stack := make([]strictJSONContainer, 0)
-	for {
+	for range StrictJSONMaxBytes {
 		token, err := decoder.Token()
 		if err != nil && onlyJSONWhitespaceAfter(data, decoder.InputOffset()) {
 			return nil
@@ -60,6 +74,7 @@ func rejectDuplicateJSONFields(data []byte) error {
 		}
 		stack = next
 	}
+	return fmt.Errorf(ErrFmtJSONUnexpectedValue, ErrJSONContract)
 }
 
 func jsonContractError(err error) error {
@@ -92,24 +107,29 @@ func scanStrictJSONToken(stack []strictJSONContainer, token json.Token) ([]stric
 	if key, ok := token.(string); ok && strictJSONTopExpectsKey(stack) {
 		return scanStrictJSONKey(stack, key)
 	}
-	return completeStrictJSONValue(stack), nil
+	return completeStrictJSONValue(stack)
 }
 
 func scanStrictJSONDelim(stack []strictJSONContainer, delim json.Delim) ([]strictJSONContainer, error) {
 	switch delim {
 	case '{':
+		if len(stack) >= StrictJSONMaxDepth {
+			return nil, fmt.Errorf(ErrFmtJSONUnexpectedValue, ErrJSONContract)
+		}
 		return append(stack, strictJSONContainer{
-			keys:      make(map[string]struct{}),
 			kind:      strictJSONContainerObject,
 			expectKey: true,
 		}), nil
 	case '[':
+		if len(stack) >= StrictJSONMaxDepth {
+			return nil, fmt.Errorf(ErrFmtJSONUnexpectedValue, ErrJSONContract)
+		}
 		return append(stack, strictJSONContainer{kind: strictJSONContainerArray}), nil
 	case '}', ']':
 		if len(stack) == 0 {
 			return nil, fmt.Errorf(ErrFmtJSONUnexpectedDelim, ErrJSONContract)
 		}
-		return completeStrictJSONValue(stack[:len(stack)-1]), nil
+		return completeStrictJSONValue(stack[:len(stack)-1])
 	default:
 		return stack, nil
 	}
@@ -120,10 +140,13 @@ func scanStrictJSONKey(stack []strictJSONContainer, key string) ([]strictJSONCon
 		return nil, fmt.Errorf(ErrFmtJSONUnexpectedField, ErrJSONContract)
 	}
 	top := &stack[len(stack)-1]
-	if _, exists := top.keys[key]; exists {
+	if len(top.keys) >= StrictJSONMaxObjectFields {
+		return nil, fmt.Errorf(ErrFmtJSONUnexpectedValue, ErrJSONContract)
+	}
+	if slices.Contains(top.keys, key) {
 		return nil, fmt.Errorf(ErrFmtJSONDuplicateField, ErrJSONContract)
 	}
-	top.keys[key] = struct{}{}
+	top.keys = append(top.keys, key)
 	top.expectKey = false
 	return stack, nil
 }
@@ -136,13 +159,20 @@ func strictJSONTopExpectsKey(stack []strictJSONContainer) bool {
 	return top.kind == strictJSONContainerObject && top.expectKey
 }
 
-func completeStrictJSONValue(stack []strictJSONContainer) []strictJSONContainer {
+func completeStrictJSONValue(stack []strictJSONContainer) ([]strictJSONContainer, error) {
 	if len(stack) == 0 {
-		return stack
+		return stack, nil
 	}
 	top := &stack[len(stack)-1]
 	if top.kind == strictJSONContainerObject && !top.expectKey {
 		top.expectKey = true
+		return stack, nil
 	}
-	return stack
+	if top.kind == strictJSONContainerArray {
+		if top.itemCount >= CollectionMaximumDefault {
+			return nil, fmt.Errorf(ErrFmtJSONUnexpectedValue, ErrJSONContract)
+		}
+		top.itemCount++
+	}
+	return stack, nil
 }

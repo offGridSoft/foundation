@@ -1,11 +1,11 @@
 package custody
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
-	"encoding/json"
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 

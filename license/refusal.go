@@ -1,9 +1,9 @@
 package license
 
 import (
+	"encoding/json"
 	"fmt"
 
-	"encoding/json"
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
@@ -30,25 +30,27 @@ const (
 	RefusalUnknownKey
 )
 
-var refusalNames = [...]string{
-	RefusalNone:             RefusalTokenNone,
-	RefusalKeyRevoked:       RefusalTokenKeyRevoked,
-	RefusalSeatLimit:        RefusalTokenSeatLimit,
-	RefusalPaymentRequired:  RefusalTokenPaymentRequired,
-	RefusalUnsupportedBuild: RefusalTokenUnsupportedBuild,
-	RefusalDeviceLimit:      RefusalTokenDeviceLimit,
-	RefusalUnknownKey:       RefusalTokenUnknownKey,
+func refusalNames() [RefusalUnknownKey + 1]string {
+	return [...]string{
+		RefusalNone:             RefusalTokenNone,
+		RefusalKeyRevoked:       RefusalTokenKeyRevoked,
+		RefusalSeatLimit:        RefusalTokenSeatLimit,
+		RefusalPaymentRequired:  RefusalTokenPaymentRequired,
+		RefusalUnsupportedBuild: RefusalTokenUnsupportedBuild,
+		RefusalDeviceLimit:      RefusalTokenDeviceLimit,
+		RefusalUnknownKey:       RefusalTokenUnknownKey,
+	}
 }
 
 func (r Refusal) String() string {
 	if r.IsValid() {
-		return refusalNames[r]
+		return refusalNames()[r]
 	}
 	return ""
 }
 
 func (r Refusal) IsValid() bool {
-	return r > refusalInvalid && int(r) < len(refusalNames) && refusalNames[r] != ""
+	return r > refusalInvalid && int(r) < len(refusalNames()) && refusalNames()[r] != ""
 }
 
 func (r Refusal) Validate() error {
@@ -59,8 +61,8 @@ func (r Refusal) Validate() error {
 }
 
 func ParseRefusal(token string) (Refusal, error) {
-	for refusal := RefusalNone; int(refusal) < len(refusalNames); refusal++ {
-		if refusalNames[refusal] == token {
+	for refusal := RefusalNone; int(refusal) < len(refusalNames()); refusal++ {
+		if refusalNames()[refusal] == token {
 			return refusal, nil
 		}
 	}

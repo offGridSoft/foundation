@@ -2,9 +2,8 @@ package core
 
 import (
 	"crypto/ed25519"
-	"fmt"
-
 	"encoding/json"
+	"fmt"
 )
 
 const (
@@ -13,10 +12,11 @@ const (
 	ErrFmtSignedSignature = "core.Signed.Signature: %w"
 	SignedMessageDomain   = "foundation-signed-v1"
 	SignedMessageSep      = byte(0)
+	SigningKeyringMaxKeys = 16
 )
 
 type CanonicalBody interface {
-	Validate() error
+	Validatable
 	Canonical(dst []byte) ([]byte, error)
 }
 
@@ -80,19 +80,18 @@ type SigningKeyring struct {
 }
 
 func (r SigningKeyring) Validate() error {
-	if len(r.Keys) == 0 {
+	if len(r.Keys) == 0 || len(r.Keys) > SigningKeyringMaxKeys {
 		return fmt.Errorf(ErrFmtSigningKeyring, ErrFoundationContract)
 	}
-	seen := make(map[string]struct{}, len(r.Keys))
-	for _, key := range r.Keys {
+	for index, key := range r.Keys {
 		if err := key.Validate(); err != nil {
 			return err
 		}
-		id := key.ID.String()
-		if _, exists := seen[id]; exists {
-			return fmt.Errorf(ErrFmtSigningKeyring, ErrFoundationContract)
+		for _, prior := range r.Keys[:index] {
+			if prior.ID == key.ID {
+				return fmt.Errorf(ErrFmtSigningKeyring, ErrFoundationContract)
+			}
 		}
-		seen[id] = struct{}{}
 	}
 	return nil
 }
@@ -104,6 +103,10 @@ func (r SigningKeyring) Lookup(id SigningKeyID) (ed25519.PublicKey, error) {
 	if err := r.Validate(); err != nil {
 		return nil, err
 	}
+	return r.lookupValidated(id)
+}
+
+func (r SigningKeyring) lookupValidated(id SigningKeyID) (ed25519.PublicKey, error) {
 	for _, key := range r.Keys {
 		if key.ID.String() == id.String() {
 			return key.PublicKey.Bytes()
@@ -129,14 +132,17 @@ func (s Signed[B]) Validate() error {
 }
 
 func (s Signed[B]) Verify(keyring SigningKeyring) error {
-	if err := s.Validate(); err != nil {
-		return err
-	}
-	key, err := keyring.Lookup(s.KeyID)
+	message, err := AppendSignedMessage(nil, s.KeyID, s.Body)
 	if err != nil {
 		return err
 	}
-	message, err := AppendSignedMessage(nil, s.KeyID, s.Body)
+	if err := s.Signature.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtSignedSignature, err)
+	}
+	if err := keyring.Validate(); err != nil {
+		return err
+	}
+	key, err := keyring.lookupValidated(s.KeyID)
 	if err != nil {
 		return err
 	}
@@ -154,13 +160,9 @@ func AppendSignedMessage[B CanonicalBody](dst []byte, keyID SigningKeyID, body B
 	if err := keyID.Validate(); err != nil {
 		return nil, err
 	}
-	canonical, err := body.Canonical(nil)
-	if err != nil {
-		return nil, err
-	}
 	dst = append(dst, SignedMessageDomain...)
 	dst = append(dst, SignedMessageSep)
 	dst = append(dst, keyID.String()...)
 	dst = append(dst, SignedMessageSep)
-	return append(dst, canonical...), nil
+	return body.Canonical(dst)
 }

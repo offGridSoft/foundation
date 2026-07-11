@@ -4,41 +4,47 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
 const (
-	GarbleSeedBytes         = 8
-	GarbleSeedMaxInputBytes = 4096
-	GarbleSeedRandom        = "random"
-	GarbleSeedFlagPrefix    = "-seed="
-	GarbleArgLiterals       = "-literals"
-	GarbleArgTiny           = "-tiny"
-	GoArgBuild              = "build"
-	GoArgTrimPath           = "-trimpath"
-	GoArgBuildVCS           = "-buildvcs=true"
-	GoBuildOutputFlag       = "-o"
-	GoBuildTagsPrefix       = "-tags="
-	GoBuildLDFlagsPrefix    = "-ldflags="
-	LDFlagStripSymbols      = "-s"
-	LDFlagStripDebug        = "-w"
-	LDFlagClearBuildID      = "-buildid="
-	LDFlagSetVariable       = "-X"
-	BuildCommandDirPrefix   = "./cmd/"
-	WindowsExecutableSuffix = ".exe"
-	DistDirName             = "dist"
-	BuildImportPathMaxRunes = 256
-	BuildTagMaxRunes        = 64
-	LinkerSymbolMaxRunes    = 256
+	GarbleSeedBytes                         = 8
+	GarbleSeedMaxInputBytes                 = 4096
+	GarbleSeedRandom                        = "random"
+	GarbleSeedFlagPrefix                    = "-seed="
+	GarbleArgLiterals                       = "-literals"
+	GarbleArgTiny                           = "-tiny"
+	GoArgBuild                              = "build"
+	GoArgTrimPath                           = "-trimpath"
+	GoArgBuildVCS                           = "-buildvcs=true"
+	GoBuildOutputFlag                       = "-o"
+	GoBuildTagsPrefix                       = "-tags="
+	GoBuildLDFlagsPrefix                    = "-ldflags="
+	LDFlagStripSymbols                      = "-s"
+	LDFlagStripDebug                        = "-w"
+	LDFlagClearBuildID                      = "-buildid="
+	LDFlagSetVariable                       = "-X"
+	BuildCommandDirPrefix                   = "./cmd/"
+	WindowsExecutableSuffix                 = ".exe"
+	DistDirName                             = "dist"
+	BuildImportPathMaxRunes                 = 256
+	BuildTagMaxRunes                        = 64
+	LinkerSymbolMaxRunes                    = 256
+	DefaultReleaseBuildPlatformCount        = 4
+	ReleaseBuildTagMaximum           uint32 = 64
+	ReleaseCommandMaximum            uint32 = 64
 )
 
-var defaultReleaseBuildPlatforms = [...]core.Platform{
-	core.PlatformDarwinARM64,
-	core.PlatformLinuxAMD64,
-	core.PlatformLinuxARM64,
-	core.PlatformWindowsAMD64,
+func defaultReleaseBuildPlatforms() [DefaultReleaseBuildPlatformCount]core.Platform {
+	return [...]core.Platform{
+		core.PlatformDarwinARM64,
+		core.PlatformLinuxAMD64,
+		core.PlatformLinuxARM64,
+		core.PlatformWindowsAMD64,
+	}
 }
 
 type GarbleSeed struct {
@@ -376,16 +382,20 @@ func (p ReleaseBuildPolicy) MarshalJSON() ([]byte, error) {
 }
 
 func validateBuildTags(p ReleaseBuildPolicy) error {
-	if int(p.TagCount) != len(p.Tags) {
+	if err := (core.CollectionCardinality{
+		Length:          len(p.Tags),
+		DeclaredCount:   p.TagCount,
+		Maximum:         ReleaseBuildTagMaximum,
+		RequireDeclared: true,
+	}).Validate(); err != nil {
 		return fmt.Errorf(ErrFmtBuildPolicy, core.ErrReleaseContract)
 	}
-	seen := core.NewUniqueStringSet(len(p.Tags))
-	for _, tag := range p.Tags {
+	for index, tag := range p.Tags {
 		if err := tag.Validate(); err != nil {
 			return wrapReleaseContract(ErrFmtBuildPolicy, err)
 		}
-		if err := seen.Add(tag.String()); err != nil {
-			return wrapReleaseContract(ErrFmtBuildPolicy, err)
+		if slices.Contains(p.Tags[:index], tag) {
+			return fmt.Errorf(ErrFmtBuildPolicy, core.ErrReleaseContract)
 		}
 	}
 	return nil
@@ -642,44 +652,53 @@ func specMatchesLayout(s ProductReleaseSpec, layout ReleaseRootLayout) bool {
 }
 
 func validateSpecCommands(s ProductReleaseSpec) error {
-	if s.CommandCount == 0 || int(s.CommandCount) != len(s.Commands) {
+	if err := (core.CollectionCardinality{
+		Length:          len(s.Commands),
+		DeclaredCount:   s.CommandCount,
+		Minimum:         1,
+		Maximum:         ReleaseCommandMaximum,
+		RequireDeclared: true,
+	}).Validate(); err != nil {
 		return fmt.Errorf(ErrFmtReleaseSpec, core.ErrReleaseContract)
 	}
-	names := core.NewUniqueStringSet(len(s.Commands))
-	imports := core.NewUniqueStringSet(len(s.Commands))
-	for _, command := range s.Commands {
+	for index, command := range s.Commands {
 		if err := command.Validate(); err != nil {
 			return wrapReleaseContract(ErrFmtReleaseSpec, err)
 		}
-		if err := names.Add(command.Name.String()); err != nil {
-			return wrapReleaseContract(ErrFmtReleaseSpec, err)
-		}
-		if err := imports.Add(command.ImportPath.String()); err != nil {
-			return wrapReleaseContract(ErrFmtReleaseSpec, err)
+		for _, prior := range s.Commands[:index] {
+			if prior.Name == command.Name || prior.ImportPath == command.ImportPath {
+				return fmt.Errorf(ErrFmtReleaseSpec, core.ErrReleaseContract)
+			}
 		}
 	}
 	return nil
 }
 
 func validateSpecPlatforms(s ProductReleaseSpec) error {
-	if s.PlatformCount == 0 || int(s.PlatformCount) != len(s.Platforms) {
+	if err := (core.CollectionCardinality{
+		Length:          len(s.Platforms),
+		DeclaredCount:   s.PlatformCount,
+		Minimum:         1,
+		Maximum:         core.PlatformMaximumDefault,
+		RequireDeclared: true,
+	}).Validate(); err != nil {
 		return fmt.Errorf(ErrFmtReleaseSpec, core.ErrReleaseContract)
 	}
-	seen := core.NewUniqueStringSet(len(s.Platforms))
-	for _, platform := range s.Platforms {
+	for index, platform := range s.Platforms {
 		if err := validateReleasePlatform(platform, ErrFmtReleaseSpec); err != nil {
 			return err
 		}
-		if err := seen.Add(platform.String()); err != nil {
-			return wrapReleaseContract(ErrFmtReleaseSpec, err)
+		if slices.Contains(s.Platforms[:index], platform) {
+			return fmt.Errorf(ErrFmtReleaseSpec, core.ErrReleaseContract)
 		}
 	}
 	return nil
 }
 
 func BuildPlatforms() []core.Platform {
-	platforms := make([]core.Platform, len(defaultReleaseBuildPlatforms))
-	copy(platforms, defaultReleaseBuildPlatforms[:])
+	defaults := defaultReleaseBuildPlatforms()
+	platforms := make([]core.Platform, len(defaults))
+	copy(platforms, defaults[:])
 	return platforms
 }
 

@@ -42,24 +42,26 @@ const (
 	SchemaTokenReleaseDownloadIndex       = "offgrid-release-download-index-v1"
 )
 
-var schemaNames = [...]string{
-	SchemaBugUsage:                   SchemaTokenBugUsage,
-	SchemaBugCheckIn:                 SchemaTokenBugCheckIn,
-	SchemaBugSeatLease:               SchemaTokenBugSeatLease,
-	SchemaWitnessCheckIn:             SchemaTokenWitnessCheckIn,
-	SchemaWitnessSubscription:        SchemaTokenWitnessSubscription,
-	SchemaCustodySessionOpenRequest:  SchemaTokenCustodySessionOpenRequest,
-	SchemaCustodySessionOpenResponse: SchemaTokenCustodySessionOpenResponse,
-	SchemaCustodyFinalizeRequest:     SchemaTokenCustodyFinalizeRequest,
-	SchemaCustodyReceipt:             SchemaTokenCustodyReceipt,
-	SchemaReleaseManifest:            SchemaTokenReleaseManifest,
-	SchemaReleaseUploadReceipt:       SchemaTokenReleaseUploadReceipt,
-	SchemaReleaseDownloadIndex:       SchemaTokenReleaseDownloadIndex,
+func schemaNames() [SchemaReleaseDownloadIndex + 1]string {
+	return [...]string{
+		SchemaBugUsage:                   SchemaTokenBugUsage,
+		SchemaBugCheckIn:                 SchemaTokenBugCheckIn,
+		SchemaBugSeatLease:               SchemaTokenBugSeatLease,
+		SchemaWitnessCheckIn:             SchemaTokenWitnessCheckIn,
+		SchemaWitnessSubscription:        SchemaTokenWitnessSubscription,
+		SchemaCustodySessionOpenRequest:  SchemaTokenCustodySessionOpenRequest,
+		SchemaCustodySessionOpenResponse: SchemaTokenCustodySessionOpenResponse,
+		SchemaCustodyFinalizeRequest:     SchemaTokenCustodyFinalizeRequest,
+		SchemaCustodyReceipt:             SchemaTokenCustodyReceipt,
+		SchemaReleaseManifest:            SchemaTokenReleaseManifest,
+		SchemaReleaseUploadReceipt:       SchemaTokenReleaseUploadReceipt,
+		SchemaReleaseDownloadIndex:       SchemaTokenReleaseDownloadIndex,
+	}
 }
 
 func ParseSchemaID(value string) (SchemaID, error) {
-	for schema := SchemaBugUsage; int(schema) < len(schemaNames); schema++ {
-		if schemaNames[schema] == value {
+	for schema := SchemaBugUsage; int(schema) < len(schemaNames()); schema++ {
+		if schemaNames()[schema] == value {
 			return schema, nil
 		}
 	}
@@ -68,13 +70,13 @@ func ParseSchemaID(value string) (SchemaID, error) {
 
 func (id SchemaID) String() string {
 	if id.IsValid() {
-		return schemaNames[id]
+		return schemaNames()[id]
 	}
 	return ""
 }
 
 func (id SchemaID) IsValid() bool {
-	return id > SchemaUnknown && int(id) < len(schemaNames) && schemaNames[id] != ""
+	return id > SchemaUnknown && int(id) < len(schemaNames()) && schemaNames()[id] != ""
 }
 
 func (id SchemaID) Validate() error {

@@ -5,9 +5,8 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
-
 	"encoding/json"
+	"fmt"
 )
 
 const BLAKE3DigestBytes = 32

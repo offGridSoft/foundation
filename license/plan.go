@@ -1,9 +1,9 @@
 package license
 
 import (
+	"encoding/json"
 	"fmt"
 
-	"encoding/json"
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
@@ -29,22 +29,24 @@ const (
 	SeatPlanOSS
 )
 
-var seatPlanNames = [...]string{
-	SeatPlanStandard:          SeatPlanTokenStandard,
-	SeatPlanEnterprise:        SeatPlanTokenEnterprise,
-	SeatPlanEnterpriseOffline: SeatPlanTokenEnterpriseOffline,
-	SeatPlanOSS:               SeatPlanTokenOSS,
+func seatPlanNames() [SeatPlanOSS + 1]string {
+	return [...]string{
+		SeatPlanStandard:          SeatPlanTokenStandard,
+		SeatPlanEnterprise:        SeatPlanTokenEnterprise,
+		SeatPlanEnterpriseOffline: SeatPlanTokenEnterpriseOffline,
+		SeatPlanOSS:               SeatPlanTokenOSS,
+	}
 }
 
 func (p SeatPlan) String() string {
 	if p.IsValid() {
-		return seatPlanNames[p]
+		return seatPlanNames()[p]
 	}
 	return ""
 }
 
 func (p SeatPlan) IsValid() bool {
-	return p > seatPlanInvalid && int(p) < len(seatPlanNames) && seatPlanNames[p] != ""
+	return p > seatPlanInvalid && int(p) < len(seatPlanNames()) && seatPlanNames()[p] != ""
 }
 
 func (p SeatPlan) Validate() error {
@@ -55,8 +57,8 @@ func (p SeatPlan) Validate() error {
 }
 
 func ParseSeatPlan(token string) (SeatPlan, error) {
-	for plan := SeatPlanStandard; int(plan) < len(seatPlanNames); plan++ {
-		if seatPlanNames[plan] == token {
+	for plan := SeatPlanStandard; int(plan) < len(seatPlanNames()); plan++ {
+		if seatPlanNames()[plan] == token {
 			return plan, nil
 		}
 	}
@@ -92,21 +94,23 @@ const (
 	SubscriptionPlanGold
 )
 
-var subscriptionPlanNames = [...]string{
-	SubscriptionPlanBronze: SubscriptionPlanTokenBronze,
-	SubscriptionPlanSilver: SubscriptionPlanTokenSilver,
-	SubscriptionPlanGold:   SubscriptionPlanTokenGold,
+func subscriptionPlanNames() [SubscriptionPlanGold + 1]string {
+	return [...]string{
+		SubscriptionPlanBronze: SubscriptionPlanTokenBronze,
+		SubscriptionPlanSilver: SubscriptionPlanTokenSilver,
+		SubscriptionPlanGold:   SubscriptionPlanTokenGold,
+	}
 }
 
 func (p SubscriptionPlan) String() string {
 	if p.IsValid() {
-		return subscriptionPlanNames[p]
+		return subscriptionPlanNames()[p]
 	}
 	return ""
 }
 
 func (p SubscriptionPlan) IsValid() bool {
-	return p > subscriptionPlanInvalid && int(p) < len(subscriptionPlanNames) && subscriptionPlanNames[p] != ""
+	return p > subscriptionPlanInvalid && int(p) < len(subscriptionPlanNames()) && subscriptionPlanNames()[p] != ""
 }
 
 func (p SubscriptionPlan) Validate() error {
@@ -117,8 +121,8 @@ func (p SubscriptionPlan) Validate() error {
 }
 
 func ParseSubscriptionPlan(token string) (SubscriptionPlan, error) {
-	for plan := SubscriptionPlanBronze; int(plan) < len(subscriptionPlanNames); plan++ {
-		if subscriptionPlanNames[plan] == token {
+	for plan := SubscriptionPlanBronze; int(plan) < len(subscriptionPlanNames()); plan++ {
+		if subscriptionPlanNames()[plan] == token {
 			return plan, nil
 		}
 	}
@@ -153,20 +157,22 @@ const (
 	BillingPeriodPrepaidYears
 )
 
-var billingPeriodNames = [...]string{
-	BillingPeriodFourWeeks:    BillingPeriodTokenFourWeeks,
-	BillingPeriodPrepaidYears: BillingPeriodTokenPrepaidYears,
+func billingPeriodNames() [BillingPeriodPrepaidYears + 1]string {
+	return [...]string{
+		BillingPeriodFourWeeks:    BillingPeriodTokenFourWeeks,
+		BillingPeriodPrepaidYears: BillingPeriodTokenPrepaidYears,
+	}
 }
 
 func (p BillingPeriod) String() string {
 	if p.IsValid() {
-		return billingPeriodNames[p]
+		return billingPeriodNames()[p]
 	}
 	return ""
 }
 
 func (p BillingPeriod) IsValid() bool {
-	return p > billingPeriodInvalid && int(p) < len(billingPeriodNames) && billingPeriodNames[p] != ""
+	return p > billingPeriodInvalid && int(p) < len(billingPeriodNames()) && billingPeriodNames()[p] != ""
 }
 
 func (p BillingPeriod) Validate() error {
@@ -177,8 +183,8 @@ func (p BillingPeriod) Validate() error {
 }
 
 func ParseBillingPeriod(token string) (BillingPeriod, error) {
-	for period := BillingPeriodFourWeeks; int(period) < len(billingPeriodNames); period++ {
-		if billingPeriodNames[period] == token {
+	for period := BillingPeriodFourWeeks; int(period) < len(billingPeriodNames()); period++ {
+		if billingPeriodNames()[period] == token {
 			return period, nil
 		}
 	}

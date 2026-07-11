@@ -16,16 +16,18 @@ func TestGateHostileTable(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
 		input         GateInput[SeatLeaseBody]
+		wantRemaining time.Duration
 		wantOutcome   GateOutcome
 		wantReason    GateReason
 		wantState     LeaseState
-		wantRemaining time.Duration
+		wantInputErr  bool
 	}{
 		{
-			name:        "zero value fails closed before lease trust",
-			input:       GateInput[SeatLeaseBody]{},
-			wantOutcome: GateRefuse,
-			wantReason:  GateReasonInvalidClock,
+			name:         "zero value fails closed before lease trust",
+			input:        GateInput[SeatLeaseBody]{},
+			wantOutcome:  GateRefuse,
+			wantReason:   GateReasonInvalidClock,
+			wantInputErr: true,
 		},
 		{
 			name: "explicit disarmed allows without trusting lease",
@@ -44,16 +46,18 @@ func TestGateHostileTable(t *testing.T) {
 				Trust:          LeaseTrustTrusted,
 				Lease:          lease,
 			},
-			wantOutcome: GateRefuse,
-			wantReason:  GateReasonClockRollback,
+			wantOutcome:  GateRefuse,
+			wantReason:   GateReasonClockRollback,
+			wantInputErr: true,
 		},
 		{
 			name: "invalid trust fails closed",
 			input: GateInput[SeatLeaseBody]{
 				Now: now,
 			},
-			wantOutcome: GateRefuse,
-			wantReason:  GateReasonInvalidTrust,
+			wantOutcome:  GateRefuse,
+			wantReason:   GateReasonInvalidTrust,
+			wantInputErr: true,
 		},
 		{
 			name: "untrusted first refusal teaches",
@@ -125,21 +129,43 @@ func TestGateHostileTable(t *testing.T) {
 			wantState:   LeaseExpired,
 		},
 		{
-			name: "trusted negative warning window refuses expired lease",
+			name: "trusted negative warning window fails closed",
 			input: GateInput[SeatLeaseBody]{
 				Now:        lease.WriteGraceUntil().Add(time.Hour),
 				Lease:      lease,
 				WarnWindow: -30 * 24 * time.Hour,
 				Trust:      LeaseTrustTrusted,
 			},
-			wantOutcome: GateRefuse,
-			wantReason:  GateReasonLeaseExpired,
-			wantState:   LeaseExpired,
+			wantOutcome:  GateRefuse,
+			wantReason:   GateReasonInvalidWindow,
+			wantInputErr: true,
+		},
+		{
+			name: "malformed trusted lease fails closed",
+			input: GateInput[SeatLeaseBody]{
+				Now:   now,
+				Trust: LeaseTrustTrusted,
+			},
+			wantOutcome:  GateRefuse,
+			wantReason:   GateReasonInvalidLease,
+			wantInputErr: true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			inputErr := tc.input.Validate()
+			if tc.wantInputErr {
+				var typed GateInputError
+				if !errors.As(inputErr, &typed) || typed.Reason != tc.wantReason || !errors.Is(inputErr, core.ErrLicenseContract) {
+					t.Fatalf("GateInput.Validate() error = %v, want GateInputError reason=%s", inputErr, tc.wantReason)
+				}
+			} else if inputErr != nil {
+				t.Fatalf("GateInput.Validate() error = %v", inputErr)
+			}
 			got := Gate(tc.input)
+			if err := got.Validate(); err != nil {
+				t.Fatalf("GateDecision.Validate() error = %v", err)
+			}
 			if got.Reason.Outcome() != tc.wantOutcome || got.Reason != tc.wantReason || got.State != tc.wantState {
 				t.Fatalf("Gate = %+v, want outcome=%s reason=%s state=%s", got, tc.wantOutcome, tc.wantReason, tc.wantState)
 			}
@@ -166,6 +192,29 @@ func TestLeaseTrustContract(t *testing.T) {
 	}
 	if err := leaseTrustInvalid.Validate(); !errors.Is(err, core.ErrLicenseContract) {
 		t.Fatalf("LeaseTrust invalid error = %v, want ErrLicenseContract", err)
+	}
+}
+
+func TestLeaseStatusRejectsInvalidExecutionInputs(t *testing.T) {
+	t.Parallel()
+	now := testTime(1782302400000000000)
+	for _, tc := range []struct {
+		name       string
+		body       SeatLeaseBody
+		now        core.UnixNanoTime
+		warnWindow time.Duration
+	}{
+		{name: "zero clock", body: gateLease(now), warnWindow: WarnWindow},
+		{name: "negative warning window", body: gateLease(now), now: now, warnWindow: -time.Nanosecond},
+		{name: "invalid lease", now: now, warnWindow: WarnWindow},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			state := Status(tc.body, tc.now, tc.warnWindow)
+			if state != leaseStateInvalid || state.Writable() {
+				t.Fatalf("Status() = %v, want invalid non-writable state", state)
+			}
+		})
 	}
 }
 

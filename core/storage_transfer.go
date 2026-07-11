@@ -13,9 +13,11 @@ const (
 	StorageProviderS3
 )
 
-var storageProviderNames = [...]string{
-	StorageProviderGCS: storageProviderTokenGCS,
-	StorageProviderS3:  storageProviderTokenS3,
+func storageProviderNames() [StorageProviderS3 + 1]string {
+	return [...]string{
+		StorageProviderGCS: storageProviderTokenGCS,
+		StorageProviderS3:  storageProviderTokenS3,
+	}
 }
 
 const (
@@ -25,13 +27,13 @@ const (
 
 func (p StorageProvider) String() string {
 	if p.IsValid() {
-		return storageProviderNames[p]
+		return storageProviderNames()[p]
 	}
 	return ""
 }
 
 func (p StorageProvider) IsValid() bool {
-	return p > StorageProviderUnknown && int(p) < len(storageProviderNames) && storageProviderNames[p] != ""
+	return p > StorageProviderUnknown && int(p) < len(storageProviderNames()) && storageProviderNames()[p] != ""
 }
 
 func (p StorageProvider) Validate() error {
@@ -49,8 +51,8 @@ func (p StorageProvider) MarshalJSON() ([]byte, error) {
 }
 
 func ParseStorageProvider(token string) (StorageProvider, error) {
-	for provider := StorageProviderGCS; int(provider) < len(storageProviderNames); provider++ {
-		if storageProviderNames[provider] == token {
+	for provider := StorageProviderGCS; int(provider) < len(storageProviderNames()); provider++ {
+		if storageProviderNames()[provider] == token {
 			return provider, nil
 		}
 	}
@@ -78,9 +80,11 @@ const (
 	UploadMethodResumableURI
 )
 
-var uploadMethodNames = [...]string{
-	UploadMethodSignedPUT:    uploadMethodTokenSignedPUT,
-	UploadMethodResumableURI: uploadMethodTokenResumableURI,
+func uploadMethodNames() [UploadMethodResumableURI + 1]string {
+	return [...]string{
+		UploadMethodSignedPUT:    uploadMethodTokenSignedPUT,
+		UploadMethodResumableURI: uploadMethodTokenResumableURI,
+	}
 }
 
 const (
@@ -90,13 +94,13 @@ const (
 
 func (m UploadMethod) String() string {
 	if m.IsValid() {
-		return uploadMethodNames[m]
+		return uploadMethodNames()[m]
 	}
 	return ""
 }
 
 func (m UploadMethod) IsValid() bool {
-	return m > UploadMethodUnknown && int(m) < len(uploadMethodNames) && uploadMethodNames[m] != ""
+	return m > UploadMethodUnknown && int(m) < len(uploadMethodNames()) && uploadMethodNames()[m] != ""
 }
 
 func (m UploadMethod) Validate() error {
@@ -114,8 +118,8 @@ func (m UploadMethod) MarshalJSON() ([]byte, error) {
 }
 
 func ParseUploadMethod(token string) (UploadMethod, error) {
-	for method := UploadMethodSignedPUT; int(method) < len(uploadMethodNames); method++ {
-		if uploadMethodNames[method] == token {
+	for method := UploadMethodSignedPUT; int(method) < len(uploadMethodNames()); method++ {
+		if uploadMethodNames()[method] == token {
 			return method, nil
 		}
 	}

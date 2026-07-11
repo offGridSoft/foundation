@@ -152,9 +152,18 @@ func TestSessionOpenResponseAndUploadTargetContracts(t *testing.T) {
 	if err := target.Validate(); !errors.Is(err, core.ErrCustodyContract) {
 		t.Fatalf("UploadTarget control header value error = %v, want ErrCustodyContract", err)
 	}
+	target = validUploadTarget(t)
+	target.Headers = make([]UploadHeader, core.HTTPHeaderMaximumDefault+1)
+	if err := target.Validate(); !errors.Is(err, core.ErrCustodyContract) {
+		t.Fatalf("UploadTarget oversized headers error = %v, want ErrCustodyContract", err)
+	}
 	response.Targets = append(response.Targets, target)
 	if err := response.Validate(); !errors.Is(err, core.ErrCustodyContract) {
 		t.Fatalf("SessionOpenResponse duplicate target error = %v, want ErrCustodyContract", err)
+	}
+	response.Targets = make([]UploadTarget, core.CollectionMaximumDefault+1)
+	if err := response.Validate(); !errors.Is(err, core.ErrCustodyContract) {
+		t.Fatalf("SessionOpenResponse oversized targets error = %v, want ErrCustodyContract", err)
 	}
 }
 

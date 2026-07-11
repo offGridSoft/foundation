@@ -35,24 +35,26 @@ const (
 	GOARCHARM64 = "arm64"
 )
 
-var platformNames = [...]string{
-	PlatformDarwinAMD64:  PlatformTokenDarwinAMD64,
-	PlatformDarwinARM64:  PlatformTokenDarwinARM64,
-	PlatformLinuxAMD64:   PlatformTokenLinuxAMD64,
-	PlatformLinuxARM64:   PlatformTokenLinuxARM64,
-	PlatformWindowsAMD64: PlatformTokenWindowsAMD64,
-	PlatformWindowsARM64: PlatformTokenWindowsARM64,
+func platformNames() [PlatformWindowsARM64 + 1]string {
+	return [...]string{
+		PlatformDarwinAMD64:  PlatformTokenDarwinAMD64,
+		PlatformDarwinARM64:  PlatformTokenDarwinARM64,
+		PlatformLinuxAMD64:   PlatformTokenLinuxAMD64,
+		PlatformLinuxARM64:   PlatformTokenLinuxARM64,
+		PlatformWindowsAMD64: PlatformTokenWindowsAMD64,
+		PlatformWindowsARM64: PlatformTokenWindowsARM64,
+	}
 }
 
 func (p Platform) String() string {
 	if p.IsValid() {
-		return platformNames[p]
+		return platformNames()[p]
 	}
 	return ""
 }
 
 func (p Platform) IsValid() bool {
-	return p > PlatformUnknown && int(p) < len(platformNames) && platformNames[p] != ""
+	return p > PlatformUnknown && int(p) < len(platformNames()) && platformNames()[p] != ""
 }
 
 func (p Platform) Validate() error {
@@ -63,8 +65,8 @@ func (p Platform) Validate() error {
 }
 
 func ParsePlatform(token string) (Platform, error) {
-	for platform := PlatformDarwinAMD64; int(platform) < len(platformNames); platform++ {
-		if platformNames[platform] == token {
+	for platform := PlatformDarwinAMD64; int(platform) < len(platformNames()); platform++ {
+		if platformNames()[platform] == token {
 			return platform, nil
 		}
 	}

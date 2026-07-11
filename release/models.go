@@ -46,23 +46,32 @@ func validateArchiveLimits(l ArchiveLayout) error {
 	if err := l.MaxTotalBytes.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtArchiveLayout, err)
 	}
-	if l.MaxEntryBytes.Uint64() > l.MaxTotalBytes.Uint64() {
+	if l.MaxEntryBytes.Uint64() > core.ArtifactMaximumBytes ||
+		l.MaxTotalBytes.Uint64() > core.ArtifactSetMaximumBytes ||
+		l.MaxEntryBytes.Uint64() > l.MaxTotalBytes.Uint64() {
 		return fmt.Errorf(ErrFmtArchiveLayout, core.ErrReleaseContract)
 	}
 	return nil
 }
 
 func validateArchiveEntries(l ArchiveLayout) error {
-	if l.EntryCount == 0 || int(l.EntryCount) != len(l.Entries) {
+	if err := (core.CollectionCardinality{
+		Length:          len(l.Entries),
+		DeclaredCount:   l.EntryCount,
+		Minimum:         1,
+		Maximum:         core.CollectionMaximumDefault,
+		RequireDeclared: true,
+	}).Validate(); err != nil {
 		return fmt.Errorf(ErrFmtArchiveLayout, core.ErrReleaseContract)
 	}
-	names := core.NewUniqueStringSet(len(l.Entries))
-	for _, entry := range l.Entries {
+	for index, entry := range l.Entries {
 		if err := entry.Validate(); err != nil {
 			return err
 		}
-		if err := names.Add(entry.Name.String()); err != nil {
-			return wrapReleaseContract(ErrFmtArchiveLayout, err)
+		for _, prior := range l.Entries[:index] {
+			if prior.Name == entry.Name {
+				return fmt.Errorf(ErrFmtArchiveLayout, core.ErrReleaseContract)
+			}
 		}
 	}
 	return nil
@@ -165,7 +174,10 @@ func validateManifestIdentity(m Manifest) error {
 }
 
 func (m Manifest) Canonical(dst []byte) ([]byte, error) {
-	return core.AppendCanonicalJSON(dst, m)
+	if err := m.Validate(); err != nil {
+		return nil, err
+	}
+	return appendManifestJSON(dst, m)
 }
 
 func (m Manifest) MarshalJSON() ([]byte, error) {
@@ -364,26 +376,34 @@ func validateUploadedSet(objects []UploadedArtifact, count uint32, total core.By
 	}, ErrFmtUploadReceipt); err != nil {
 		return err
 	}
-	objectsSeen := core.NewUniqueStringSet(len(objects))
-	for _, object := range objects {
-		if err := objectsSeen.Add(object.Object.String()); err != nil {
-			return wrapReleaseContract(ErrFmtUploadReceipt, err)
+	for index, object := range objects {
+		for _, prior := range objects[:index] {
+			if prior.Object == object.Object {
+				return fmt.Errorf(ErrFmtUploadReceipt, core.ErrReleaseContract)
+			}
 		}
 	}
 	return nil
 }
 
 func validateDownloadSet(downloads []Download, count uint32) error {
-	if count == 0 || int(count) != len(downloads) {
+	if err := (core.CollectionCardinality{
+		Length:          len(downloads),
+		DeclaredCount:   count,
+		Minimum:         1,
+		Maximum:         core.CollectionMaximumDefault,
+		RequireDeclared: true,
+	}).Validate(); err != nil {
 		return fmt.Errorf(ErrFmtDownloadIndex, core.ErrReleaseContract)
 	}
-	platforms := core.NewUniqueStringSet(len(downloads))
-	for _, download := range downloads {
+	for index, download := range downloads {
 		if err := download.Validate(); err != nil {
 			return err
 		}
-		if err := platforms.Add(download.Platform.String()); err != nil {
-			return wrapReleaseContract(ErrFmtDownloadIndex, err)
+		for _, prior := range downloads[:index] {
+			if prior.Platform == download.Platform {
+				return fmt.Errorf(ErrFmtDownloadIndex, core.ErrReleaseContract)
+			}
 		}
 	}
 	return nil

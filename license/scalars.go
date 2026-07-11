@@ -1,11 +1,11 @@
 package license
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"unicode"
 
-	"encoding/json"
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 

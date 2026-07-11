@@ -15,20 +15,22 @@ const (
 	RetentionClassPrepaid
 )
 
-var retentionClassNames = [...]string{
-	RetentionClassConditional: "conditional",
-	RetentionClassPrepaid:     "prepaid",
+func retentionClassNames() [RetentionClassPrepaid + 1]string {
+	return [...]string{
+		RetentionClassConditional: "conditional",
+		RetentionClassPrepaid:     "prepaid",
+	}
 }
 
 func (c RetentionClass) String() string {
 	if c.IsValid() {
-		return retentionClassNames[c]
+		return retentionClassNames()[c]
 	}
 	return ""
 }
 
 func (c RetentionClass) IsValid() bool {
-	return c > retentionClassInvalid && int(c) < len(retentionClassNames) && retentionClassNames[c] != ""
+	return c > retentionClassInvalid && int(c) < len(retentionClassNames()) && retentionClassNames()[c] != ""
 }
 
 func (c RetentionClass) Validate() error {
@@ -46,8 +48,8 @@ func (c RetentionClass) MarshalJSON() ([]byte, error) {
 }
 
 func ParseRetentionClass(token string) (RetentionClass, error) {
-	for class := RetentionClassConditional; int(class) < len(retentionClassNames); class++ {
-		if retentionClassNames[class] == token {
+	for class := RetentionClassConditional; int(class) < len(retentionClassNames()); class++ {
+		if retentionClassNames()[class] == token {
 			return class, nil
 		}
 	}

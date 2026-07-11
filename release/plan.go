@@ -6,6 +6,11 @@ import (
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
+const (
+	ReleasePlanValidateAllocationBudget     float64 = 12
+	ReleasePlanBuildRequestAllocationBudget float64 = 34
+)
+
 type ReleasePreflightInput struct {
 	Toolchain       BuildToolchain
 	Evidence        ReleaseGateEvidence
@@ -91,14 +96,21 @@ func (p ReleasePlan) GarbleBuildRequests() ([]ReleaseGarbleBuildRequest, error) 
 }
 
 func (p ReleasePlan) Canonical(dst []byte) ([]byte, error) {
-	return core.AppendCanonicalJSON(dst, p)
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+	return appendReleasePlanJSON(dst, p)
 }
 
 func (p ReleasePlan) MarshalJSON() ([]byte, error) {
 	if err := p.Validate(); err != nil {
 		return nil, err
 	}
-	dst := []byte{'{'}
+	return appendReleasePlanJSON(nil, p)
+}
+
+func appendReleasePlanJSON(dst []byte, p ReleasePlan) ([]byte, error) {
+	dst = append(dst, '{')
 	var err error
 	dst, err = core.AppendJSONField(dst, jsonFieldProduct, p.Product)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldVersion, p.Version)
@@ -283,16 +295,23 @@ func validateDeployPlanCrossIdentity(p DeployPlan) error {
 }
 
 func validateDeployTargets(targets []UploadTarget, count uint32) error {
-	if count == 0 || int(count) != len(targets) {
+	if err := (core.CollectionCardinality{
+		Length:          len(targets),
+		DeclaredCount:   count,
+		Minimum:         1,
+		Maximum:         core.CollectionMaximumDefault,
+		RequireDeclared: true,
+	}).Validate(); err != nil {
 		return fmt.Errorf(ErrFmtDeployPlan, core.ErrReleaseContract)
 	}
-	seen := core.NewUniqueStringSet(len(targets))
-	for _, target := range targets {
+	for index, target := range targets {
 		if err := target.Validate(); err != nil {
 			return wrapReleaseContract(ErrFmtDeployPlan, err)
 		}
-		if err := seen.Add(deployTargetKey(target)); err != nil {
-			return wrapReleaseContract(ErrFmtDeployPlan, err)
+		for _, prior := range targets[:index] {
+			if deployTargetKey(prior) == deployTargetKey(target) {
+				return fmt.Errorf(ErrFmtDeployPlan, core.ErrReleaseContract)
+			}
 		}
 	}
 	return nil

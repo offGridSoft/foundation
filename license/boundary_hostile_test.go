@@ -1,11 +1,11 @@
 package license
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
 
-	"encoding/json"
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
@@ -168,7 +168,7 @@ func TestDeveloperKeyIDRejectsControlToken(t *testing.T) {
 
 func TestCheckInEndpointWireContract(t *testing.T) {
 	t.Parallel()
-	endpoint := BugCheckInEndpoint
+	endpoint := BugCheckInEndpoint()
 	data, err := endpoint.MarshalJSON()
 	if err != nil {
 		t.Fatal(err)

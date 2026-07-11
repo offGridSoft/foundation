@@ -109,25 +109,37 @@ const (
 	OfferWitnessGold
 )
 
-var offerCodeNames = [...]string{
-	OfferBugStandard:          "bug_standard",
-	OfferBugEnterprise:        "bug_enterprise",
-	OfferBugEnterpriseOffline: "bug_enterprise_offline",
-	OfferBugOSS:               "bug_oss",
-	OfferWitnessBronze:        "witness_bronze",
-	OfferWitnessSilver:        "witness_silver",
-	OfferWitnessGold:          "witness_gold",
+const (
+	OfferCodeTokenBugStandard          = "bug_standard"
+	OfferCodeTokenBugEnterprise        = "bug_enterprise"
+	OfferCodeTokenBugEnterpriseOffline = "bug_enterprise_offline"
+	OfferCodeTokenBugOSS               = "bug_oss"
+	OfferCodeTokenWitnessBronze        = "witness_bronze"
+	OfferCodeTokenWitnessSilver        = "witness_silver"
+	OfferCodeTokenWitnessGold          = "witness_gold"
+)
+
+func offerCodeNames() [OfferWitnessGold + 1]string {
+	return [...]string{
+		OfferBugStandard:          OfferCodeTokenBugStandard,
+		OfferBugEnterprise:        OfferCodeTokenBugEnterprise,
+		OfferBugEnterpriseOffline: OfferCodeTokenBugEnterpriseOffline,
+		OfferBugOSS:               OfferCodeTokenBugOSS,
+		OfferWitnessBronze:        OfferCodeTokenWitnessBronze,
+		OfferWitnessSilver:        OfferCodeTokenWitnessSilver,
+		OfferWitnessGold:          OfferCodeTokenWitnessGold,
+	}
 }
 
 func (c OfferCode) String() string {
 	if c.IsValid() {
-		return offerCodeNames[c]
+		return offerCodeNames()[c]
 	}
 	return ""
 }
 
 func (c OfferCode) IsValid() bool {
-	return c > offerCodeInvalid && int(c) < len(offerCodeNames) && offerCodeNames[c] != ""
+	return c > offerCodeInvalid && int(c) < len(offerCodeNames()) && offerCodeNames()[c] != ""
 }
 
 func (c OfferCode) Validate() error {
@@ -138,8 +150,8 @@ func (c OfferCode) Validate() error {
 }
 
 func ParseOfferCode(token string) (OfferCode, error) {
-	for code := OfferBugStandard; int(code) < len(offerCodeNames); code++ {
-		if offerCodeNames[code] == token {
+	for code := OfferBugStandard; int(code) < len(offerCodeNames()); code++ {
+		if offerCodeNames()[code] == token {
 			return code, nil
 		}
 	}

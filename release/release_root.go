@@ -81,14 +81,21 @@ func (l ReleaseRootLayout) Validate() error {
 }
 
 func (l ReleaseRootLayout) Canonical(dst []byte) ([]byte, error) {
-	return core.AppendCanonicalJSON(dst, l)
+	if err := l.Validate(); err != nil {
+		return nil, err
+	}
+	return appendReleaseRootLayoutJSON(dst, l)
 }
 
 func (l ReleaseRootLayout) MarshalJSON() ([]byte, error) {
 	if err := l.Validate(); err != nil {
 		return nil, err
 	}
-	dst := []byte{'{'}
+	return appendReleaseRootLayoutJSON(nil, l)
+}
+
+func appendReleaseRootLayoutJSON(dst []byte, l ReleaseRootLayout) ([]byte, error) {
+	dst = append(dst, '{')
 	var err error
 	dst, err = core.AppendJSONField(dst, jsonFieldProduct, l.Product)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldVersion, l.Version)

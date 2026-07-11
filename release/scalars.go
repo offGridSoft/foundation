@@ -23,8 +23,6 @@ const (
 	GarbleSeedFileName      = "garble.seed"
 	ArchiveToolFileMode     = 0o755
 	ArchiveMetadataFileMode = 0o644
-	ArchiveMaxEntryBytes    = 256 << 20
-	ArchiveMaxTotalBytes    = 512 << 20
 	EvidenceRefMaxRunes     = 512
 	GarbleSeedRefMaxRunes   = 512
 	ToolModuleMaxRunes      = 256

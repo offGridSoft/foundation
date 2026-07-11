@@ -1,6 +1,7 @@
 package release
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"encoding/json"
 	"errors"
@@ -79,6 +80,10 @@ func TestArchiveLayoutHostileTable(t *testing.T) {
 		{name: "control valid", mutate: func(*ArchiveLayout) {}},
 		{name: "bad archive name", mutate: func(l *ArchiveLayout) { l.Name = ArtifactName{} }},
 		{name: "entry count mismatch", mutate: func(l *ArchiveLayout) { l.EntryCount++ }},
+		{name: "entry cardinality exceeds maximum", mutate: func(l *ArchiveLayout) {
+			l.Entries = make([]ArchiveEntry, core.CollectionMaximumDefault+1)
+			l.EntryCount = uint32(len(l.Entries))
+		}},
 		{name: "duplicate entry name", mutate: func(l *ArchiveLayout) {
 			l.Entries = append(l.Entries, l.Entries[0])
 			l.EntryCount = uint32(len(l.Entries))
@@ -87,6 +92,12 @@ func TestArchiveLayoutHostileTable(t *testing.T) {
 		{name: "entry limit above total limit", mutate: func(l *ArchiveLayout) {
 			l.MaxEntryBytes = core.NewByteCount(2)
 			l.MaxTotalBytes = core.NewByteCount(1)
+		}},
+		{name: "entry byte budget exceeds maximum", mutate: func(l *ArchiveLayout) {
+			l.MaxEntryBytes = core.NewByteCount(core.ArtifactMaximumBytes + 1)
+		}},
+		{name: "total byte budget exceeds maximum", mutate: func(l *ArchiveLayout) {
+			l.MaxTotalBytes = core.NewByteCount(core.ArtifactSetMaximumBytes + 1)
 		}},
 		{name: "zero limits reject", mutate: func(l *ArchiveLayout) { l.MaxEntryBytes = core.ByteCount{} }},
 	} {
@@ -625,8 +636,8 @@ func validArchiveLayout(t *testing.T) ArchiveLayout {
 			{Name: mustArtifactName(t, "witness"), Mode: ArchiveToolFileMode},
 		},
 		EntryCount:    2,
-		MaxEntryBytes: core.NewByteCount(ArchiveMaxEntryBytes),
-		MaxTotalBytes: core.NewByteCount(ArchiveMaxTotalBytes),
+		MaxEntryBytes: core.NewByteCount(core.ArtifactMaximumBytes),
+		MaxTotalBytes: core.NewByteCount(core.ArtifactSetMaximumBytes),
 	}
 }
 
@@ -649,6 +660,7 @@ func TestReleaseSignerHostileTable(t *testing.T) {
 		{name: "valid signer returns typed signature", signer: testReleaseSigner{signature: validSignature}, payload: []byte("manifest"), wantErr: nil},
 		{name: "nil signer rejected", payload: []byte("manifest"), wantErr: core.ErrReleaseContract},
 		{name: "empty payload rejected", signer: testReleaseSigner{signature: validSignature}, payload: nil, wantErr: core.ErrReleaseContract},
+		{name: "oversized payload rejected", signer: testReleaseSigner{signature: validSignature}, payload: make([]byte, core.StrictJSONMaxBytes+1), wantErr: core.ErrReleaseContract},
 		{name: "signer error preserved", signer: testReleaseSigner{err: signerErr}, payload: []byte("manifest"), wantErr: signerErr},
 		{name: "zero signature rejected", signer: testReleaseSigner{}, payload: []byte("manifest"), wantErr: core.ErrFoundationContract},
 	} {
@@ -671,9 +683,34 @@ func TestReleaseSignerHostileTable(t *testing.T) {
 	}
 }
 
+func TestSignReleasePayloadFreezesCallerBytes(t *testing.T) {
+	t.Parallel()
+	signature, err := core.NewEd25519SignatureHex(make([]byte, ed25519.SignatureSize))
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte("manifest")
+	want := bytes.Clone(payload)
+	if _, err := SignReleasePayload(mutatingReleaseSigner{signature: signature}, payload); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(payload, want) {
+		t.Fatalf("SignReleasePayload mutated caller payload = %q, want %q", payload, want)
+	}
+}
+
 type testReleaseSigner struct {
 	err       error
 	signature core.Ed25519SignatureHex
+}
+
+type mutatingReleaseSigner struct {
+	signature core.Ed25519SignatureHex
+}
+
+func (s mutatingReleaseSigner) SignRelease(payload []byte) (core.Ed25519SignatureHex, error) {
+	payload[0]++
+	return s.signature, nil
 }
 
 func (s testReleaseSigner) SignRelease([]byte) (core.Ed25519SignatureHex, error) {
@@ -1117,6 +1154,10 @@ func TestReleaseBuildSpecHostileTable(t *testing.T) {
 			s.CommandCount = 0
 		}, wantErr: true},
 		{name: "command count mismatch", wantErr: true, mutate: func(s *ProductReleaseSpec) { s.CommandCount++ }},
+		{name: "command cardinality exceeds maximum", wantErr: true, mutate: func(s *ProductReleaseSpec) {
+			s.Commands = make([]ReleaseCommand, ReleaseCommandMaximum+1)
+			s.CommandCount = uint32(len(s.Commands))
+		}},
 		{name: "duplicate command name", mutate: func(s *ProductReleaseSpec) {
 			s.Commands[1].Name = s.Commands[0].Name
 		}, wantErr: true},
@@ -1130,11 +1171,19 @@ func TestReleaseBuildSpecHostileTable(t *testing.T) {
 			s.Platforms[1] = s.Platforms[0]
 		}, wantErr: true},
 		{name: "platform count mismatch", wantErr: true, mutate: func(s *ProductReleaseSpec) { s.PlatformCount++ }},
+		{name: "platform cardinality exceeds maximum", wantErr: true, mutate: func(s *ProductReleaseSpec) {
+			s.Platforms = make([]core.Platform, core.PlatformMaximumDefault+1)
+			s.PlatformCount = uint32(len(s.Platforms))
+		}},
 		{name: "non-stripped build rejected", wantErr: true, mutate: func(s *ProductReleaseSpec) { s.Policy.Strip = false }},
 		{name: "duplicate build tag", mutate: func(s *ProductReleaseSpec) {
 			s.Policy.Tags = append(s.Policy.Tags, s.Policy.Tags[0])
 			s.Policy.TagCount = uint32(len(s.Policy.Tags))
 		}, wantErr: true},
+		{name: "build tag cardinality exceeds maximum", wantErr: true, mutate: func(s *ProductReleaseSpec) {
+			s.Policy.Tags = make([]BuildTag, ReleaseBuildTagMaximum+1)
+			s.Policy.TagCount = uint32(len(s.Policy.Tags))
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -1447,6 +1496,10 @@ func TestDeployPlanHostileTable(t *testing.T) {
 			p.TargetCount = uint32(len(p.Targets))
 		}, wantErr: true},
 		{name: "target count mismatch rejected", wantErr: true, mutate: func(p *DeployPlan) { p.TargetCount++ }},
+		{name: "target cardinality exceeds maximum", wantErr: true, mutate: func(p *DeployPlan) {
+			p.Targets = make([]UploadTarget, core.CollectionMaximumDefault+1)
+			p.TargetCount = uint32(len(p.Targets))
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

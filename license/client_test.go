@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"encoding/json"
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
@@ -599,7 +599,7 @@ func TestClientValidateChecksAPIKeyAndBackoffTable(t *testing.T) {
 			t.Parallel()
 			client := Client[BugCheckIn, SeatLeaseBody]{
 				HTTP:     &http.Client{},
-				Endpoint: BugCheckInEndpoint,
+				Endpoint: BugCheckInEndpoint(),
 				APIKey:   testAPICallKey(t),
 				Backoff:  core.BackoffPolicy{Base: time.Nanosecond, Max: time.Nanosecond, MaxAttempts: 1},
 				Keyring:  testClientKeyring(t),
@@ -631,12 +631,13 @@ func TestJitterFractionZeroFailsToMaxDelay(t *testing.T) {
 	if got := conservativeJitterFraction(1.1); got != 1 {
 		t.Fatalf("conservativeJitterFraction >1 = %v, want 1", got)
 	}
-	got, err := CheckInBackoff.Delay(0, client.jitterFraction())
+	backoff := DefaultCheckInBackoff()
+	got, err := backoff.Delay(0, client.jitterFraction())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != CheckInBackoff.Base {
-		t.Fatalf("zero jitter delay = %s, want %s", got, CheckInBackoff.Base)
+	if got != backoff.Base {
+		t.Fatalf("zero jitter delay = %s, want %s", got, backoff.Base)
 	}
 }
 
@@ -676,6 +677,14 @@ func TestCheckInResponseHostileCombinations(t *testing.T) {
 			Refusal:     RefusalPaymentRequired,
 			Remediation: " \t ",
 		}},
+		{name: "refused control remediation", response: CheckInResponse[SeatLeaseBody]{
+			Refusal:     RefusalPaymentRequired,
+			Remediation: "pay\nnow",
+		}},
+		{name: "refused oversized remediation", response: CheckInResponse[SeatLeaseBody]{
+			Refusal:     RefusalPaymentRequired,
+			Remediation: strings.Repeat("a", CheckInRemediationMaxRunes+1),
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -686,28 +695,65 @@ func TestCheckInResponseHostileCombinations(t *testing.T) {
 	}
 }
 
-func TestCheckInResponseSatisfiesNativeTransportBodyContract(t *testing.T) {
+func TestCheckInTransportContractLayerTriad(t *testing.T) {
 	t.Parallel()
-
-	type transportBody interface {
-		Validate() error
-		APIBody()
+	lease := &core.Signed[SeatLeaseBody]{
+		KeyID:     mustSigningKeyID(t),
+		Signature: testSignatureHex(t),
+		Body:      testSeatLeaseBody(t),
 	}
-
 	tests := []struct {
-		body transportBody
-		name string
+		body    TransportResponseBody
+		name    string
+		wantErr bool
 	}{
-		{name: "bug seat check-in response", body: CheckInResponse[SeatLeaseBody]{}},
-		{name: "witness subscription check-in response", body: CheckInResponse[SubscriptionLeaseBody]{}},
+		{name: "positive granted response", body: CheckInResponse[SeatLeaseBody]{Granted: true, Refusal: RefusalNone, Lease: lease}},
+		{name: "negative zero response", body: CheckInResponse[SeatLeaseBody]{}, wantErr: true},
+		{name: "neutral refused response", body: CheckInResponse[SeatLeaseBody]{Refusal: RefusalPaymentRequired, Remediation: "update payment"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if tc.body == nil {
-				t.Fatalf("body = nil, want concrete Foundation transport body")
+			err := tc.body.Validate()
+			if tc.wantErr {
+				if !errors.Is(err, core.ErrLicenseContract) {
+					t.Fatalf("TransportResponseBody.Validate() error = %v, want ErrLicenseContract", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("TransportResponseBody.Validate() error = %v", err)
 			}
 		})
+	}
+}
+
+func TestClientRejectsNilContextWithTypedIdentity(t *testing.T) {
+	t.Parallel()
+
+	client := Client[BugCheckIn, SeatLeaseBody]{}
+	var nilContext context.Context
+	_, err := client.Do(nilContext, BugCheckIn{})
+	if !errors.Is(err, core.ErrNilContext) {
+		t.Fatalf("Client.Do(nil) error = %v, want ErrNilContext", err)
+	}
+	if !errors.Is(err, core.ErrLicenseContract) || !errors.Is(err, core.ErrFoundationContract) {
+		t.Fatalf("Client.Do(nil) error = %v, want license and foundation identities", err)
+	}
+}
+
+func TestCompilerOwnedDefaultsCannotBeMutatedGlobally(t *testing.T) {
+	t.Parallel()
+
+	mutated := DefaultCheckInBackoff()
+	mutated.MaxAttempts = 0
+	if err := DefaultCheckInBackoff().Validate(); err != nil {
+		t.Fatalf("DefaultCheckInBackoff() after local mutation = %v", err)
+	}
+	for _, endpoint := range []CheckInEndpoint{BugCheckInEndpoint(), WitnessCheckInEndpoint()} {
+		if err := endpoint.Validate(); err != nil {
+			t.Fatalf("default endpoint validation = %v", err)
+		}
 	}
 }
 
@@ -735,6 +781,10 @@ func TestClientBoundaryErrorsCarryLicenseIdentityTable(t *testing.T) {
 	}{
 		{name: "body read failure", run: func() error {
 			_, err := readCappedResponseBody(failingReader{})
+			return err
+		}},
+		{name: "nil response body", run: func() error {
+			_, err := readCappedResponseBody(nil)
 			return err
 		}},
 		{name: "success envelope decode failure", run: func() error {
@@ -770,7 +820,8 @@ func TestClientBoundaryErrorsCarryLicenseIdentityTable(t *testing.T) {
 
 func TestCheckInBudgetCoversWorstCaseRetryAfterSchedule(t *testing.T) {
 	t.Parallel()
-	minBudget := time.Duration(CheckInBackoff.MaxAttempts-1) * CheckInBackoff.Max
+	backoff := DefaultCheckInBackoff()
+	minBudget := time.Duration(backoff.MaxAttempts-1) * backoff.Max
 	if CheckInBudget < minBudget {
 		t.Fatalf("CheckInBudget = %s, want at least %s", CheckInBudget, minBudget)
 	}

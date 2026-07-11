@@ -18,20 +18,22 @@ const (
 	ProductTokenBug     = "bug"
 )
 
-var productNames = [...]string{
-	ProductWitness: ProductTokenWitness,
-	ProductBug:     ProductTokenBug,
+func productNames() [ProductBug + 1]string {
+	return [...]string{
+		ProductWitness: ProductTokenWitness,
+		ProductBug:     ProductTokenBug,
+	}
 }
 
 func (p Product) String() string {
 	if p.IsValid() {
-		return productNames[p]
+		return productNames()[p]
 	}
 	return ""
 }
 
 func (p Product) IsValid() bool {
-	return p > ProductUnknown && int(p) < len(productNames) && productNames[p] != ""
+	return p > ProductUnknown && int(p) < len(productNames()) && productNames()[p] != ""
 }
 
 func (p Product) Validate() error {
@@ -42,8 +44,8 @@ func (p Product) Validate() error {
 }
 
 func ParseProduct(token string) (Product, error) {
-	for product := ProductWitness; int(product) < len(productNames); product++ {
-		if productNames[product] == token {
+	for product := ProductWitness; int(product) < len(productNames()); product++ {
+		if productNames()[product] == token {
 			return product, nil
 		}
 	}

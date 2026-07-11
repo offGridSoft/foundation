@@ -1,15 +1,15 @@
 package license
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
-	"encoding/json"
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
 type Body interface {
-	Validate() error
+	core.Validatable
 	Canonical(dst []byte) ([]byte, error)
 	ExpiresAt() core.UnixNanoTime
 	WriteGraceUntil() core.UnixNanoTime
@@ -62,7 +62,10 @@ func (b SeatLeaseBody) Validate() error {
 }
 
 func (b SeatLeaseBody) Canonical(dst []byte) ([]byte, error) {
-	return core.AppendCanonicalJSON(dst, b)
+	if err := b.Validate(); err != nil {
+		return nil, err
+	}
+	return appendSeatLeaseBodyJSON(dst, b)
 }
 
 func (b SeatLeaseBody) MarshalJSON() ([]byte, error) {
@@ -210,7 +213,10 @@ func (b SubscriptionLeaseBody) Validate() error {
 }
 
 func (b SubscriptionLeaseBody) Canonical(dst []byte) ([]byte, error) {
-	return core.AppendCanonicalJSON(dst, b)
+	if err := b.Validate(); err != nil {
+		return nil, err
+	}
+	return appendSubscriptionLeaseBodyJSON(dst, b)
 }
 
 func (b SubscriptionLeaseBody) MarshalJSON() ([]byte, error) {
@@ -349,22 +355,31 @@ const (
 	LeaseExpired
 )
 
-var leaseStateNames = [...]string{
-	LeaseValid:   "valid",
-	LeaseWarning: "expiring",
-	LeaseGrace:   "grace",
-	LeaseExpired: "expired",
+const (
+	LeaseStateTokenValid   = "valid"
+	LeaseStateTokenWarning = "expiring"
+	LeaseStateTokenGrace   = "grace"
+	LeaseStateTokenExpired = "expired"
+)
+
+func leaseStateNames() [LeaseExpired + 1]string {
+	return [...]string{
+		LeaseValid:   LeaseStateTokenValid,
+		LeaseWarning: LeaseStateTokenWarning,
+		LeaseGrace:   LeaseStateTokenGrace,
+		LeaseExpired: LeaseStateTokenExpired,
+	}
 }
 
 func (s LeaseState) String() string {
 	if s.IsValid() {
-		return leaseStateNames[s]
+		return leaseStateNames()[s]
 	}
 	return ""
 }
 
 func (s LeaseState) IsValid() bool {
-	return s > leaseStateInvalid && int(s) < len(leaseStateNames) && leaseStateNames[s] != ""
+	return s > leaseStateInvalid && int(s) < len(leaseStateNames()) && leaseStateNames()[s] != ""
 }
 
 func (s LeaseState) Validate() error {
@@ -382,8 +397,8 @@ func (s LeaseState) MarshalJSON() ([]byte, error) {
 }
 
 func ParseLeaseState(token string) (LeaseState, error) {
-	for state := LeaseValid; int(state) < len(leaseStateNames); state++ {
-		if leaseStateNames[state] == token {
+	for state := LeaseValid; int(state) < len(leaseStateNames()); state++ {
+		if leaseStateNames()[state] == token {
 			return state, nil
 		}
 	}
@@ -408,9 +423,16 @@ func (s LeaseState) Writable() bool {
 }
 
 func Status[B Body](body B, now core.UnixNanoTime, warnWindow time.Duration) LeaseState {
-	if warnWindow < 0 {
-		warnWindow = 0
+	if now.IsZero() || warnWindow < 0 {
+		return leaseStateInvalid
 	}
+	if err := body.Validate(); err != nil {
+		return leaseStateInvalid
+	}
+	return leaseStatus(body, now, warnWindow)
+}
+
+func leaseStatus[B Body](body B, now core.UnixNanoTime, warnWindow time.Duration) LeaseState {
 	switch {
 	case now.Before(body.ExpiresAt().Add(-warnWindow)):
 		return LeaseValid

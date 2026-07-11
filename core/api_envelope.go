@@ -1,17 +1,18 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"unicode"
-
-	"encoding/json"
 )
 
 const (
-	APIHeaderXRequestID  = "X-Request-Id"
-	APIRequestIDMissing  = "missing"
-	APIRequestIDMaxRunes = 256
+	APIHeaderXRequestID     = "X-Request-Id"
+	APIRequestIDMissing     = "missing"
+	APIRequestIDMaxRunes    = 256
+	APIErrorMessageMaxRunes = 1024
+	APIErrorTipMaxRunes     = 1024
 
 	APICodeTokenNotFound           = "not_found"
 	APICodeTokenInvalidInput       = "invalid_input"
@@ -54,9 +55,12 @@ func ParseAPIRequestID(value string) (APIRequestID, error) {
 
 func normalizeAPIRequestID(value string) string {
 	value = strings.TrimSpace(dropControlRunes(value))
-	runes := []rune(value)
-	if len(runes) > APIRequestIDMaxRunes {
-		value = string(runes[:APIRequestIDMaxRunes])
+	runeCount := 0
+	for index := range value {
+		if runeCount == APIRequestIDMaxRunes {
+			return value[:index]
+		}
+		runeCount++
 	}
 	return value
 }
@@ -75,7 +79,7 @@ func dropControlRunesSlow(value string) string {
 	builder.Grow(len(value))
 	for _, r := range value {
 		if !unicode.IsControl(r) {
-			builder.WriteRune(r)
+			_, _ = builder.WriteRune(r) // Safe: strings.Builder.WriteRune always returns a nil error.
 		}
 	}
 	return builder.String()
@@ -127,26 +131,28 @@ const (
 	APICodeInternal
 )
 
-var apiCodeNames = [...]string{
-	APICodeNotFound:           APICodeTokenNotFound,
-	APICodeInvalidInput:       APICodeTokenInvalidInput,
-	APICodeConflict:           APICodeTokenConflict,
-	APICodeUnauthorized:       APICodeTokenUnauthorized,
-	APICodeForbidden:          APICodeTokenForbidden,
-	APICodePayloadTooLarge:    APICodeTokenPayloadTooLarge,
-	APICodeServiceUnavailable: APICodeTokenServiceUnavailable,
-	APICodeInternal:           APICodeTokenInternal,
+func apiCodeNames() [APICodeInternal + 1]string {
+	return [...]string{
+		APICodeNotFound:           APICodeTokenNotFound,
+		APICodeInvalidInput:       APICodeTokenInvalidInput,
+		APICodeConflict:           APICodeTokenConflict,
+		APICodeUnauthorized:       APICodeTokenUnauthorized,
+		APICodeForbidden:          APICodeTokenForbidden,
+		APICodePayloadTooLarge:    APICodeTokenPayloadTooLarge,
+		APICodeServiceUnavailable: APICodeTokenServiceUnavailable,
+		APICodeInternal:           APICodeTokenInternal,
+	}
 }
 
 func (c APICode) String() string {
 	if c.IsValid() {
-		return apiCodeNames[c]
+		return apiCodeNames()[c]
 	}
 	return ""
 }
 
 func (c APICode) IsValid() bool {
-	return c > apiCodeInvalid && int(c) < len(apiCodeNames) && apiCodeNames[c] != ""
+	return c > apiCodeInvalid && int(c) < len(apiCodeNames()) && apiCodeNames()[c] != ""
 }
 
 func (c APICode) Validate() error {
@@ -157,8 +163,8 @@ func (c APICode) Validate() error {
 }
 
 func ParseAPICode(token string) (APICode, error) {
-	for code := APICodeNotFound; int(code) < len(apiCodeNames); code++ {
-		if apiCodeNames[code] == token {
+	for code := APICodeNotFound; int(code) < len(apiCodeNames()); code++ {
+		if apiCodeNames()[code] == token {
 			return code, nil
 		}
 	}
@@ -195,16 +201,18 @@ func (b APIErrorBody) Validate() error {
 	if err := b.Code.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtAPIErrorBody, err)
 	}
-	if strings.TrimSpace(b.Message) == "" {
+	if err := ValidateOpaqueToken(b.Message, APIErrorMessageMaxRunes); err != nil {
 		return fmt.Errorf(ErrFmtAPIErrorBody, ErrFoundationContract)
 	}
-	if b.Tip != "" && strings.TrimSpace(b.Tip) == "" {
-		return fmt.Errorf(ErrFmtAPIErrorBody, ErrFoundationContract)
+	if b.Tip != "" {
+		if err := ValidateOpaqueToken(b.Tip, APIErrorTipMaxRunes); err != nil {
+			return fmt.Errorf(ErrFmtAPIErrorBody, ErrFoundationContract)
+		}
 	}
 	return nil
 }
 
-type APIEnvelope[T any] struct {
+type APIEnvelope[T Validatable] struct {
 	Data      *T            `json:"data"`
 	Error     *APIErrorBody `json:"error"`
 	RequestID APIRequestID  `json:"request_id"`
@@ -216,6 +224,9 @@ func (e APIEnvelope[T]) Validate() error {
 	}
 	switch {
 	case e.Data != nil && e.Error == nil:
+		if err := (*e.Data).Validate(); err != nil {
+			return fmt.Errorf(ErrFmtAPIEnvelope, err)
+		}
 		return nil
 	case e.Data == nil && e.Error != nil:
 		return validateAPIEnvelopeError(e.Error)

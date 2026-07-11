@@ -6,7 +6,7 @@ import (
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
-const MaxToolProvenanceItems = 64
+const MaxToolProvenanceItems uint32 = 64
 
 type BuildToolchain struct {
 	GarbleVersion ToolVersion `json:"garble_version"`
@@ -135,10 +135,13 @@ type ToolProvenanceSet struct {
 }
 
 func (s ToolProvenanceSet) Validate() error {
-	if s.ToolCount == 0 || int(s.ToolCount) != len(s.Tools) {
-		return fmt.Errorf(ErrFmtToolProvenance, core.ErrReleaseContract)
-	}
-	if len(s.Tools) > MaxToolProvenanceItems {
+	if err := (core.CollectionCardinality{
+		Length:          len(s.Tools),
+		DeclaredCount:   s.ToolCount,
+		Minimum:         1,
+		Maximum:         MaxToolProvenanceItems,
+		RequireDeclared: true,
+	}).Validate(); err != nil {
 		return fmt.Errorf(ErrFmtToolProvenance, core.ErrReleaseContract)
 	}
 	return validateToolProvenanceOrder(s.Tools)

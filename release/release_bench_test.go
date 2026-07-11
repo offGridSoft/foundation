@@ -35,7 +35,7 @@ func BenchmarkReleasePlanGarbleBuildRequests(b *testing.B) {
 }
 
 func BenchmarkToolProvenanceSetValidate64(b *testing.B) {
-	tools := benchmarkTools(b, MaxToolProvenanceItems)
+	tools := benchmarkTools(b, int(MaxToolProvenanceItems))
 	set := ToolProvenanceSet{Tools: tools, ToolCount: uint32(len(tools))}
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -43,6 +43,32 @@ func BenchmarkToolProvenanceSetValidate64(b *testing.B) {
 		if err := set.Validate(); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+// witness:waiver doctrine/test_protocol/top_parallel -- testing.AllocsPerRun mutates the process-global runtime allocation counter and panics inside parallel tests.
+func TestReleasePlanAllocationBudgets(t *testing.T) {
+	plan := validReleasePlan(t)
+	var validationErr error
+	validateAllocs := testing.AllocsPerRun(100, func() {
+		validationErr = plan.Validate()
+	})
+	if validationErr != nil {
+		t.Fatal(validationErr)
+	}
+	if validateAllocs > ReleasePlanValidateAllocationBudget {
+		t.Fatalf("ReleasePlan.Validate allocs = %.0f, want <= %.0f", validateAllocs, ReleasePlanValidateAllocationBudget)
+	}
+
+	var buildErr error
+	buildAllocs := testing.AllocsPerRun(100, func() {
+		_, buildErr = plan.GarbleBuildRequests()
+	})
+	if buildErr != nil {
+		t.Fatal(buildErr)
+	}
+	if buildAllocs > ReleasePlanBuildRequestAllocationBudget {
+		t.Fatalf("ReleasePlan.GarbleBuildRequests allocs = %.0f, want <= %.0f", buildAllocs, ReleasePlanBuildRequestAllocationBudget)
 	}
 }
 

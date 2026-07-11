@@ -1,9 +1,8 @@
 package core
 
 import (
-	"fmt"
-
 	"encoding/json"
+	"fmt"
 )
 
 type ProductVersion struct {

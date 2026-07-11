@@ -2,12 +2,12 @@
 
 This protocol is not a ceremony and not a separate truth source.
 
-It is the test-quality doctrine for evidence-producing Go pipelines. Rules that
-can be proven from source belong in a lint tool. Rules that require intent stay
-in this document until they can be encoded safely. The references to
-`witness-lint` and the `witness:waiver` comment grammar throughout this document
-are this codebase's implementation of the rule; adopt the same names or
-substitute equivalents that fit your project.
+It is the test-quality doctrine for evidence-producing Go pipelines. Rules
+that can be proven from source belong in a lint tool. Rules that require
+intent stay in this document until they can be encoded safely. The
+references to `witness-lint` and the `witness:waiver` comment grammar
+throughout this document are this codebase's implementation of the rule;
+adopt the same names or substitute equivalents that fit your project.
 
 The goal is not pretty tests. The goal is evidence.
 
@@ -25,46 +25,46 @@ required unless there is a better local reason. `review` means the rule needs
 human judgment today.
 
 When rules conflict, the more specific rule wins. A serial test may override
-`test/parallel/default` only with a waiver. A tempdir isolation rule may
-override a helper convenience pattern. A structural invariant test may use
-source inspection when a runtime test cannot prove the compiler-visible
-contract. When two rules still conflict, choose the rule that preserves evidence
-accounting and determinism. If that choice weakens another rule, add a waiver at
-the call site and state the exact failure class being accepted.
+`test/parallel/default` only with a waiver. A tempdir isolation rule may override
+a helper convenience pattern. A structural invariant test may use source
+inspection when a runtime test cannot prove the compiler-visible contract.
+When two rules still conflict, choose the rule that preserves evidence
+accounting and determinism. If that choice weakens another rule, add a waiver
+at the call site and state the exact failure class being accepted.
 
 ## Rule Index
 
-| id                                | level  | enforcement | summary                                                                     |
-| :-------------------------------- | :----- | :---------- | :-------------------------------------------------------------------------- |
-| `test/review-checklist`           | must   | review      | Reviewer questions for every new or changed test                            |
-| `test/compiler-driven`            | must   | review      | Keep the compiler in charge; clean break over compat shims                  |
-| `test/evidence`                   | must   | review      | Tests must prove a behavior that can fail                                   |
-| `test/red-green-slice`            | must   | review      | Every slice has a red state or a named ratchet reason                       |
-| `test/isolation/tempdir`          | must   | lint        | Filesystem-mutating tests own a tempdir per parallel unit                   |
-| `test/parallel/default`           | should | lint        | Tests parallelize by default; serial cases need a waiver                    |
-| `test/sync/no-sleep`              | must   | lint        | Synchronize on facts, not on `time.Sleep`                                   |
-| `test/determinism`                | must   | review      | Control time, randomness, paths, env, IDs, command output                   |
-| `test/table-shape`                | must   | review      | The table is the attack surface; names name the boundary                    |
-| `test/boundaries`                 | must   | review      | Policy/data code needs negative and boundary coverage                       |
-| `test/layer-triad`                | must   | review      | Each touched layer needs positive/negative/neutral coverage                 |
-| `test/package-sweep-exit`         | must   | review      | A sweep is done when surfaces have coverage and legacy retired              |
-| `test/errors`                     | must   | review      | Assert the strongest stable error contract (`errors.Is`/`As` over strings)  |
-| `test/structural-equality`        | must   | lint        | No `reflect.DeepEqual`; use `==`, `slices.Equal`, or explicit fields        |
-| `test/helpers`                    | must   | lint        | No testify/`assert*`; show `got`/`want` in plain Go                         |
-| `test/fixtures/no-shared-mutable` | must   | lint        | Parallel tests must not share mutable fixtures                              |
-| `test/fixtures/non-vacuous`       | must   | review      | Fixtures must force the behavior under test to execute                      |
-| `test/production-path`            | must   | review      | Be honest about which path the test exercises                               |
-| `test/evidence-path-consistency`  | must   | review      | Ref-says-X ∧ manifest-says-X ∧ disk-has-X for every evidence file           |
-| `test/goroutines/owned`           | must   | review      | Every goroutine has owner, cancel path, wait path, timeout backstop         |
-| `test/structural-invariant`       | must   | review      | Source/AST tests valid when contract is compiler-visible structure          |
-| `test/data-flow-inventory`        | must   | review      | Production structs in eligible packages must be classified                  |
-| `test/repeat-policy`              | must   | review      | `RepeatCount` is tests-only; tools/benchmarks/fuzz run once per phase       |
-| `test/budget-divergence`          | must   | review      | Effective/configured budget ratio is a contract, not a side effect          |
-| `test/benchmarks`                 | must   | review      | Measure one thing, report allocs, run serial+last, manifest covers evidence |
-| `test/fuzz-boundary`              | should | review      | Fuzz at trust boundaries; evidence covered by manifest                      |
-| `test/ledger-chain`               | must   | review      | Ledger tests prove the real chain                                           |
-| `protocol/typed-boundary`         | must   | lint        | Protocol payloads are typed structs and enums                               |
-| `test/waivers`                    | must   | review      | Waivers name why the rule is wrong for this case                            |
+| id | level | enforcement | summary |
+| :- | :---- | :---------- | :------ |
+| `test/review-checklist` | must | review | Reviewer questions for every new or changed test |
+| `test/compiler-driven` | must | review | Keep the compiler in charge; clean break over compat shims |
+| `test/evidence` | must | review | Tests must prove a behavior that can fail |
+| `test/red-green-slice` | must | review | Every slice has a red state or a named ratchet reason |
+| `test/isolation/tempdir` | must | lint | Filesystem-mutating tests own a tempdir per parallel unit |
+| `test/parallel/default` | should | lint | Tests parallelize by default; serial cases need a waiver |
+| `test/sync/no-sleep` | must | lint | Synchronize on facts, not on `time.Sleep` |
+| `test/determinism` | must | review | Control time, randomness, paths, env, IDs, command output |
+| `test/table-shape` | must | review | The table is the attack surface; names name the boundary |
+| `test/boundaries` | must | review | Policy/data code needs negative and boundary coverage |
+| `test/layer-triad` | must | review | Each touched layer needs positive/negative/neutral coverage |
+| `test/package-sweep-exit` | must | review | A sweep is done when surfaces have coverage and legacy retired |
+| `test/errors` | must | review | Assert the strongest stable error contract (`errors.Is`/`As` over strings) |
+| `test/structural-equality` | must | lint | No `reflect.DeepEqual`; use `==`, `slices.Equal`, or explicit fields |
+| `test/helpers` | must | lint | No testify/`assert*`; show `got`/`want` in plain Go |
+| `test/fixtures/no-shared-mutable` | must | lint | Parallel tests must not share mutable fixtures |
+| `test/fixtures/non-vacuous` | must | review | Fixtures must force the behavior under test to execute |
+| `test/production-path` | must | review | Be honest about which path the test exercises |
+| `test/evidence-path-consistency` | must | review | Ref-says-X ∧ manifest-says-X ∧ disk-has-X for every evidence file |
+| `test/goroutines/owned` | must | review | Every goroutine has owner, cancel path, wait path, timeout backstop |
+| `test/structural-invariant` | must | review | Source/AST tests valid when contract is compiler-visible structure |
+| `test/data-flow-inventory` | must | review | Production structs in eligible packages must be classified |
+| `test/repeat-policy` | must | review | `RepeatCount` is tests-only; tools/benchmarks/fuzz run once per phase |
+| `test/budget-divergence` | must | review | Effective/configured budget ratio is a contract, not a side effect |
+| `test/benchmarks` | must | review | Measure one thing, report allocs, run serial+last, manifest covers evidence |
+| `test/fuzz-boundary` | should | review | Fuzz at trust boundaries; evidence covered by manifest |
+| `test/ledger-chain` | must | review | Ledger tests prove the real chain |
+| `protocol/typed-boundary` | must | lint | Protocol payloads are typed structs and enums |
+| `test/waivers` | must | review | Waivers name why the rule is wrong for this case |
 
 Grep this index by `id` to jump to the rule body. Every rule body restates the
 `id`, `level`, and `enforcement` line so the table stays a navigation aid, not a
@@ -117,10 +117,10 @@ For every new or changed test, reviewers must ask:
 
 Tests must keep the compiler in charge.
 
-The preferred upgrade path is a clean break: structs to structs, enums to closed
-`iota` enums, explicit `Validate()` gates, typed sentinels, and direct call
-sites. Do not add compatibility wrappers, shims, alternate model structs, or
-stringly adapters just to keep old tests green.
+The preferred upgrade path is a clean break: structs to structs, enums to
+closed `iota` enums, explicit `Validate()` gates, typed sentinels, and direct
+call sites. Do not add compatibility wrappers, shims, alternate model structs,
+or stringly adapters just to keep old tests green.
 
 When a legacy assumption is wrong, upgrade the assumption. Do not fight the old
 test. Either rewrite it around the new typed contract or replace it with a
@@ -236,8 +236,8 @@ review note. "Out of scope" must identify the next proof surface, not hide it.
 Every test that mutates the filesystem must own its directory.
 
 If a test or subtest calls `t.Parallel()` and creates, writes, renames, removes,
-links, chmods, or truncates files, it must call `t.TempDir()` in the same test
-or subtest function body.
+links, chmods, or truncates files, it must call `t.TempDir()` in the same test or
+subtest function body.
 
 Parent temp directories do not make child subtests safe. A parallel subtest is a
 separate unit of isolation.
@@ -511,9 +511,9 @@ that table. Do not count the same three polite cases as both table shape and
 boundary coverage.
 
 A serious function is one that sits on a trust boundary, parser, classifier,
-planner, scorer, ledger/fold path, artifact/finalization path, or doctrine rule.
-Tiny field formatters and one-branch adapters can exhaust their complete input
-space instead of meeting the 10/10/20 floor.
+planner, scorer, ledger/fold path, artifact/finalization path, or doctrine
+rule. Tiny field formatters and one-branch adapters can exhaust their complete
+input space instead of meeting the 10/10/20 floor.
 
 ## Layer Triad Coverage
 
@@ -531,10 +531,10 @@ own local triad test. End-to-end and integration tests are valuable, but they do
 not replace local producer, schema, writer, replay, fold, projection, verifier,
 reporter, and CLI/process triads.
 
-An evidence pipeline is not one function. A correct producer paired with a blind
-verifier is a bug. A correct writer paired with a stale reporter is a bug. A
-typed index that accepts a bad counter because a lower layer already "should
-have" checked it is a bug.
+An evidence pipeline is not one function. A correct producer paired with a
+blind verifier is a bug. A correct writer paired with a stale reporter is a
+bug. A typed index that accepts a bad counter because a lower layer already
+"should have" checked it is a bug.
 
 Any change that affects captured output, fuzz evidence, retained facts,
 artifacts, ledgers, manifests, terminal envelopes, run/fold accounting, or
@@ -556,21 +556,21 @@ Required layer map:
   facts stay balanced
 - artifact/manifest projection: every durable evidence file is projected once,
   and scratch/raw/duplicate files are rejected or explicitly excluded
-- hostile self-consistency scan: an independent walk over the finalized bundle
-  compares the typed projection, the manifest, and the on-disk tree and refuses
-  to certify when any two disagree
-- verifier: the independent disk/manifest/ledger check catches forged, missing,
-  duplicated, truncated, and extra evidence
+- hostile self-consistency scan: an independent walk over the finalized
+  bundle compares the typed projection, the manifest, and the on-disk tree
+  and refuses to certify when any two disagree
+- verifier: the independent disk/manifest/ledger check catches forged,
+  missing, duplicated, truncated, and extra evidence
 - reporter/human output: typed evidence is rendered once and generic fallback
   output does not repeat or hide it
 - CLI/process boundary: cancellation, close errors, setup/install state, and
   command-output capture do not silently downgrade evidence
 
 The hostile self-consistency scan is a separate layer from verifier even when
-they share code. Verifier proves the bundle is internally consistent against its
-own claims. The hostile scan proves the producer/writer/projection chain did not
-record presence the durable tree cannot sustain. A bundle that passes verifier
-but fails the hostile scan is a producer/writer bug, not an attacker.
+they share code. Verifier proves the bundle is internally consistent against
+its own claims. The hostile scan proves the producer/writer/projection chain
+did not record presence the durable tree cannot sustain. A bundle that passes
+verifier but fails the hostile scan is a producer/writer bug, not an attacker.
 
 Required triad per layer:
 
@@ -603,12 +603,12 @@ triad, but they do not replace the behavioral tests. The behavioral tests must
 execute the real producer/writer/verifier path whenever that path is cheap
 enough to run inside the package test.
 
-Every package that owns one of the required layer responsibilities must declare
-its local triad tests as top-level test functions whose names contain
-`LayerTriad`. The doctrine ratchet locates the contract by function name across
-the package's consolidated `_test.go`, so an auditor can grep for `LayerTriad`
-to find the layer's positive/negative/neutral coverage without threading through
-file boundaries.
+Every package that owns one of the required layer responsibilities must
+declare its local triad tests as top-level test functions whose names contain
+`LayerTriad`. The doctrine ratchet locates the contract by function name
+across the package's consolidated `_test.go`, so an auditor can grep for
+`LayerTriad` to find the layer's positive/negative/neutral coverage without
+threading through file boundaries.
 
 ## Package Sweep Exit Gate
 
@@ -634,8 +634,8 @@ Exit checklist:
 - old compatibility tests have been upgraded or deleted
 - no new dead wrappers, duplicate truths, or test-only shims were introduced
 - focused package tests pass
-- relevant lint (the project's doctrine linter, `go vet`, `staticcheck`, and any
-  package-owned tool) is clean or has an explicit known baseline
+- relevant lint (the project's doctrine linter, `go vet`, `staticcheck`, and
+  any package-owned tool) is clean or has an explicit known baseline
 
 For a large package, the sweep may land in slices. Each slice must say which
 surface it closed and which surface remains. Do not declare the package done
@@ -683,17 +683,17 @@ two-tiered:
 
 1. assert the typed class with `errors.Is` or `errors.As` — this is the
    load-bearing rejection proof
-2. then assert the diagnostic detail only for the user-visible payload — this is
-   the operator-facing message check, not the contract
+2. then assert the diagnostic detail only for the user-visible payload —
+   this is the operator-facing message check, not the contract
 
-The diagnostic check must never be the only rejection proof. A test that matches
-only on the diagnostic string passes when the error class regresses to a
-different typed error that happens to render the same prose.
+The diagnostic check must never be the only rejection proof. A test that
+matches only on the diagnostic string passes when the error class regresses
+to a different typed error that happens to render the same prose.
 
-If an upstream library exposes only strings, wrap the error at the boundary with
-a typed or sentinel error and assert that wrapper. If no wrapper exists yet, a
-string assertion needs a waiver that names the upstream gap and the migration
-target.
+If an upstream library exposes only strings, wrap the error at the boundary
+with a typed or sentinel error and assert that wrapper. If no wrapper exists
+yet, a string assertion needs a waiver that names the upstream gap and the
+migration target.
 
 ## Structural Equality
 
@@ -717,8 +717,8 @@ Preferred comparison order:
 4. explicit field-by-field comparison when each field is a contract
 5. canonical JSON byte equality only when the JSON projection itself is the
    contract
-6. `cmp.Diff` only in tests where a rich structural diff is worth the dependency
-   and the comparison options are explicit
+6. `cmp.Diff` only in tests where a rich structural diff is worth the
+   dependency and the comparison options are explicit
 
 Wrong:
 
@@ -774,14 +774,15 @@ Forbidden:
 Allowed:
 
 - direct `if got != want { t.Fatalf(...) }`
-- small `require*` setup helpers for fixture construction or repeated fail-fast
-  preconditions
+- small `require*` setup helpers for fixture construction or repeated
+  fail-fast preconditions
 - domain-specific helpers that preserve `got`/`want` in the failure text
 - helper functions that accept `*testing.T` and call `t.Helper()` before any
   failure path
 
 Helpers should make failures sharper, not hide complexity. If a helper needs
-branch-heavy logic, split it or return structured data and check it in the test.
+branch-heavy logic, split it or return structured data and check it in the
+test.
 
 Pattern:
 
@@ -880,8 +881,8 @@ Common false coverage patterns:
   a temp file and commits it later
 - a fake commander pre-populates `StdoutRef` while the claimed contract is
   runwriter post-fill
-- a report test string-matches Markdown while the machine JSON projection is the
-  stable surface
+- a report test string-matches Markdown while the machine JSON projection is
+  the stable surface
 - a verifier test names a manifest drift but skips the bundle manifest writer
   that normally creates the input
 
@@ -897,9 +898,9 @@ live between two correct local components.
 
 `enforcement: review`
 
-A test that asserts a captured evidence file must prove the three-way invariant:
-the typed reference names the file, the durable manifest seals the file, and the
-file exists on disk at the asserted path.
+A test that asserts a captured evidence file must prove the three-way
+invariant: the typed reference names the file, the durable manifest seals
+the file, and the file exists on disk at the asserted path.
 
 Three independent layers can disagree about a single evidence file:
 
@@ -907,20 +908,21 @@ Three independent layers can disagree about a single evidence file:
 - the final manifest that the seal/finalize path emits
 - the bytes on disk under the bundle root
 
-Two of three agreeing is not enough. A test that only checks the typed reference
-passes when the manifest is missing the entry. A test that only checks disk
-presence passes when the projection never recorded it. The hostile
-self-consistency scan (see `test/layer-triad`) catches divergence at run time,
-but local tests must not let the run get that far.
+Two of three agreeing is not enough. A test that only checks the typed
+reference passes when the manifest is missing the entry. A test that only
+checks disk presence passes when the projection never recorded it. The
+hostile self-consistency scan (see `test/layer-triad`) catches divergence at
+run time, but local tests must not let the run get that far.
 
 Required for every test that touches captured evidence:
 
 - assert the typed reference names the expected path, hash, and byte count
-- assert the manifest contains the same path with matching hash and byte count
+- assert the manifest contains the same path with matching hash and byte
+  count
 - assert the file exists on disk at the manifest-asserted path with the
   manifest-asserted bytes
-- assert the manifest entry was produced by the projection writer being tested,
-  not by a pre-baked fixture
+- assert the manifest entry was produced by the projection writer being
+  tested, not by a pre-baked fixture
 
 Triad reminder: this rule is in addition to `test/layer-triad`. The triad
 governs per-layer positive/negative/neutral coverage. This rule governs
@@ -931,8 +933,8 @@ Common failure classes this rule catches:
 - the run projection records a path that the writer never wrote
 - the writer seals a file but the manifest projection skips it
 - the manifest claims bytes the disk file no longer has after a cleanup pass
-- profile or benchmark capture records the reference optimistically before the
-  subprocess writes a non-empty file
+- profile or benchmark capture records the reference optimistically before
+  the subprocess writes a non-empty file
 
 Helper pattern:
 
@@ -956,9 +958,9 @@ func requireEvidenceConsistent(t *testing.T, ref EvidenceRef, m Manifest, bundle
 }
 ```
 
-`EvidenceRef` and `Manifest` are placeholders for whatever typed reference and
-manifest types the package owns. The point is the three-way check, not the
-helper signature.
+`EvidenceRef` and `Manifest` are placeholders for whatever typed reference
+and manifest types the package owns. The point is the three-way check, not
+the helper signature.
 
 ## Goroutine Ownership
 
@@ -1052,21 +1054,23 @@ not build a world model just to enforce a doctrine rule.
 Every package that owns a trust-boundary surface must maintain a data-flow
 struct inventory and treat it as a wiring ratchet.
 
-Trust-boundary surfaces include protocol parsing and emission, evidence capture
-and projection, durable writing and replay, run/fold accounting, manifest
-generation, verification, and doctrine enforcement. Packages that do not own
-such a surface — small leaf helpers, pure-format utilities, thin glue — are not
-required to maintain an inventory, but adding one is never wrong.
+Trust-boundary surfaces include protocol parsing and emission, evidence
+capture and projection, durable writing and replay, run/fold accounting,
+manifest generation, verification, and doctrine enforcement. Packages that
+do not own such a surface — small leaf helpers, pure-format utilities, thin
+glue — are not required to maintain an inventory, but adding one is never
+wrong.
 
-Every production struct in an eligible package must appear in the inventory and
-be classified into an intentional role: protocol fact, sealed projection,
+Every production struct in an eligible package must appear in the inventory
+and be classified into an intentional role: protocol fact, sealed projection,
 internal flow carrier, test-only seam, capability wrapper, or another
 package-local category with the same precision.
 
-The inventory does not prove behavior by itself. It proves that the compiler can
-see the shape and that reviewers cannot accidentally miss a new data carrier.
-Behavior still needs hostile tests, `Validate()` gates, typed sentinels,
-layer-triad coverage, and end-to-end evidence checks where appropriate.
+The inventory does not prove behavior by itself. It proves that the compiler
+can see the shape and that reviewers cannot accidentally miss a new data
+carrier. Behavior still needs hostile tests, `Validate()` gates, typed
+sentinels, layer-triad coverage, and end-to-end evidence checks where
+appropriate.
 
 Required:
 
@@ -1088,8 +1092,8 @@ Forbidden:
 - treating the inventory as behavioral proof; it is a wiring proof only
 
 Example: a temporary-looking finalize-time identity struct that routes one
-event's outcome to a specific transform is still a production struct. It must be
-classified, because it decides which event receives the transform. The right
+event's outcome to a specific transform is still a production struct. It must
+be classified, because it decides which event receives the transform. The right
 inventory role is internal flow; the behavior is then proved separately by
 hostile tests showing same-key siblings do not receive each other's transforms.
 
@@ -1124,12 +1128,13 @@ Required phase policy:
 
 `enforcement: review`
 
-The ratio of effective to configured budget is a contract, not a side effect.
+The ratio of effective to configured budget is a contract, not a side
+effect.
 
-Run profiles declare configured budgets for tests, benchmarks, fuzz, per-package
-timeouts, and aggregate timeouts. The orchestrator computes effective budgets
-from configured budgets, parallelism, repeat counts, and the unit count of each
-phase. A large divergence ratio means one of:
+Run profiles declare configured budgets for tests, benchmarks, fuzz,
+per-package timeouts, and aggregate timeouts. The orchestrator computes
+effective budgets from configured budgets, parallelism, repeat counts, and
+the unit count of each phase. A large divergence ratio means one of:
 
 - the profile under-declares the work the run actually does
 - the orchestrator silently amplifies a small budget into hours of execution
@@ -1143,23 +1148,23 @@ Required:
   effective range in the commit
 - a run with `effective / configured > 10×` for any budget must surface that
   ratio in the human-facing report and in the machine record
-- a run with `effective / configured > 100×` for any budget is an infrastructure
-  violation; either the profile is wrong or the amplification is wrong, and
-  certification must not bury the discrepancy
+- a run with `effective / configured > 100×` for any budget is an
+  infrastructure violation; either the profile is wrong or the amplification
+  is wrong, and certification must not bury the discrepancy
 - changes to amplification factors (parallelism, repeat count, unit-count
   multipliers) must update tests that assert the resulting effective budgets
 
 Forbidden:
 
 - treating effective budgets as derived telemetry without a contract
-- profiles that configure tiny budgets relying on amplification to make the run
-  feasible; configure the real intended budget
+- profiles that configure tiny budgets relying on amplification to make the
+  run feasible; configure the real intended budget
 - silencing divergence by raising the configured budget post-hoc instead of
   fixing the source of amplification
 
 Budget divergence is also a diagnostic signal. Stable allocation counts with
-noisy wall-clock numbers in benchmarks indicate contention, not flakiness; large
-budget divergence indicates orchestration drift, not flexibility.
+noisy wall-clock numbers in benchmarks indicate contention, not flakiness;
+large budget divergence indicates orchestration drift, not flexibility.
 
 ## Benchmarks
 
@@ -1340,42 +1345,42 @@ older code, but new waivers use the canonical grammar.
 
 ## Automation Map
 
-Already enforced. Each row names the rule or sub-rule and the lint surface that
-owns enforcement so a reader can locate the implementation by grepping the
-implementer column.
+Already enforced. Each row names the rule or sub-rule and the lint surface
+that owns enforcement so a reader can locate the implementation by grepping
+the implementer column.
 
-| rule or sub-rule                                              | implemented by                                         |
-| :------------------------------------------------------------ | :----------------------------------------------------- |
-| `test/isolation/tempdir`                                      | lint: filesystem-mutation analyzer                     |
-| `test/sync/no-sleep`                                          | lint: `time.Sleep` rejector in tests                   |
-| `test/parallel/default`                                       | lint: missing-`t.Parallel()` analyzer                  |
-| `protocol/typed-boundary`                                     | lint: protocol-bag (`any`/`map[...]any`) rejector      |
-| `test/helpers` (assertion-framework imports)                  | lint: import allowlist for `testing` packages          |
-| `test/helpers` (assert-style local helpers)                   | lint: function-name analyzer for `assert*`/`expect*`   |
-| `test/helpers` (got/want vocabulary)                          | lint: table-field and failure-message wording analyzer |
-| `test/helpers` (generic subtest names)                        | lint: subtest-name vocabulary analyzer                 |
-| `test/benchmarks`                                             | lint: benchmark shape and `b.ReportAllocs` requirement |
-| `test/structural-equality`                                    | lint: `reflect.DeepEqual` rejector in tests            |
-| `test/fixtures/no-shared-mutable`                             | lint: mutable package-level test variable rejector     |
-| `TestMain` must call `m.Run()` or a recognized goleak wrapper | lint: `TestMain` body analyzer                         |
-| `runtime.NumGoroutine` and `time.Now` in tests                | lint: nondeterminism-source rejector                   |
-| loud enum switch defaults                                     | lint: switch-default analyzer for typed enums          |
-| streaming-critical no whole-stream reads                      | lint: streaming-budget analyzer                        |
+| rule or sub-rule | implemented by |
+| :--------------- | :------------- |
+| `test/isolation/tempdir` | lint: filesystem-mutation analyzer |
+| `test/sync/no-sleep` | lint: `time.Sleep` rejector in tests |
+| `test/parallel/default` | lint: missing-`t.Parallel()` analyzer |
+| `protocol/typed-boundary` | lint: protocol-bag (`any`/`map[...]any`) rejector |
+| `test/helpers` (assertion-framework imports) | lint: import allowlist for `testing` packages |
+| `test/helpers` (assert-style local helpers) | lint: function-name analyzer for `assert*`/`expect*` |
+| `test/helpers` (got/want vocabulary) | lint: table-field and failure-message wording analyzer |
+| `test/helpers` (generic subtest names) | lint: subtest-name vocabulary analyzer |
+| `test/benchmarks` | lint: benchmark shape and `b.ReportAllocs` requirement |
+| `test/structural-equality` | lint: `reflect.DeepEqual` rejector in tests |
+| `test/fixtures/no-shared-mutable` | lint: mutable package-level test variable rejector |
+| `TestMain` must call `m.Run()` or a recognized goleak wrapper | lint: `TestMain` body analyzer |
+| `runtime.NumGoroutine` and `time.Now` in tests | lint: nondeterminism-source rejector |
+| loud enum switch defaults | lint: switch-default analyzer for typed enums |
+| streaming-critical no whole-stream reads | lint: streaming-budget analyzer |
 
 Next good automation targets. Each is currently `review`-enforced and should
 graduate to lint when its false-positive story is understood.
 
-| rule or sub-rule                                                        | candidate lint surface                              |
-| :---------------------------------------------------------------------- | :-------------------------------------------------- |
-| `test/table-shape` (named subtests)                                     | table-test-shape analyzer                           |
-| `test/structural-invariant` (allowlist ratchets)                        | allowlist count-monotonicity analyzer               |
-| `test/fixtures/non-vacuous`                                             | minimum-output checker for common harnesses         |
-| `test/fuzz-boundary` (panic-free assertion)                             | fuzz-target body analyzer                           |
-| `test/package-sweep-exit` (sweep metadata)                              | package-sweep-marker scanner                        |
-| `test/production-path` (fake commanders / pre-baked refs)               | production-path proof-marker scanner                |
-| `test/compiler-driven` (stale legacy-compat branches after clean-break) | dead-branch ratchet against the new typed contract  |
-| `test/evidence-path-consistency`                                        | three-way-invariant analyzer for evidence-ref tests |
-| `test/budget-divergence`                                                | run-record analyzer flagging ratio thresholds       |
+| rule or sub-rule | candidate lint surface |
+| :--------------- | :--------------------- |
+| `test/table-shape` (named subtests) | table-test-shape analyzer |
+| `test/structural-invariant` (allowlist ratchets) | allowlist count-monotonicity analyzer |
+| `test/fixtures/non-vacuous` | minimum-output checker for common harnesses |
+| `test/fuzz-boundary` (panic-free assertion) | fuzz-target body analyzer |
+| `test/package-sweep-exit` (sweep metadata) | package-sweep-marker scanner |
+| `test/production-path` (fake commanders / pre-baked refs) | production-path proof-marker scanner |
+| `test/compiler-driven` (stale legacy-compat branches after clean-break) | dead-branch ratchet against the new typed contract |
+| `test/evidence-path-consistency` | three-way-invariant analyzer for evidence-ref tests |
+| `test/budget-divergence` | run-record analyzer flagging ratio thresholds |
 
 Do not automate a rule until the false-positive story is understood. A noisy
 doctrine rule creates waivers, and waivers rot.

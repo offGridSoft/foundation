@@ -1,10 +1,9 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
-
-	"encoding/json"
 )
 
 const (

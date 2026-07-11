@@ -1,13 +1,13 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
 	"time"
 	"unicode"
-
-	"encoding/json"
+	"unicode/utf8"
 )
 
 const (
@@ -18,6 +18,8 @@ const (
 	URLSchemeHTTPS                      = "https"
 	HostLocalhost                       = "localhost"
 	HTTPSURLDefaultMaxRunes             = 2048
+	HTTPHeaderNameMaxRunes              = 256
+	HTTPHeaderValueMaxRunes             = 8192
 	BackoffMaxDuration                  = 24 * time.Hour
 	HTTPStatusOK                        = 200
 	HTTPStatusTooManyRequests           = 429
@@ -73,7 +75,7 @@ func validateHTTPSURLParts(parsed *url.URL, policy HTTPSURLPolicy) error {
 }
 
 func ValidateHTTPHeaderName(value string) error {
-	if value == "" {
+	if value == "" || !utf8.ValidString(value) || utf8.RuneCountInString(value) > HTTPHeaderNameMaxRunes {
 		return fmt.Errorf(ErrFmtHTTPHeaderName, ErrFoundationContract)
 	}
 	for _, r := range value {
@@ -85,6 +87,9 @@ func ValidateHTTPHeaderName(value string) error {
 }
 
 func ValidateHTTPHeaderValue(value string) error {
+	if !utf8.ValidString(value) || utf8.RuneCountInString(value) > HTTPHeaderValueMaxRunes {
+		return fmt.Errorf(ErrFmtHTTPHeaderValue, ErrFoundationContract)
+	}
 	for _, r := range value {
 		if unicode.IsControl(r) && r != '\t' {
 			return fmt.Errorf(ErrFmtHTTPHeaderValue, ErrFoundationContract)
@@ -124,21 +129,23 @@ const (
 	HTTPOutcomeTerminal
 )
 
-var httpOutcomeNames = [...]string{
-	HTTPOutcomeSuccess:   "success",
-	HTTPOutcomeRetryable: "retryable",
-	HTTPOutcomeTerminal:  "terminal",
+func httpOutcomeNames() [HTTPOutcomeTerminal + 1]string {
+	return [...]string{
+		HTTPOutcomeSuccess:   "success",
+		HTTPOutcomeRetryable: "retryable",
+		HTTPOutcomeTerminal:  "terminal",
+	}
 }
 
 func (o HTTPOutcome) String() string {
 	if o.IsValid() {
-		return httpOutcomeNames[o]
+		return httpOutcomeNames()[o]
 	}
 	return ""
 }
 
 func (o HTTPOutcome) IsValid() bool {
-	return o > httpOutcomeInvalid && int(o) < len(httpOutcomeNames) && httpOutcomeNames[o] != ""
+	return o > httpOutcomeInvalid && int(o) < len(httpOutcomeNames()) && httpOutcomeNames()[o] != ""
 }
 
 func (o HTTPOutcome) Validate() error {
@@ -156,8 +163,8 @@ func (o HTTPOutcome) MarshalJSON() ([]byte, error) {
 }
 
 func ParseHTTPOutcome(token string) (HTTPOutcome, error) {
-	for outcome := HTTPOutcomeSuccess; int(outcome) < len(httpOutcomeNames); outcome++ {
-		if httpOutcomeNames[outcome] == token {
+	for outcome := HTTPOutcomeSuccess; int(outcome) < len(httpOutcomeNames()); outcome++ {
+		if httpOutcomeNames()[outcome] == token {
 			return outcome, nil
 		}
 	}
@@ -211,8 +218,11 @@ func (p BackoffPolicy) Delay(attempt int, jitterFrac float64) (time.Duration, er
 	if err := p.Validate(); err != nil {
 		return 0, err
 	}
-	if attempt < 0 {
-		attempt = 0
+	if attempt < 0 || attempt >= p.MaxAttempts {
+		return 0, fmt.Errorf(ErrFmtBackoffAttempts, ErrFoundationContract)
+	}
+	if !(jitterFrac >= 0 && jitterFrac <= 1) {
+		return 0, fmt.Errorf(ErrFmtBackoffWindow, ErrFoundationContract)
 	}
 	ceiling := p.Base
 	for i := 0; i < attempt && ceiling < p.Max; i++ {
@@ -221,15 +231,5 @@ func (p BackoffPolicy) Delay(attempt int, jitterFrac float64) (time.Duration, er
 	if ceiling > p.Max {
 		ceiling = p.Max
 	}
-	return time.Duration(clampUnit(jitterFrac) * float64(ceiling)), nil
-}
-
-func clampUnit(value float64) float64 {
-	if value < 0 {
-		return 0
-	}
-	if value > 1 {
-		return 1
-	}
-	return value
+	return time.Duration(jitterFrac * float64(ceiling)), nil
 }

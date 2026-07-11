@@ -7,10 +7,11 @@ import (
 
 var (
 	ErrFoundationContract = errors.New("foundation contract violation")
-	ErrLicenseContract    = errors.New("license contract violation")
-	ErrCustodyContract    = errors.New("custody contract violation")
-	ErrReleaseContract    = errors.New("release contract violation")
-	ErrJSONContract       = errors.New("json contract violation")
+	ErrLicenseContract    = fmt.Errorf("license contract violation: %w", ErrFoundationContract)
+	ErrCustodyContract    = fmt.Errorf("custody contract violation: %w", ErrFoundationContract)
+	ErrReleaseContract    = fmt.Errorf("release contract violation: %w", ErrFoundationContract)
+	ErrJSONContract       = fmt.Errorf("json contract violation: %w", ErrFoundationContract)
+	ErrNilContext         = fmt.Errorf("nil context: %w", ErrFoundationContract)
 )
 
 func wrapFoundationContract(format string) error {

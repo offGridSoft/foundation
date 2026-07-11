@@ -3,12 +3,12 @@ package license
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
 	"time"
 
-	"encoding/json"
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 

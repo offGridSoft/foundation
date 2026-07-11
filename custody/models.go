@@ -97,20 +97,21 @@ func (r SessionOpenResponse) Validate() error {
 }
 
 func validateUploadTargetSet(targets []UploadTarget, errFmt string) error {
-	if len(targets) == 0 {
+	if err := (core.CollectionCardinality{
+		Length:  len(targets),
+		Minimum: 1,
+		Maximum: core.CollectionMaximumDefault,
+	}).Validate(); err != nil {
 		return fmt.Errorf(errFmt, core.ErrCustodyContract)
 	}
-	artifacts := core.NewUniqueStringSet(len(targets))
-	objects := core.NewUniqueStringSet(len(targets))
-	for _, target := range targets {
+	for index, target := range targets {
 		if err := target.Validate(); err != nil {
 			return fmt.Errorf(errFmt, err)
 		}
-		if err := artifacts.Add(target.Artifact.String()); err != nil {
-			return fmt.Errorf(errFmt, core.ErrCustodyContract)
-		}
-		if err := objects.Add(target.Object.String()); err != nil {
-			return fmt.Errorf(errFmt, core.ErrCustodyContract)
+		for _, prior := range targets[:index] {
+			if prior.Artifact == target.Artifact || prior.Object == target.Object {
+				return fmt.Errorf(errFmt, core.ErrCustodyContract)
+			}
 		}
 	}
 	return nil
@@ -141,13 +142,24 @@ func (t UploadTarget) Validate() error {
 	if err := t.Method.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtStorage, err)
 	}
-	names := core.NewUniqueStringSet(len(t.Headers))
-	for _, header := range t.Headers {
+	return validateUploadHeaders(t.Headers)
+}
+
+func validateUploadHeaders(headers []UploadHeader) error {
+	if err := (core.CollectionCardinality{
+		Length:  len(headers),
+		Maximum: core.HTTPHeaderMaximumDefault,
+	}).Validate(); err != nil {
+		return fmt.Errorf(ErrFmtStorage, core.ErrCustodyContract)
+	}
+	for index, header := range headers {
 		if err := header.Validate(); err != nil {
 			return fmt.Errorf(ErrFmtStorage, err)
 		}
-		if err := names.Add(strings.ToLower(header.Name)); err != nil {
-			return fmt.Errorf(ErrFmtStorage, core.ErrCustodyContract)
+		for _, prior := range headers[:index] {
+			if strings.EqualFold(prior.Name, header.Name) {
+				return fmt.Errorf(ErrFmtStorage, core.ErrCustodyContract)
+			}
 		}
 	}
 	return nil
@@ -288,20 +300,21 @@ func validateReceiptIdentity(b ReceiptBody) error {
 }
 
 func validateUploadedObjectSet(objects []UploadedObject, errFmt string) error {
-	if len(objects) == 0 {
+	if err := (core.CollectionCardinality{
+		Length:  len(objects),
+		Minimum: 1,
+		Maximum: core.CollectionMaximumDefault,
+	}).Validate(); err != nil {
 		return fmt.Errorf(errFmt, core.ErrCustodyContract)
 	}
-	artifacts := core.NewUniqueStringSet(len(objects))
-	paths := core.NewUniqueStringSet(len(objects))
-	for _, object := range objects {
+	for index, object := range objects {
 		if err := object.Validate(); err != nil {
 			return fmt.Errorf(errFmt, err)
 		}
-		if err := artifacts.Add(object.Artifact.String()); err != nil {
-			return fmt.Errorf(errFmt, core.ErrCustodyContract)
-		}
-		if err := paths.Add(object.Object.String()); err != nil {
-			return fmt.Errorf(errFmt, core.ErrCustodyContract)
+		for _, prior := range objects[:index] {
+			if prior.Artifact == object.Artifact || prior.Object == object.Object {
+				return fmt.Errorf(errFmt, core.ErrCustodyContract)
+			}
 		}
 	}
 	return nil
@@ -331,7 +344,10 @@ func validateReceiptLedger(b ReceiptBody) error {
 }
 
 func (b ReceiptBody) Canonical(dst []byte) ([]byte, error) {
-	return core.AppendCanonicalJSON(dst, b)
+	if err := b.Validate(); err != nil {
+		return nil, err
+	}
+	return appendReceiptBodyJSON(dst, b)
 }
 
 func (b ReceiptBody) MarshalJSON() ([]byte, error) {

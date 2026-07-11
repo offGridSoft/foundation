@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,14 +14,17 @@ import (
 	"strings"
 	"time"
 
-	"encoding/json"
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
 const (
-	CheckInResponseByteCap = 1 << 16
-	CheckInBudget          = 8 * time.Second
-	CheckInMaxRetryAfter   = 24 * time.Hour
+	CheckInResponseByteCap     = 1 << 16
+	CheckInBudget              = 8 * time.Second
+	CheckInMinInterval         = 24 * time.Hour
+	WarnWindow                 = 7 * 24 * time.Hour
+	ClockSkewAllowance         = 60 * time.Minute
+	CheckInMaxRetryAfter       = 24 * time.Hour
+	CheckInRemediationMaxRunes = 512
 )
 
 type CheckInAPIError struct {
@@ -64,14 +68,22 @@ func (e CheckInRetryExhaustedError) Unwrap() error {
 	return e.Cause
 }
 
-var CheckInBackoff = core.BackoffPolicy{
-	Base:        100 * time.Millisecond,
-	Max:         2 * time.Second,
-	MaxAttempts: 4,
+const (
+	checkInBackoffBase        = 100 * time.Millisecond
+	checkInBackoffMax         = 2 * time.Second
+	checkInBackoffMaxAttempts = 4
+)
+
+func DefaultCheckInBackoff() core.BackoffPolicy {
+	return core.BackoffPolicy{
+		Base:        checkInBackoffBase,
+		Max:         checkInBackoffMax,
+		MaxAttempts: checkInBackoffMaxAttempts,
+	}
 }
 
 type CheckInPayload interface {
-	Validate() error
+	core.Validatable
 }
 
 type CheckInResponse[B Body] struct {
@@ -81,9 +93,8 @@ type CheckInResponse[B Body] struct {
 	Granted     bool            `json:"granted"`
 }
 
-// APIBody lets Foundation response contracts satisfy offgridsoftware and
-// kernel transport.JSON body interfaces structurally without importing either
-// transport package.
+// APIBody lets Foundation response contracts satisfy lfw/api.Body
+// structurally without reversing the dependency into the transport package.
 func (CheckInResponse[B]) APIBody() {}
 
 func (r CheckInResponse[B]) Validate() error {
@@ -102,7 +113,7 @@ func (r CheckInResponse[B]) Validate() error {
 	if err := r.Refusal.Validate(); err != nil || r.Refusal == RefusalNone {
 		return fmt.Errorf(ErrFmtCheckInResponse, core.ErrLicenseContract)
 	}
-	if strings.TrimSpace(r.Remediation) == "" {
+	if err := core.ValidateOpaqueToken(r.Remediation, CheckInRemediationMaxRunes); err != nil {
 		return fmt.Errorf(ErrFmtCheckInResponse, core.ErrLicenseContract)
 	}
 	return nil
@@ -141,6 +152,9 @@ func (c Client[P, B]) Validate() error {
 }
 
 func (c Client[P, B]) Do(ctx context.Context, in P) (CheckInResponse[B], error) {
+	if ctx == nil {
+		return CheckInResponse[B]{}, fmt.Errorf(ErrFmtCheckInClient, errors.Join(core.ErrLicenseContract, core.ErrNilContext))
+	}
 	if err := c.Validate(); err != nil {
 		return CheckInResponse[B]{}, err
 	}
@@ -210,13 +224,15 @@ func (c Client[P, B]) attempt(ctx context.Context, body []byte, maxRetryAfterWai
 	if err != nil {
 		return attemptResult[B]{Outcome: core.HTTPOutcomeRetryable, Err: transportError(err)}
 	}
-	if reply == nil {
+	if reply == nil || reply.Body == nil {
 		return attemptResult[B]{
 			Outcome: core.HTTPOutcomeTerminal,
 			Err:     fmt.Errorf(ErrFmtCheckInTransport, core.ErrLicenseContract),
 		}
 	}
-	defer func() { _ = reply.Body.Close() }()
+	defer func() {
+		_ = reply.Body.Close() // Safe: the bounded body read owns the meaningful transport result.
+	}()
 	outcome := core.ClassifyHTTPStatus(reply.StatusCode)
 	if outcome != core.HTTPOutcomeSuccess {
 		retryAfter := parseRetryAfter(reply.Header.Get(core.HTTPHeaderRetryAfter), time.Now().UTC(), maxRetryAfterWait)
@@ -269,9 +285,6 @@ func readResponse[B Body](reply *http.Response, keyring core.SigningKeyring) (Ch
 	if err := decoded.ValidateSuccess(); err != nil {
 		return CheckInResponse[B]{}, fmt.Errorf(ErrFmtCheckInResponse, errors.Join(core.ErrLicenseContract, err))
 	}
-	if err := decoded.Data.Validate(); err != nil {
-		return CheckInResponse[B]{}, err
-	}
 	if err := verifyGrantedLease(*decoded.Data, keyring); err != nil {
 		return CheckInResponse[B]{}, err
 	}
@@ -315,6 +328,9 @@ func readFailureResponse[B Body](reply *http.Response, statusCode int, retryAfte
 }
 
 func readCappedResponseBody(body io.Reader) ([]byte, error) {
+	if body == nil {
+		return nil, fmt.Errorf(ErrFmtCheckInResponse, core.ErrLicenseContract)
+	}
 	data, err := io.ReadAll(io.LimitReader(body, CheckInResponseByteCap+1))
 	if err != nil {
 		return nil, transportError(err)
@@ -338,7 +354,7 @@ func (c Client[P, B]) jitterFraction() float64 {
 
 func (c Client[P, B]) backoffPolicy() core.BackoffPolicy {
 	if c.Backoff == (core.BackoffPolicy{}) {
-		return CheckInBackoff
+		return DefaultCheckInBackoff()
 	}
 	return c.Backoff
 }

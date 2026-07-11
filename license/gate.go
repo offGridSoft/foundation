@@ -1,10 +1,11 @@
 package license
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
-	"encoding/json"
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
@@ -18,22 +19,31 @@ const (
 	GateRefuse
 )
 
-var gateOutcomeNames = [...]string{
-	GateAllow:  "allow",
-	GateWarn:   "warn",
-	GateTeach:  "teach",
-	GateRefuse: "refuse",
+const (
+	GateOutcomeTokenAllow  = "allow"
+	GateOutcomeTokenWarn   = "warn"
+	GateOutcomeTokenTeach  = "teach"
+	GateOutcomeTokenRefuse = "refuse"
+)
+
+func gateOutcomeNames() [GateRefuse + 1]string {
+	return [...]string{
+		GateAllow:  GateOutcomeTokenAllow,
+		GateWarn:   GateOutcomeTokenWarn,
+		GateTeach:  GateOutcomeTokenTeach,
+		GateRefuse: GateOutcomeTokenRefuse,
+	}
 }
 
 func (o GateOutcome) String() string {
 	if o.IsValid() {
-		return gateOutcomeNames[o]
+		return gateOutcomeNames()[o]
 	}
 	return ""
 }
 
 func (o GateOutcome) IsValid() bool {
-	return o > gateOutcomeInvalid && int(o) < len(gateOutcomeNames) && gateOutcomeNames[o] != ""
+	return o > gateOutcomeInvalid && int(o) < len(gateOutcomeNames()) && gateOutcomeNames()[o] != ""
 }
 
 func (o GateOutcome) Validate() error {
@@ -51,8 +61,8 @@ func (o GateOutcome) MarshalJSON() ([]byte, error) {
 }
 
 func ParseGateOutcome(token string) (GateOutcome, error) {
-	for outcome := GateAllow; int(outcome) < len(gateOutcomeNames); outcome++ {
-		if gateOutcomeNames[outcome] == token {
+	for outcome := GateAllow; int(outcome) < len(gateOutcomeNames()); outcome++ {
+		if gateOutcomeNames()[outcome] == token {
 			return outcome, nil
 		}
 	}
@@ -84,20 +94,27 @@ const (
 	LeaseTrustTrusted
 )
 
-var leaseTrustNames = [...]string{
-	LeaseTrustUntrusted: "untrusted",
-	LeaseTrustTrusted:   "trusted",
+const (
+	LeaseTrustTokenUntrusted = "untrusted"
+	LeaseTrustTokenTrusted   = "trusted"
+)
+
+func leaseTrustNames() [LeaseTrustTrusted + 1]string {
+	return [...]string{
+		LeaseTrustUntrusted: LeaseTrustTokenUntrusted,
+		LeaseTrustTrusted:   LeaseTrustTokenTrusted,
+	}
 }
 
 func (t LeaseTrust) String() string {
 	if t.IsValid() {
-		return leaseTrustNames[t]
+		return leaseTrustNames()[t]
 	}
 	return ""
 }
 
 func (t LeaseTrust) IsValid() bool {
-	return t > leaseTrustInvalid && int(t) < len(leaseTrustNames) && leaseTrustNames[t] != ""
+	return t > leaseTrustInvalid && int(t) < len(leaseTrustNames()) && leaseTrustNames()[t] != ""
 }
 
 func (t LeaseTrust) Validate() error {
@@ -119,8 +136,8 @@ func (t LeaseTrust) MarshalJSON() ([]byte, error) {
 }
 
 func ParseLeaseTrust(token string) (LeaseTrust, error) {
-	for trust := LeaseTrustUntrusted; int(trust) < len(leaseTrustNames); trust++ {
-		if leaseTrustNames[trust] == token {
+	for trust := LeaseTrustUntrusted; int(trust) < len(leaseTrustNames()); trust++ {
+		if leaseTrustNames()[trust] == token {
 			return trust, nil
 		}
 	}
@@ -156,23 +173,107 @@ type GateDecision struct {
 	State     LeaseState
 }
 
+type GateInputError struct {
+	Reason GateReason
+}
+
+func (e GateInputError) Error() string {
+	return ErrMsgGateInput
+}
+
+func (e GateInputError) Unwrap() error {
+	return core.ErrLicenseContract
+}
+
+func (in GateInput[B]) Validate() error {
+	reason := gateInputViolation(in)
+	if reason == gateReasonInvalid {
+		return nil
+	}
+	return GateInputError{Reason: reason}
+}
+
+func gateInputViolation[B Body](in GateInput[B]) GateReason {
+	switch {
+	case in.Disarmed:
+		return gateReasonInvalid
+	case in.Now.IsZero():
+		return GateReasonInvalidClock
+	case in.ClockHighWater.After(in.Now):
+		return GateReasonClockRollback
+	case in.WarnWindow < 0:
+		return GateReasonInvalidWindow
+	case !in.Trust.IsValid():
+		return GateReasonInvalidTrust
+	case in.Trust.Trusted():
+		if err := in.Lease.Validate(); err != nil {
+			return GateReasonInvalidLease
+		}
+	}
+	return gateReasonInvalid
+}
+
+func (d GateDecision) Validate() error {
+	if err := d.Reason.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtGateDecision, err)
+	}
+	switch d.Reason {
+	case GateReasonLeaseValid:
+		return validateGateDecisionState(d, LeaseValid, false)
+	case GateReasonLeaseWarning:
+		return validateGateDecisionState(d, LeaseWarning, true)
+	case GateReasonLeaseGrace:
+		return validateGateDecisionState(d, LeaseGrace, true)
+	case GateReasonLeaseExpired:
+		return validateGateDecisionState(d, LeaseExpired, false)
+	case GateReasonDisarmed, GateReasonInvalidClock, GateReasonClockRollback, GateReasonInvalidTrust,
+		GateReasonTeaching, GateReasonMissingTrustedLease, GateReasonInvalidWindow, GateReasonInvalidLease:
+		if d.State != leaseStateInvalid || d.Remaining != 0 {
+			return fmt.Errorf(ErrFmtGateDecision, core.ErrLicenseContract)
+		}
+		return nil
+	default:
+		return fmt.Errorf(ErrFmtGateDecision, core.ErrLicenseContract)
+	}
+}
+
+func validateGateDecisionState(d GateDecision, state LeaseState, requireRemaining bool) error {
+	if d.State != state {
+		return fmt.Errorf(ErrFmtGateDecision, core.ErrLicenseContract)
+	}
+	if requireRemaining && d.Remaining <= 0 {
+		return fmt.Errorf(ErrFmtGateDecision, core.ErrLicenseContract)
+	}
+	if !requireRemaining && d.Remaining != 0 {
+		return fmt.Errorf(ErrFmtGateDecision, core.ErrLicenseContract)
+	}
+	return nil
+}
+
 func Gate[B Body](in GateInput[B]) GateDecision {
+	if err := in.Validate(); err != nil {
+		if inputErr, ok := errors.AsType[GateInputError](err); ok {
+			return validatedGateDecision(GateDecision{Reason: inputErr.Reason})
+		}
+		return validatedGateDecision(GateDecision{Reason: GateReasonInvalidTrust})
+	}
 	if in.Disarmed {
-		return GateDecision{Reason: GateReasonDisarmed}
+		return validatedGateDecision(GateDecision{Reason: GateReasonDisarmed})
 	}
-	if in.Now.IsZero() {
-		return GateDecision{Reason: GateReasonInvalidClock}
+	var decision GateDecision
+	if !in.Trust.Trusted() {
+		decision = untrustedLeaseDecision(in.TeachingShown)
+	} else {
+		decision = trustedLeaseDecision(in.Now, in.Lease, in.WarnWindow)
 	}
-	if in.ClockHighWater.After(in.Now) {
-		return GateDecision{Reason: GateReasonClockRollback}
-	}
-	if !in.Trust.IsValid() {
+	return validatedGateDecision(decision)
+}
+
+func validatedGateDecision(decision GateDecision) GateDecision {
+	if err := decision.Validate(); err != nil {
 		return GateDecision{Reason: GateReasonInvalidTrust}
 	}
-	if !in.Trust.Trusted() {
-		return untrustedLeaseDecision(in.TeachingShown)
-	}
-	return trustedLeaseDecision(in.Now, in.Lease, in.WarnWindow)
+	return decision
 }
 
 func untrustedLeaseDecision(teachingShown bool) GateDecision {
@@ -187,7 +288,7 @@ func trustedLeaseDecision[B Body](
 	lease B,
 	warnWindow time.Duration,
 ) GateDecision {
-	state := Status(lease, now, warnWindow)
+	state := leaseStatus(lease, now, warnWindow)
 	switch state {
 	case LeaseValid:
 		return GateDecision{Reason: GateReasonLeaseValid, State: state}
@@ -222,30 +323,51 @@ const (
 	GateReasonLeaseWarning
 	GateReasonLeaseGrace
 	GateReasonLeaseExpired
+	GateReasonInvalidWindow
+	GateReasonInvalidLease
 )
 
-var gateReasonNames = [...]string{
-	GateReasonDisarmed:            "disarmed",
-	GateReasonInvalidClock:        "invalid_clock",
-	GateReasonClockRollback:       "clock_rollback",
-	GateReasonInvalidTrust:        "invalid_trust_resolution",
-	GateReasonTeaching:            "teaching",
-	GateReasonMissingTrustedLease: "missing_trusted_lease",
-	GateReasonLeaseValid:          "lease_valid",
-	GateReasonLeaseWarning:        "lease_warning",
-	GateReasonLeaseGrace:          "lease_grace",
-	GateReasonLeaseExpired:        "lease_expired",
+const (
+	GateReasonTokenDisarmed            = "disarmed"
+	GateReasonTokenInvalidClock        = "invalid_clock"
+	GateReasonTokenClockRollback       = "clock_rollback"
+	GateReasonTokenInvalidTrust        = "invalid_trust_resolution"
+	GateReasonTokenTeaching            = "teaching"
+	GateReasonTokenMissingTrustedLease = "missing_trusted_lease"
+	GateReasonTokenLeaseValid          = "lease_valid"
+	GateReasonTokenLeaseWarning        = "lease_warning"
+	GateReasonTokenLeaseGrace          = "lease_grace"
+	GateReasonTokenLeaseExpired        = "lease_expired"
+	GateReasonTokenInvalidWindow       = "invalid_warning_window"
+	GateReasonTokenInvalidLease        = "invalid_lease"
+)
+
+func gateReasonNames() [GateReasonInvalidLease + 1]string {
+	return [...]string{
+		GateReasonDisarmed:            GateReasonTokenDisarmed,
+		GateReasonInvalidClock:        GateReasonTokenInvalidClock,
+		GateReasonClockRollback:       GateReasonTokenClockRollback,
+		GateReasonInvalidTrust:        GateReasonTokenInvalidTrust,
+		GateReasonTeaching:            GateReasonTokenTeaching,
+		GateReasonMissingTrustedLease: GateReasonTokenMissingTrustedLease,
+		GateReasonLeaseValid:          GateReasonTokenLeaseValid,
+		GateReasonLeaseWarning:        GateReasonTokenLeaseWarning,
+		GateReasonLeaseGrace:          GateReasonTokenLeaseGrace,
+		GateReasonLeaseExpired:        GateReasonTokenLeaseExpired,
+		GateReasonInvalidWindow:       GateReasonTokenInvalidWindow,
+		GateReasonInvalidLease:        GateReasonTokenInvalidLease,
+	}
 }
 
 func (r GateReason) String() string {
 	if r.IsValid() {
-		return gateReasonNames[r]
+		return gateReasonNames()[r]
 	}
 	return ""
 }
 
 func (r GateReason) IsValid() bool {
-	return r > gateReasonInvalid && int(r) < len(gateReasonNames) && gateReasonNames[r] != ""
+	return r > gateReasonInvalid && int(r) < len(gateReasonNames()) && gateReasonNames()[r] != ""
 }
 
 func (r GateReason) Validate() error {
@@ -263,7 +385,7 @@ func (r GateReason) Outcome() GateOutcome {
 		return GateWarn
 	case GateReasonTeaching:
 		return GateTeach
-	case GateReasonInvalidClock, GateReasonClockRollback, GateReasonInvalidTrust, GateReasonMissingTrustedLease, GateReasonLeaseExpired:
+	case GateReasonInvalidClock, GateReasonClockRollback, GateReasonInvalidTrust, GateReasonMissingTrustedLease, GateReasonLeaseExpired, GateReasonInvalidWindow, GateReasonInvalidLease:
 		return GateRefuse
 	default:
 		return gateOutcomeInvalid
@@ -278,8 +400,8 @@ func (r GateReason) MarshalJSON() ([]byte, error) {
 }
 
 func ParseGateReason(token string) (GateReason, error) {
-	for reason := GateReasonDisarmed; int(reason) < len(gateReasonNames); reason++ {
-		if gateReasonNames[reason] == token {
+	for reason := GateReasonDisarmed; int(reason) < len(gateReasonNames()); reason++ {
+		if gateReasonNames()[reason] == token {
 			return reason, nil
 		}
 	}

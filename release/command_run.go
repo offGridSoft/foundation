@@ -20,20 +20,22 @@ const (
 	CommandKindTokenDeploy  = "deploy"
 )
 
-var commandKindNames = [...]string{
-	CommandKindRelease: CommandKindTokenRelease,
-	CommandKindDeploy:  CommandKindTokenDeploy,
+func commandKindNames() [CommandKindDeploy + 1]string {
+	return [...]string{
+		CommandKindRelease: CommandKindTokenRelease,
+		CommandKindDeploy:  CommandKindTokenDeploy,
+	}
 }
 
 func (k CommandKind) String() string {
 	if k.IsValid() {
-		return commandKindNames[k]
+		return commandKindNames()[k]
 	}
 	return ""
 }
 
 func (k CommandKind) IsValid() bool {
-	return k > CommandKindUnknown && int(k) < len(commandKindNames) && commandKindNames[k] != ""
+	return k > CommandKindUnknown && int(k) < len(commandKindNames()) && commandKindNames()[k] != ""
 }
 
 func (k CommandKind) Validate() error {
@@ -44,8 +46,8 @@ func (k CommandKind) Validate() error {
 }
 
 func ParseCommandKind(token string) (CommandKind, error) {
-	for kind := CommandKindRelease; int(kind) < len(commandKindNames); kind++ {
-		if commandKindNames[kind] == token {
+	for kind := CommandKindRelease; int(kind) < len(commandKindNames()); kind++ {
+		if commandKindNames()[kind] == token {
 			return kind, nil
 		}
 	}
@@ -85,20 +87,22 @@ const (
 	CommandStatusTokenFailed    = "failed"
 )
 
-var commandStatusNames = [...]string{
-	CommandStatusSucceeded: CommandStatusTokenSucceeded,
-	CommandStatusFailed:    CommandStatusTokenFailed,
+func commandStatusNames() [CommandStatusFailed + 1]string {
+	return [...]string{
+		CommandStatusSucceeded: CommandStatusTokenSucceeded,
+		CommandStatusFailed:    CommandStatusTokenFailed,
+	}
 }
 
 func (s CommandStatus) String() string {
 	if s.IsValid() {
-		return commandStatusNames[s]
+		return commandStatusNames()[s]
 	}
 	return ""
 }
 
 func (s CommandStatus) IsValid() bool {
-	return s > CommandStatusUnknown && int(s) < len(commandStatusNames) && commandStatusNames[s] != ""
+	return s > CommandStatusUnknown && int(s) < len(commandStatusNames()) && commandStatusNames()[s] != ""
 }
 
 func (s CommandStatus) Validate() error {
@@ -109,8 +113,8 @@ func (s CommandStatus) Validate() error {
 }
 
 func ParseCommandStatus(token string) (CommandStatus, error) {
-	for status := CommandStatusSucceeded; int(status) < len(commandStatusNames); status++ {
-		if commandStatusNames[status] == token {
+	for status := CommandStatusSucceeded; int(status) < len(commandStatusNames()); status++ {
+		if commandStatusNames()[status] == token {
 			return status, nil
 		}
 	}
@@ -150,20 +154,22 @@ const (
 	TreeStateTokenDirty = "dirty"
 )
 
-var treeStateNames = [...]string{
-	TreeStateClean: TreeStateTokenClean,
-	TreeStateDirty: TreeStateTokenDirty,
+func treeStateNames() [TreeStateDirty + 1]string {
+	return [...]string{
+		TreeStateClean: TreeStateTokenClean,
+		TreeStateDirty: TreeStateTokenDirty,
+	}
 }
 
 func (s TreeState) String() string {
 	if s.IsValid() {
-		return treeStateNames[s]
+		return treeStateNames()[s]
 	}
 	return ""
 }
 
 func (s TreeState) IsValid() bool {
-	return s > TreeStateUnknown && int(s) < len(treeStateNames) && treeStateNames[s] != ""
+	return s > TreeStateUnknown && int(s) < len(treeStateNames()) && treeStateNames()[s] != ""
 }
 
 func (s TreeState) Validate() error {
@@ -174,8 +180,8 @@ func (s TreeState) Validate() error {
 }
 
 func ParseTreeState(token string) (TreeState, error) {
-	for state := TreeStateClean; int(state) < len(treeStateNames); state++ {
-		if treeStateNames[state] == token {
+	for state := TreeStateClean; int(state) < len(treeStateNames()); state++ {
+		if treeStateNames()[state] == token {
 			return state, nil
 		}
 	}
@@ -265,14 +271,21 @@ func (r CommandRun) Validate() error {
 }
 
 func (r CommandRun) Canonical(dst []byte) ([]byte, error) {
-	return core.AppendCanonicalJSON(dst, r)
+	if err := r.Validate(); err != nil {
+		return nil, err
+	}
+	return appendCommandRunJSON(dst, r)
 }
 
 func (r CommandRun) MarshalJSON() ([]byte, error) {
 	if err := r.Validate(); err != nil {
 		return nil, err
 	}
-	dst := []byte{'{'}
+	return appendCommandRunJSON(nil, r)
+}
+
+func appendCommandRunJSON(dst []byte, r CommandRun) ([]byte, error) {
+	dst = append(dst, '{')
 	var err error
 	dst, err = core.AppendJSONField(dst, jsonFieldKind, r.Kind)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldStatus, r.Status)

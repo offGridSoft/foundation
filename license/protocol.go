@@ -1,13 +1,13 @@
 package license
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"net/url"
 	"strings"
 
-	"encoding/json"
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
@@ -20,14 +20,6 @@ const (
 
 type CheckInEndpoint struct {
 	value string
-}
-
-func MustCheckInEndpoint(value string) CheckInEndpoint {
-	endpoint, err := ParseCheckInEndpoint(value)
-	if err != nil {
-		panic(err)
-	}
-	return endpoint
 }
 
 func CheckInPath(product core.Product) (string, error) {
@@ -89,10 +81,13 @@ func (e *CheckInEndpoint) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-var (
-	BugCheckInEndpoint     = MustCheckInEndpoint(OffgridAPIBaseURL + OffgridBugCheckInPath)
-	WitnessCheckInEndpoint = MustCheckInEndpoint(OffgridAPIBaseURL + OffgridWitnessCheckInPath)
-)
+func BugCheckInEndpoint() CheckInEndpoint {
+	return CheckInEndpoint{value: OffgridAPIBaseURL + OffgridBugCheckInPath}
+}
+
+func WitnessCheckInEndpoint() CheckInEndpoint {
+	return CheckInEndpoint{value: OffgridAPIBaseURL + OffgridWitnessCheckInPath}
+}
 
 func normalizeCheckInBaseURL(value string) (string, error) {
 	if err := core.ValidateOpaqueToken(value, core.HTTPSURLDefaultMaxRunes); err != nil {

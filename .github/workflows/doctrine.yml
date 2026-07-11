@@ -1,0 +1,70 @@
+name: Go Doctrine
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  doctrine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install pinned doctrine tools
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
+          go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
+          go install github.com/kisielk/errcheck@v1.20.0
+          go install go.uber.org/nilaway/cmd/nilaway@v0.0.0-20260612163715-2d8907f431ca
+          go install github.com/fzipp/gocyclo/cmd/gocyclo@v0.6.0
+          go install github.com/jgautheron/goconst/cmd/goconst@v1.10.1
+          go install golang.org/x/tools/go/analysis/passes/fieldalignment/cmd/fieldalignment@v0.45.0
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.26.1
+          go install github.com/offGridSoft/witness/cmd/witness-lint@670642153febca8179b47fe96c7b3b61d55db3e4
+
+      - name: Verify correctness and determinism
+        run: |
+          go test -count=1 ./...
+          go test -race -count=1 ./...
+          go vet ./...
+          staticcheck ./...
+          errcheck ./...
+          nilaway ./...
+          witness-lint ./...
+
+      - name: Verify doctrine form and security
+        run: |
+          test -z "$(gofmt -l .)"
+          go mod tidy -diff
+          gocyclo -over 10 --ignore '_test.go' .
+          goconst ./...
+          fieldalignment ./...
+          gosec -quiet ./...
+          govulncheck ./...
+
+      - name: Verify zero cross-package coupling
+        run: |
+          if go list -f '{{range .Imports}}{{printf "%s %s\n" $.ImportPath .}}{{end}}' ./... | grep -E ' github.com/offGridSoft/foundation/v2026/(license|release|custody)$'; then
+            exit 1
+          fi
+
+      - name: Verify hostile boundaries
+        run: |
+          go test -run '^$' -fuzz '^FuzzDecodeStrictJSONNeverPanics$' -fuzztime=10s ./core
+          go test -run '^$' -fuzz '^FuzzParseCheckInEndpointNeverPanics$' -fuzztime=10s ./license
+
+      - name: Verify allocation budgets
+        run: go test -run '^$' -bench . -benchmem -benchtime=1x ./...
