@@ -302,21 +302,46 @@ func TestFixedHexJSONRejectsNullAndEmptyHostileTable(t *testing.T) {
 	}
 }
 
-func TestAppendJSONFieldRejectsInvalidFieldNameHostileTable(t *testing.T) {
+func TestAppendJSONFieldNameHostileTable(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name      string
 		fieldName string
+		wantError bool
 	}{
-		{name: "control byte rejected", fieldName: "bad\x01field"},
-		{name: "newline rejected", fieldName: "bad\nfield"},
-		{name: "edge space rejected", fieldName: " field"},
-		{name: "empty rejected", fieldName: ""},
+		{name: "single lowercase letter accepted", fieldName: "a"},
+		{name: "lowercase word accepted", fieldName: "message"},
+		{name: "snake case accepted", fieldName: "device_fingerprint"},
+		{name: "digit suffix accepted", fieldName: "sha256"},
+		{name: "maximum length lowercase accepted", fieldName: strings.Repeat("a", JSONFieldNameMaxRunes)},
+		{name: "empty rejected", fieldName: "", wantError: true},
+		{name: "one over maximum rejected", fieldName: strings.Repeat("a", JSONFieldNameMaxRunes+1), wantError: true},
+		{name: "leading uppercase rejected", fieldName: "Message", wantError: true},
+		{name: "mixed uppercase rejected", fieldName: "MeSsAgE", wantError: true},
+		{name: "all uppercase rejected", fieldName: "MESSAGE", wantError: true},
+		{name: "digit prefix rejected", fieldName: "2026_schema", wantError: true},
+		{name: "leading separator rejected", fieldName: "_schema", wantError: true},
+		{name: "trailing separator rejected", fieldName: "schema_", wantError: true},
+		{name: "repeated separator rejected", fieldName: "request__id", wantError: true},
+		{name: "hyphen rejected", fieldName: "request-id", wantError: true},
+		{name: "period rejected", fieldName: "request.id", wantError: true},
+		{name: "slash rejected", fieldName: "request/id", wantError: true},
+		{name: "backslash rejected", fieldName: `request\id`, wantError: true},
+		{name: "leading space rejected", fieldName: " field", wantError: true},
+		{name: "trailing space rejected", fieldName: "field ", wantError: true},
+		{name: "newline rejected", fieldName: "bad\nfield", wantError: true},
+		{name: "control byte rejected", fieldName: "bad\x01field", wantError: true},
+		{name: "unicode case fold rejected", fieldName: "meſſage", wantError: true},
+		{name: "non-ascii letter rejected", fieldName: "mésage", wantError: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if _, err := AppendJSONField(nil, tc.fieldName, "value"); !errors.Is(err, ErrFoundationContract) {
-				t.Fatalf("AppendJSONField(%q) error = %v, want ErrFoundationContract", tc.fieldName, err)
+			_, err := AppendJSONField(nil, tc.fieldName, "value")
+			if tc.wantError && !errors.Is(err, ErrJSONContract) {
+				t.Fatalf("AppendJSONField(%q) error = %v, want ErrJSONContract", tc.fieldName, err)
+			}
+			if !tc.wantError && err != nil {
+				t.Fatalf("AppendJSONField(%q) unexpected error = %v", tc.fieldName, err)
 			}
 		})
 	}
@@ -828,6 +853,8 @@ func TestDecodeStrictJSONHostileTable(t *testing.T) {
 		raw  string
 	}{
 		{name: "duplicate field", raw: `{"name":"a","name":"b"}`},
+		{name: "case-variant duplicate field", raw: `{"name":"a","Name":"b"}`},
+		{name: "case-variant field", raw: `{"Name":"a","at":1,"ok":true}`},
 		{name: "unknown field", raw: `{"name":"a","extra":"b"}`},
 		{name: "trailing object", raw: `{"name":"a"}{"name":"b"}`},
 		{name: "array instead of object", raw: `[]`},
@@ -838,6 +865,32 @@ func TestDecodeStrictJSONHostileTable(t *testing.T) {
 			t.Parallel()
 			if _, err := DecodeStrictJSON[strictJSONHostilePayload]([]byte(tc.raw)); !errors.Is(err, ErrJSONContract) {
 				t.Fatalf("DecodeStrictJSON error = %v, want ErrJSONContract", err)
+			}
+		})
+	}
+}
+
+func TestDecodeStrictJSONRejectsNonCanonicalAPIFieldCase(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		raw  string
+	}{
+		{name: "mixed-case message rejected", raw: `{"MeSsAgE":"smuggled","code":"forbidden"}`},
+		{name: "title-case message rejected", raw: `{"Message":"smuggled","code":"forbidden"}`},
+		{name: "uppercase message rejected", raw: `{"MESSAGE":"smuggled","code":"forbidden"}`},
+		{name: "mixed-case code rejected", raw: `{"message":"denied","CoDe":"forbidden"}`},
+		{name: "title-case tip rejected", raw: `{"message":"denied","Tip":"retry","code":"forbidden"}`},
+		{name: "canonical then title-case duplicate rejected", raw: `{"message":"legit","Message":"smuggled","code":"forbidden"}`},
+		{name: "title-case then canonical duplicate rejected", raw: `{"Message":"smuggled","message":"legit","code":"forbidden"}`},
+		{name: "uppercase then canonical duplicate rejected", raw: `{"MESSAGE":"smuggled","message":"legit","code":"forbidden"}`},
+		{name: "unicode long-s field rejected", raw: `{"meſſage":"smuggled","code":"forbidden"}`},
+		{name: "non-ascii field rejected", raw: `{"méssage":"smuggled","code":"forbidden"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if _, err := DecodeStrictJSON[APIErrorBody]([]byte(tc.raw)); !errors.Is(err, ErrJSONContract) {
+				t.Fatalf("DecodeStrictJSON(%s) error = %v, want ErrJSONContract", tc.raw, err)
 			}
 		})
 	}

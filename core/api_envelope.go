@@ -55,9 +55,14 @@ func ParseAPIRequestID(value string) (APIRequestID, error) {
 
 func normalizeAPIRequestID(value string) string {
 	value = strings.TrimSpace(dropControlRunes(value))
+	value = truncateRunes(value, APIRequestIDMaxRunes)
+	return strings.TrimSpace(value)
+}
+
+func truncateRunes(value string, maximum int) string {
 	runeCount := 0
 	for index := range value {
-		if runeCount == APIRequestIDMaxRunes {
+		if runeCount == maximum {
 			return value[:index]
 		}
 		runeCount++

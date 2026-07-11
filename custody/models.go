@@ -456,6 +456,10 @@ func (b ReceiptBody) Canonical(dst []byte) ([]byte, error) {
 	return appendReceiptBodyJSON(dst, b)
 }
 
+func (b ReceiptBody) SigningSchema() core.SchemaID {
+	return b.Schema
+}
+
 func (b ReceiptBody) MarshalJSON() ([]byte, error) {
 	if err := b.Validate(); err != nil {
 		return nil, err

@@ -53,6 +53,7 @@ const (
 	ErrFmtUnixNanoTime        = "core.UnixNanoTime: %w"
 	ErrFmtNanosecondsDuration = "core.NanosecondsDuration: %w"
 	ErrFmtMoneyPennies        = "core.MoneyPennies: %w"
+	ErrFmtJSONFieldName       = "core.JSON.FieldName: %w"
 	ErrFmtJSONTrailingValue   = "core.JSON.TrailingValue: %w"
 	ErrFmtJSONDuplicateField  = "core.JSON.DuplicateField: %w"
 	ErrFmtJSONUnexpectedField = "core.JSON.UnexpectedField: %w"

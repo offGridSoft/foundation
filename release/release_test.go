@@ -184,6 +184,16 @@ func TestUploadAndDownloadHostileTable(t *testing.T) {
 			return target.Validate()
 		}, wantErr: true},
 		{name: "valid upload receipt", run: func() error { return validUploadReceipt(t).Validate() }},
+		{name: "upload receipt zero schema rejected", run: func() error {
+			receipt := validUploadReceipt(t)
+			receipt.Schema = core.SchemaUnknown
+			return receipt.Validate()
+		}, wantErr: true},
+		{name: "upload receipt cross-contract schema rejected", run: func() error {
+			receipt := validUploadReceipt(t)
+			receipt.Schema = core.SchemaReleaseDownloadIndex
+			return receipt.Validate()
+		}, wantErr: true},
 		{name: "duplicate uploaded artifact", run: func() error {
 			receipt := validUploadReceipt(t)
 			receipt.Objects = append(receipt.Objects, receipt.Objects[0])
@@ -192,6 +202,16 @@ func TestUploadAndDownloadHostileTable(t *testing.T) {
 			return receipt.Validate()
 		}, wantErr: true},
 		{name: "valid download index", run: func() error { return validDownloadIndex(t).Validate() }},
+		{name: "download index zero schema rejected", run: func() error {
+			index := validDownloadIndex(t)
+			index.Schema = core.SchemaUnknown
+			return index.Validate()
+		}, wantErr: true},
+		{name: "download index cross-contract schema rejected", run: func() error {
+			index := validDownloadIndex(t)
+			index.Schema = core.SchemaReleaseUploadReceipt
+			return index.Validate()
+		}, wantErr: true},
 		{name: "duplicate download platform", run: func() error {
 			index := validDownloadIndex(t)
 			index.Downloads = append(index.Downloads, index.Downloads[0])
@@ -386,6 +406,56 @@ func TestManifestCanonicalRoundTripTable(t *testing.T) {
 	}
 }
 
+func TestReceiptAndIndexCanonicalSigningContracts(t *testing.T) {
+	t.Parallel()
+
+	t.Run("upload receipt", func(t *testing.T) {
+		t.Parallel()
+		original := validUploadReceipt(t)
+		if original.SigningSchema() != core.SchemaReleaseUploadReceipt {
+			t.Fatalf("UploadReceipt.SigningSchema() = %v", original.SigningSchema())
+		}
+		canonical, err := original.Canonical(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded, err := core.DecodeStrictJSON[UploadReceipt](canonical)
+		if err != nil {
+			t.Fatal(err)
+		}
+		roundTrip, err := decoded.Canonical(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(roundTrip) != string(canonical) {
+			t.Fatalf("UploadReceipt canonical round trip\n got: %s\nwant: %s", roundTrip, canonical)
+		}
+	})
+
+	t.Run("download index", func(t *testing.T) {
+		t.Parallel()
+		original := validDownloadIndex(t)
+		if original.SigningSchema() != core.SchemaReleaseDownloadIndex {
+			t.Fatalf("DownloadIndex.SigningSchema() = %v", original.SigningSchema())
+		}
+		canonical, err := original.Canonical(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded, err := core.DecodeStrictJSON[DownloadIndex](canonical)
+		if err != nil {
+			t.Fatal(err)
+		}
+		roundTrip, err := decoded.Canonical(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(roundTrip) != string(canonical) {
+			t.Fatalf("DownloadIndex canonical round trip\n got: %s\nwant: %s", roundTrip, canonical)
+		}
+	})
+}
+
 func TestReleaseRootLayoutHostileTable(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -395,6 +465,12 @@ func TestReleaseRootLayoutHostileTable(t *testing.T) {
 		wantError    bool
 	}{
 		{name: "valid release root"},
+		{name: "zero schema", mutateLayout: func(_ *testing.T, l *ReleaseRootLayout) {
+			l.Schema = core.SchemaUnknown
+		}, wantError: true},
+		{name: "cross-contract schema", mutateLayout: func(_ *testing.T, l *ReleaseRootLayout) {
+			l.Schema = core.SchemaReleasePlan
+		}, wantError: true},
 		{name: "unknown product", mutateInput: func(i *ReleaseRootInput) { i.Product = core.ProductUnknown }, wantError: true},
 		{name: "bad version", mutateInput: func(i *ReleaseRootInput) { i.Version = core.ProductVersion{} }, wantError: true},
 		{name: "bad date", mutateInput: func(i *ReleaseRootInput) { i.Date = ReleaseDate{value: "2026-7-8"} }, wantError: true},
@@ -441,7 +517,7 @@ func TestReleaseRootLayoutCanonicalRoundTripTable(t *testing.T) {
 		{
 			name:  "witness release root",
 			input: validReleaseRootInput(t),
-			want:  `{"product":"witness","version":"2026.0.0","date":"2026-07-08","release_id":"2026-07-08-2026.0.0","root":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0","private":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/private","public":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/public","platforms":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/platforms","receipts":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/receipts","manifests":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/manifests","dogfood":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/dogfood"}`,
+			want:  `{"` + core.JSONFieldSchema + `":"` + core.SchemaTokenReleaseRootLayout + `","product":"witness","version":"2026.0.0","date":"2026-07-08","release_id":"2026-07-08-2026.0.0","root":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0","private":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/private","public":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/public","platforms":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/platforms","receipts":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/receipts","manifests":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/manifests","dogfood":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/dogfood"}`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1410,6 +1486,8 @@ func TestReleasePlanHostileTable(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "valid witness plan accepted", mutate: func(*ReleasePlan) {}},
+		{name: "zero schema rejected", wantErr: true, mutate: func(p *ReleasePlan) { p.Schema = core.SchemaUnknown }},
+		{name: "cross-contract schema rejected", wantErr: true, mutate: func(p *ReleasePlan) { p.Schema = core.SchemaReleaseCommandRun }},
 		{name: "layout product drift rejected", wantErr: true, mutate: func(p *ReleasePlan) { p.Layout.Product = core.ProductBug }},
 		{name: "spec version drift rejected", wantErr: true, mutate: func(p *ReleasePlan) { p.Spec.Version = mustOtherVersion(t) }},
 		{name: "commit stamp drift rejected", wantErr: true, mutate: func(p *ReleasePlan) { p.Spec.Policy.CommitStamp.Commit = mustOtherCommit(t) }},
@@ -1531,6 +1609,8 @@ func TestCommandRunHostileTable(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "release run valid", mutate: func(*CommandRun) {}},
+		{name: "zero schema rejected", wantErr: true, mutate: func(r *CommandRun) { r.Schema = core.SchemaUnknown }},
+		{name: "cross-contract schema rejected", wantErr: true, mutate: func(r *CommandRun) { r.Schema = core.SchemaReleasePlan }},
 		{name: "deploy run valid", mutate: func(r *CommandRun) { r.Kind = CommandKindDeploy }},
 		{name: "dirty tree run valid", mutate: func(r *CommandRun) { r.TreeState = TreeStateDirty }},
 		{name: "unknown kind", wantErr: true, mutate: func(r *CommandRun) { r.Kind = CommandKindUnknown }},
@@ -1578,7 +1658,7 @@ func TestCommandRunCanonicalRoundTripTable(t *testing.T) {
 		{
 			name: "release command run",
 			run:  validCommandRun(t),
-			want: `{"kind":"release","status":"succeeded","tree_state":"clean","product":"witness","version":"2026.0.0","release_id":"2026-07-08-2026.0.0","git_commit":"` +
+			want: `{"` + core.JSONFieldSchema + `":"` + core.SchemaTokenReleaseCommandRun + `","kind":"release","status":"succeeded","tree_state":"clean","product":"witness","version":"2026.0.0","release_id":"2026-07-08-2026.0.0","git_commit":"` +
 				strings.Repeat("a", 40) +
 				`","machine":{"platform":"darwin-arm64","hostname_sha256":"` +
 				strings.Repeat("c", 64) +
@@ -1663,6 +1743,7 @@ func validReleasePlan(t *testing.T) ReleasePlan {
 	t.Helper()
 	tools := validToolProvenance(t)
 	return ReleasePlan{
+		Schema:    core.SchemaReleasePlan,
 		Product:   core.ProductWitness,
 		Version:   mustVersion(t),
 		ReleaseID: mustReleaseID(t),
@@ -1801,6 +1882,7 @@ func validCommandRun(t *testing.T) CommandRun {
 		t.Fatal(err)
 	}
 	return CommandRun{
+		Schema:         core.SchemaReleaseCommandRun,
 		Kind:           CommandKindRelease,
 		Status:         CommandStatusSucceeded,
 		TreeState:      TreeStateClean,

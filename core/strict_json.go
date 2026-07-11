@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 )
 
 const (
@@ -143,8 +144,13 @@ func scanStrictJSONKey(stack []strictJSONContainer, key string) ([]strictJSONCon
 	if len(top.keys) >= StrictJSONMaxObjectFields {
 		return nil, fmt.Errorf(ErrFmtJSONUnexpectedValue, ErrJSONContract)
 	}
-	if slices.Contains(top.keys, key) {
+	if slices.ContainsFunc(top.keys, func(existing string) bool {
+		return strings.EqualFold(existing, key)
+	}) {
 		return nil, fmt.Errorf(ErrFmtJSONDuplicateField, ErrJSONContract)
+	}
+	if err := ValidateJSONFieldName(key); err != nil {
+		return nil, fmt.Errorf(ErrFmtJSONUnexpectedField, ErrJSONContract)
 	}
 	top.keys = append(top.keys, key)
 	top.expectKey = false

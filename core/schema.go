@@ -26,6 +26,9 @@ const (
 	SchemaReleaseManifest
 	SchemaReleaseUploadReceipt
 	SchemaReleaseDownloadIndex
+	SchemaReleasePlan
+	SchemaReleaseRootLayout
+	SchemaReleaseCommandRun
 )
 
 const (
@@ -42,9 +45,12 @@ const (
 	SchemaTokenReleaseManifest            = "offgrid-release-manifest-v1"
 	SchemaTokenReleaseUploadReceipt       = "offgrid-release-upload-receipt-v1"
 	SchemaTokenReleaseDownloadIndex       = "offgrid-release-download-index-v1"
+	SchemaTokenReleasePlan                = "offgrid-release-plan-v1"
+	SchemaTokenReleaseRootLayout          = "offgrid-release-root-layout-v1"
+	SchemaTokenReleaseCommandRun          = "offgrid-release-command-run-v1"
 )
 
-func schemaNames() [SchemaReleaseDownloadIndex + 1]string {
+func schemaNames() [SchemaReleaseCommandRun + 1]string {
 	return [...]string{
 		SchemaBugUsage:                   SchemaTokenBugUsage,
 		SchemaWitnessUsage:               SchemaTokenWitnessUsage,
@@ -59,6 +65,9 @@ func schemaNames() [SchemaReleaseDownloadIndex + 1]string {
 		SchemaReleaseManifest:            SchemaTokenReleaseManifest,
 		SchemaReleaseUploadReceipt:       SchemaTokenReleaseUploadReceipt,
 		SchemaReleaseDownloadIndex:       SchemaTokenReleaseDownloadIndex,
+		SchemaReleasePlan:                SchemaTokenReleasePlan,
+		SchemaReleaseRootLayout:          SchemaTokenReleaseRootLayout,
+		SchemaReleaseCommandRun:          SchemaTokenReleaseCommandRun,
 	}
 }
 

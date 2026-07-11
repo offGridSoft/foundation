@@ -10,7 +10,7 @@ const (
 	ErrFmtSigningKeyID    = "core.SigningKeyID: %w"
 	ErrFmtSigningKeyring  = "core.SigningKeyring: %w"
 	ErrFmtSignedSignature = "core.Signed.Signature: %w"
-	SignedMessageDomain   = "foundation-signed-v1"
+	SignedMessageDomain   = "foundation-signed-2026"
 	SignedMessageSep      = byte(0)
 	SigningKeyringMaxKeys = 16
 )
@@ -18,6 +18,105 @@ const (
 type CanonicalBody interface {
 	Validatable
 	Canonical(dst []byte) ([]byte, error)
+	SigningSchema() SchemaID
+}
+
+type SigningDomain uint16
+
+const (
+	SigningDomainUnknown                  = SigningDomain(SchemaUnknown)
+	SigningDomainBugSeatLease             = SigningDomain(SchemaBugSeatLease)
+	SigningDomainWitnessSubscriptionLease = SigningDomain(SchemaWitnessSubscription)
+	SigningDomainWitnessCustodyReceipt    = SigningDomain(SchemaCustodyReceipt)
+	SigningDomainReleaseManifest          = SigningDomain(SchemaReleaseManifest)
+	SigningDomainReleaseUploadReceipt     = SigningDomain(SchemaReleaseUploadReceipt)
+	SigningDomainReleaseDownloadIndex     = SigningDomain(SchemaReleaseDownloadIndex)
+	SigningDomainReleasePlan              = SigningDomain(SchemaReleasePlan)
+	SigningDomainReleaseRootLayout        = SigningDomain(SchemaReleaseRootLayout)
+	SigningDomainReleaseCommandRun        = SigningDomain(SchemaReleaseCommandRun)
+)
+
+const (
+	SigningDomainTokenBugSeatLease             = "bug-seat-lease-2026"
+	SigningDomainTokenWitnessSubscriptionLease = "witness-subscription-lease-2026"
+	SigningDomainTokenWitnessCustodyReceipt    = "witness-custody-receipt-2026"
+	SigningDomainTokenReleaseManifest          = "release-manifest-2026"
+	SigningDomainTokenReleaseUploadReceipt     = "release-upload-receipt-2026"
+	SigningDomainTokenReleaseDownloadIndex     = "release-download-index-2026"
+	SigningDomainTokenReleasePlan              = "release-plan-2026"
+	SigningDomainTokenReleaseRootLayout        = "release-root-layout-2026"
+	SigningDomainTokenReleaseCommandRun        = "release-command-run-2026"
+	ErrFmtSigningDomain                        = "core.SigningDomain: %w"
+)
+
+func signingDomainNames() [SchemaReleaseCommandRun + 1]string {
+	return [...]string{
+		SigningDomainBugSeatLease:             SigningDomainTokenBugSeatLease,
+		SigningDomainWitnessSubscriptionLease: SigningDomainTokenWitnessSubscriptionLease,
+		SigningDomainWitnessCustodyReceipt:    SigningDomainTokenWitnessCustodyReceipt,
+		SigningDomainReleaseManifest:          SigningDomainTokenReleaseManifest,
+		SigningDomainReleaseUploadReceipt:     SigningDomainTokenReleaseUploadReceipt,
+		SigningDomainReleaseDownloadIndex:     SigningDomainTokenReleaseDownloadIndex,
+		SigningDomainReleasePlan:              SigningDomainTokenReleasePlan,
+		SigningDomainReleaseRootLayout:        SigningDomainTokenReleaseRootLayout,
+		SigningDomainReleaseCommandRun:        SigningDomainTokenReleaseCommandRun,
+	}
+}
+
+func (d SigningDomain) String() string {
+	if d.IsValid() {
+		return signingDomainNames()[d]
+	}
+	return ""
+}
+
+func (d SigningDomain) IsValid() bool {
+	return d > SigningDomainUnknown && int(d) < len(signingDomainNames()) && signingDomainNames()[d] != ""
+}
+
+func (d SigningDomain) Validate() error {
+	if !d.IsValid() {
+		return fmt.Errorf(ErrFmtSigningDomain, ErrFoundationContract)
+	}
+	return nil
+}
+
+func ParseSigningDomain(value string) (SigningDomain, error) {
+	for domain := SigningDomainUnknown + 1; int(domain) < len(signingDomainNames()); domain++ {
+		if domain.IsValid() && domain.String() == value {
+			return domain, nil
+		}
+	}
+	return SigningDomainUnknown, fmt.Errorf(ErrFmtSigningDomain, ErrFoundationContract)
+}
+
+func (d SigningDomain) MarshalJSON() ([]byte, error) {
+	if err := d.Validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(d.String())
+}
+
+//validate:unmarshal_ignore reason="ParseSigningDomain validates a temporary before assignment so rejected input cannot mutate the receiver."
+func (d *SigningDomain) UnmarshalJSON(data []byte) error {
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return fmt.Errorf(ErrFmtSigningDomain, ErrFoundationContract)
+	}
+	parsed, err := ParseSigningDomain(value)
+	if err != nil {
+		return err
+	}
+	*d = parsed
+	return nil
+}
+
+func (id SchemaID) ResolveSigningDomain() SigningDomain {
+	domain := SigningDomain(id)
+	if domain.IsValid() {
+		return domain
+	}
+	return SigningDomainUnknown
 }
 
 type SigningKeyID struct {
@@ -161,6 +260,12 @@ func AppendSignedMessage[B CanonicalBody](dst []byte, keyID SigningKeyID, body B
 		return nil, err
 	}
 	dst = append(dst, SignedMessageDomain...)
+	dst = append(dst, SignedMessageSep)
+	domain := body.SigningSchema().ResolveSigningDomain()
+	if err := domain.Validate(); err != nil {
+		return nil, err
+	}
+	dst = append(dst, domain.String()...)
 	dst = append(dst, SignedMessageSep)
 	dst = append(dst, keyID.String()...)
 	dst = append(dst, SignedMessageSep)

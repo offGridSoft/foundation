@@ -6,6 +6,12 @@ import (
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
+var (
+	_ core.CanonicalBody = Manifest{}
+	_ core.CanonicalBody = UploadReceipt{}
+	_ core.CanonicalBody = DownloadIndex{}
+)
+
 type ArchiveEntry struct {
 	Name ArtifactName `json:"name"`
 	Mode uint32       `json:"mode"`
@@ -180,6 +186,10 @@ func (m Manifest) Canonical(dst []byte) ([]byte, error) {
 	return appendManifestJSON(dst, m)
 }
 
+func (m Manifest) SigningSchema() core.SchemaID {
+	return m.Schema
+}
+
 func (m Manifest) MarshalJSON() ([]byte, error) {
 	if err := m.Validate(); err != nil {
 		return nil, err
@@ -289,6 +299,41 @@ func (r UploadReceipt) Validate() error {
 	return validateUploadedSet(r.Objects, r.ObjectCount, r.TotalBytes)
 }
 
+func (r UploadReceipt) Canonical(dst []byte) ([]byte, error) {
+	if err := r.Validate(); err != nil {
+		return nil, err
+	}
+	return appendUploadReceiptJSON(dst, r)
+}
+
+func (r UploadReceipt) SigningSchema() core.SchemaID {
+	return r.Schema
+}
+
+func (r UploadReceipt) MarshalJSON() ([]byte, error) {
+	if err := r.Validate(); err != nil {
+		return nil, err
+	}
+	return appendUploadReceiptJSON(nil, r)
+}
+
+func appendUploadReceiptJSON(dst []byte, r UploadReceipt) ([]byte, error) {
+	dst = append(dst, '{')
+	var err error
+	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, r.Schema)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldVersion, r.Version)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldReleaseID, r.ReleaseID)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldObjects, r.Objects)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldUploadedAt, r.UploadedAt)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldTotalBytes, r.TotalBytes)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldObjectCount, r.ObjectCount)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldProduct, r.Product)
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, '}'), nil
+}
+
 func validateReceiptIdentity(r UploadReceipt) error {
 	if err := r.Product.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtUploadReceipt, err)
@@ -350,6 +395,40 @@ func (i DownloadIndex) Validate() error {
 		return err
 	}
 	return validateDownloadSet(i.Downloads, i.DownloadCount)
+}
+
+func (i DownloadIndex) Canonical(dst []byte) ([]byte, error) {
+	if err := i.Validate(); err != nil {
+		return nil, err
+	}
+	return appendDownloadIndexJSON(dst, i)
+}
+
+func (i DownloadIndex) SigningSchema() core.SchemaID {
+	return i.Schema
+}
+
+func (i DownloadIndex) MarshalJSON() ([]byte, error) {
+	if err := i.Validate(); err != nil {
+		return nil, err
+	}
+	return appendDownloadIndexJSON(nil, i)
+}
+
+func appendDownloadIndexJSON(dst []byte, i DownloadIndex) ([]byte, error) {
+	dst = append(dst, '{')
+	var err error
+	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, i.Schema)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldVersion, i.Version)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldReleaseID, i.ReleaseID)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDownloads, i.Downloads)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldGeneratedAt, i.GeneratedAt)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDownloadCount, i.DownloadCount)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldProduct, i.Product)
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, '}'), nil
 }
 
 func validateDownloadIndexIdentity(i DownloadIndex) error {

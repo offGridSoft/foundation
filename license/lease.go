@@ -9,8 +9,7 @@ import (
 )
 
 type Body interface {
-	core.Validatable
-	Canonical(dst []byte) ([]byte, error)
+	core.CanonicalBody
 	ExpiresAt() core.UnixNanoTime
 	WriteGraceUntil() core.UnixNanoTime
 	CheckInAfter() core.UnixNanoTime
@@ -66,6 +65,10 @@ func (b SeatLeaseBody) Canonical(dst []byte) ([]byte, error) {
 		return nil, err
 	}
 	return appendSeatLeaseBodyJSON(dst, b)
+}
+
+func (b SeatLeaseBody) SigningSchema() core.SchemaID {
+	return b.Schema
 }
 
 func (b SeatLeaseBody) MarshalJSON() ([]byte, error) {
@@ -217,6 +220,10 @@ func (b SubscriptionLeaseBody) Canonical(dst []byte) ([]byte, error) {
 		return nil, err
 	}
 	return appendSubscriptionLeaseBodyJSON(dst, b)
+}
+
+func (b SubscriptionLeaseBody) SigningSchema() core.SchemaID {
+	return b.Schema
 }
 
 func (b SubscriptionLeaseBody) MarshalJSON() ([]byte, error) {

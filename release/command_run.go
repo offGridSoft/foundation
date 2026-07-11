@@ -7,6 +7,8 @@ import (
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
+var _ core.CanonicalBody = CommandRun{}
+
 type CommandKind uint8
 
 const (
@@ -254,10 +256,14 @@ type CommandRun struct {
 	Kind           CommandKind         `json:"kind"`
 	Status         CommandStatus       `json:"status"`
 	TreeState      TreeState           `json:"tree_state"`
+	Schema         core.SchemaID       `json:"schema"`
 	Product        core.Product        `json:"product"`
 }
 
 func (r CommandRun) Validate() error {
+	if r.Schema != core.SchemaReleaseCommandRun {
+		return fmt.Errorf(ErrFmtCommandRun, core.ErrReleaseContract)
+	}
 	if err := validateCommandRunIdentity(r); err != nil {
 		return err
 	}
@@ -277,6 +283,10 @@ func (r CommandRun) Canonical(dst []byte) ([]byte, error) {
 	return appendCommandRunJSON(dst, r)
 }
 
+func (r CommandRun) SigningSchema() core.SchemaID {
+	return r.Schema
+}
+
 func (r CommandRun) MarshalJSON() ([]byte, error) {
 	if err := r.Validate(); err != nil {
 		return nil, err
@@ -287,7 +297,8 @@ func (r CommandRun) MarshalJSON() ([]byte, error) {
 func appendCommandRunJSON(dst []byte, r CommandRun) ([]byte, error) {
 	dst = append(dst, '{')
 	var err error
-	dst, err = core.AppendJSONField(dst, jsonFieldKind, r.Kind)
+	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, r.Schema)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldKind, r.Kind)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldStatus, r.Status)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldTreeState, r.TreeState)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldProduct, r.Product)

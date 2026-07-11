@@ -7,6 +7,8 @@ import (
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
+var _ core.CanonicalBody = ReleaseRootLayout{}
+
 const (
 	ReleaseRootDirName      = "releases"
 	ReleasePlatformsDirName = "platforms"
@@ -49,6 +51,7 @@ type ReleaseRootLayout struct {
 	Receipts  BuildOutputPath     `json:"receipts"`
 	Manifests BuildOutputPath     `json:"manifests"`
 	Dogfood   BuildOutputPath     `json:"dogfood"`
+	Schema    core.SchemaID       `json:"schema"`
 	Product   core.Product        `json:"product"`
 }
 
@@ -64,6 +67,9 @@ func BuildReleaseRootLayout(input ReleaseRootInput) (ReleaseRootLayout, error) {
 }
 
 func (l ReleaseRootLayout) Validate() error {
+	if l.Schema != core.SchemaReleaseRootLayout {
+		return fmt.Errorf(ErrFmtReleaseRoot, core.ErrReleaseContract)
+	}
 	input := ReleaseRootInput{
 		Product:   l.Product,
 		Version:   l.Version,
@@ -87,6 +93,10 @@ func (l ReleaseRootLayout) Canonical(dst []byte) ([]byte, error) {
 	return appendReleaseRootLayoutJSON(dst, l)
 }
 
+func (l ReleaseRootLayout) SigningSchema() core.SchemaID {
+	return l.Schema
+}
+
 func (l ReleaseRootLayout) MarshalJSON() ([]byte, error) {
 	if err := l.Validate(); err != nil {
 		return nil, err
@@ -97,7 +107,8 @@ func (l ReleaseRootLayout) MarshalJSON() ([]byte, error) {
 func appendReleaseRootLayoutJSON(dst []byte, l ReleaseRootLayout) ([]byte, error) {
 	dst = append(dst, '{')
 	var err error
-	dst, err = core.AppendJSONField(dst, jsonFieldProduct, l.Product)
+	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, l.Schema)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldProduct, l.Product)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldVersion, l.Version)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDate, l.Date)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldReleaseID, l.ReleaseID)
@@ -124,6 +135,7 @@ func releaseRootLayoutFromInput(input ReleaseRootInput) (ReleaseRootLayout, erro
 		return ReleaseRootLayout{}, err
 	}
 	layout.Product = input.Product
+	layout.Schema = core.SchemaReleaseRootLayout
 	layout.Version = input.Version
 	layout.Date = input.Date
 	layout.ReleaseID = input.ReleaseID

@@ -2,11 +2,13 @@ package core
 
 import (
 	"encoding/json"
+	"fmt"
 )
 
 const (
-	JSONFieldNameMaxRunes = 128
-	JSONLiteralNull       = "null"
+	JSONFieldNameMaxRunes  = 128
+	JSONFieldNameSeparator = '_'
+	JSONLiteralNull        = "null"
 
 	JSONFieldChainHash  = "chain_hash"
 	JSONFieldAcceptedAt = "accepted_at"
@@ -24,7 +26,38 @@ const (
 )
 
 func ValidateJSONFieldName(name string) error {
-	return ValidateOpaqueToken(name, JSONFieldNameMaxRunes)
+	if err := ValidateOpaqueToken(name, JSONFieldNameMaxRunes); err != nil {
+		return fmt.Errorf(ErrFmtJSONFieldName, ErrJSONContract)
+	}
+	if !isCanonicalJSONFieldName(name) {
+		return fmt.Errorf(ErrFmtJSONFieldName, ErrJSONContract)
+	}
+	return nil
+}
+
+func isCanonicalJSONFieldName(name string) bool {
+	previousSeparator := false
+	for index, character := range name {
+		if index == 0 && !isLowercaseASCII(character) {
+			return false
+		}
+		if character == JSONFieldNameSeparator {
+			if previousSeparator {
+				return false
+			}
+			previousSeparator = true
+			continue
+		}
+		if !isLowercaseASCII(character) && (character < '0' || character > '9') {
+			return false
+		}
+		previousSeparator = false
+	}
+	return !previousSeparator
+}
+
+func isLowercaseASCII(character rune) bool {
+	return character >= 'a' && character <= 'z'
 }
 
 func AppendJSONField[T any](dst []byte, name string, value T) ([]byte, error) {

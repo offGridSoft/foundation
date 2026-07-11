@@ -2,7 +2,8 @@ package core
 
 import (
 	"crypto/ed25519"
-	"crypto/rand"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -13,6 +14,14 @@ type signedTestBody struct {
 }
 
 const signedTestBodyJSONFieldValue = "value"
+
+const (
+	retiredSignedMessageDomainV1  = "foundation-signed-v1"
+	retiredSignedMessageDomainV2  = "foundation-signed-v2"
+	signedTestCanonicalJSON       = `{"value":"ok"}`
+	signedTestKeyIDToken          = "server-key-1"
+	signingDomainTruncationOffset = SchemaID(1 << 8)
+)
 
 func (b signedTestBody) Validate() error {
 	if b.Value == "" {
@@ -31,6 +40,24 @@ func (b signedTestBody) Canonical(dst []byte) ([]byte, error) {
 		return nil, err
 	}
 	return append(dst, '}'), nil
+}
+
+func (b signedTestBody) SigningSchema() SchemaID {
+	return SchemaReleaseCommandRun
+}
+
+type signedOtherTestBody signedTestBody
+
+func (b signedOtherTestBody) Validate() error {
+	return signedTestBody(b).Validate()
+}
+
+func (b signedOtherTestBody) Canonical(dst []byte) ([]byte, error) {
+	return signedTestBody(b).Canonical(dst)
+}
+
+func (b signedOtherTestBody) SigningSchema() SchemaID {
+	return SchemaReleasePlan
 }
 
 func TestSignedVerifyHostileTable(t *testing.T) {
@@ -123,14 +150,172 @@ func TestSignedVerifyAcceptsValidSignature(t *testing.T) {
 
 func TestAppendSignedMessageWireLayout(t *testing.T) {
 	t.Parallel()
-	keyID, _, _ := signingTestKey(t, "server-key-1")
+	keyID, _, _ := signingTestKey(t, signedTestKeyIDToken)
 	got, err := AppendSignedMessage(nil, keyID, signedTestBody{Value: "ok"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "foundation-signed-v1\x00server-key-1\x00{\"value\":\"ok\"}"
+	separator := string([]byte{SignedMessageSep})
+	want := SignedMessageDomain + separator + SigningDomainTokenReleaseCommandRun + separator + signedTestKeyIDToken + separator + signedTestCanonicalJSON
 	if string(got) != want {
 		t.Fatalf("AppendSignedMessage() = %q, want %q", got, want)
+	}
+}
+
+func TestSchemaSigningDomainTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		schema SchemaID
+		domain SigningDomain
+	}{
+		{name: "bug usage is not signable", schema: SchemaBugUsage, domain: SigningDomainUnknown},
+		{name: "witness usage is not signable", schema: SchemaWitnessUsage, domain: SigningDomainUnknown},
+		{name: "bug check-in is not signable", schema: SchemaBugCheckIn, domain: SigningDomainUnknown},
+		{name: "bug seat lease owns its domain", schema: SchemaBugSeatLease, domain: SigningDomainBugSeatLease},
+		{name: "witness check-in is not signable", schema: SchemaWitnessCheckIn, domain: SigningDomainUnknown},
+		{name: "witness subscription owns its domain", schema: SchemaWitnessSubscription, domain: SigningDomainWitnessSubscriptionLease},
+		{name: "custody session open request is not signable", schema: SchemaCustodySessionOpenRequest, domain: SigningDomainUnknown},
+		{name: "custody session open response is not signable", schema: SchemaCustodySessionOpenResponse, domain: SigningDomainUnknown},
+		{name: "custody finalize request is not signable", schema: SchemaCustodyFinalizeRequest, domain: SigningDomainUnknown},
+		{name: "custody receipt owns its domain", schema: SchemaCustodyReceipt, domain: SigningDomainWitnessCustodyReceipt},
+		{name: "release manifest owns its domain", schema: SchemaReleaseManifest, domain: SigningDomainReleaseManifest},
+		{name: "release upload receipt owns its domain", schema: SchemaReleaseUploadReceipt, domain: SigningDomainReleaseUploadReceipt},
+		{name: "release download index owns its domain", schema: SchemaReleaseDownloadIndex, domain: SigningDomainReleaseDownloadIndex},
+		{name: "release plan owns its domain", schema: SchemaReleasePlan, domain: SigningDomainReleasePlan},
+		{name: "release root layout owns its domain", schema: SchemaReleaseRootLayout, domain: SigningDomainReleaseRootLayout},
+		{name: "release command run owns its domain", schema: SchemaReleaseCommandRun, domain: SigningDomainReleaseCommandRun},
+		{name: "zero schema is not signable", schema: SchemaUnknown, domain: SigningDomainUnknown},
+		{name: "future schema cannot truncate to signable ordinal", schema: signingDomainTruncationOffset + SchemaBugSeatLease, domain: SigningDomainUnknown},
+		{name: "future schema is not signable", schema: SchemaID(^uint16(0)), domain: SigningDomainUnknown},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := tc.schema.ResolveSigningDomain(); got != tc.domain {
+				t.Fatalf("SchemaID.ResolveSigningDomain() = %v, want %v", got, tc.domain)
+			}
+		})
+	}
+}
+
+func TestSigningDomainJSONHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		domain    SigningDomain
+		token     string
+		wantError bool
+	}{
+		{name: "bug seat lease domain round trips", domain: SigningDomainBugSeatLease, token: SigningDomainTokenBugSeatLease},
+		{name: "witness subscription domain round trips", domain: SigningDomainWitnessSubscriptionLease, token: SigningDomainTokenWitnessSubscriptionLease},
+		{name: "custody receipt domain round trips", domain: SigningDomainWitnessCustodyReceipt, token: SigningDomainTokenWitnessCustodyReceipt},
+		{name: "release manifest domain round trips", domain: SigningDomainReleaseManifest, token: SigningDomainTokenReleaseManifest},
+		{name: "release upload receipt domain round trips", domain: SigningDomainReleaseUploadReceipt, token: SigningDomainTokenReleaseUploadReceipt},
+		{name: "release download index domain round trips", domain: SigningDomainReleaseDownloadIndex, token: SigningDomainTokenReleaseDownloadIndex},
+		{name: "release plan domain round trips", domain: SigningDomainReleasePlan, token: SigningDomainTokenReleasePlan},
+		{name: "release root layout domain round trips", domain: SigningDomainReleaseRootLayout, token: SigningDomainTokenReleaseRootLayout},
+		{name: "release command run domain round trips", domain: SigningDomainReleaseCommandRun, token: SigningDomainTokenReleaseCommandRun},
+		{name: "zero domain marshal rejected", domain: SigningDomainUnknown, wantError: true},
+		{name: "future domain marshal rejected", domain: SigningDomain(^uint16(0)), wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			encoded, err := tc.domain.MarshalJSON()
+			if tc.wantError {
+				if !errors.Is(err, ErrFoundationContract) {
+					t.Fatalf("SigningDomain.MarshalJSON() error = %v, want ErrFoundationContract", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			want, err := json.Marshal(tc.token)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(encoded) != string(want) {
+				t.Fatalf("SigningDomain.MarshalJSON() = %s, want %s", encoded, want)
+			}
+			var decoded SigningDomain
+			if err := decoded.UnmarshalJSON(encoded); err != nil {
+				t.Fatal(err)
+			}
+			if decoded != tc.domain {
+				t.Fatalf("SigningDomain.UnmarshalJSON() = %v, want %v", decoded, tc.domain)
+			}
+		})
+	}
+}
+
+func TestParseSigningDomainHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		token     string
+		want      SigningDomain
+		wantError bool
+	}{
+		{name: "bug seat lease token accepted", token: SigningDomainTokenBugSeatLease, want: SigningDomainBugSeatLease},
+		{name: "witness subscription token accepted", token: SigningDomainTokenWitnessSubscriptionLease, want: SigningDomainWitnessSubscriptionLease},
+		{name: "custody receipt token accepted", token: SigningDomainTokenWitnessCustodyReceipt, want: SigningDomainWitnessCustodyReceipt},
+		{name: "release manifest token accepted", token: SigningDomainTokenReleaseManifest, want: SigningDomainReleaseManifest},
+		{name: "release upload receipt token accepted", token: SigningDomainTokenReleaseUploadReceipt, want: SigningDomainReleaseUploadReceipt},
+		{name: "release download index token accepted", token: SigningDomainTokenReleaseDownloadIndex, want: SigningDomainReleaseDownloadIndex},
+		{name: "release plan token accepted", token: SigningDomainTokenReleasePlan, want: SigningDomainReleasePlan},
+		{name: "release root layout token accepted", token: SigningDomainTokenReleaseRootLayout, want: SigningDomainReleaseRootLayout},
+		{name: "release command run token accepted", token: SigningDomainTokenReleaseCommandRun, want: SigningDomainReleaseCommandRun},
+		{name: "empty token rejected", wantError: true},
+		{name: "unknown token rejected", token: "unknown", wantError: true},
+		{name: "uppercase token rejected", token: "RELEASE-MANIFEST-2026", wantError: true},
+		{name: "legacy numeric suffix rejected", token: "release-manifest-v1", wantError: true},
+		{name: "leading whitespace rejected", token: " release-manifest-2026", wantError: true},
+		{name: "trailing whitespace rejected", token: "release-manifest-2026 ", wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := ParseSigningDomain(tc.token)
+			if tc.wantError {
+				if !errors.Is(err, ErrFoundationContract) {
+					t.Fatalf("ParseSigningDomain() error = %v, want ErrFoundationContract", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tc.want {
+				t.Fatalf("ParseSigningDomain() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSigningDomainUnmarshalHostileTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		raw  string
+	}{
+		{name: "empty JSON rejected", raw: ""},
+		{name: "null rejected", raw: `null`},
+		{name: "number rejected", raw: `1`},
+		{name: "boolean rejected", raw: `true`},
+		{name: "object rejected", raw: `{}`},
+		{name: "array rejected", raw: `[]`},
+		{name: "unknown string rejected", raw: `"unknown"`},
+		{name: "truncated string rejected", raw: `"release-manifest-2026`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := SigningDomainReleaseManifest
+			if err := got.UnmarshalJSON([]byte(tc.raw)); !errors.Is(err, ErrFoundationContract) {
+				t.Fatalf("SigningDomain.UnmarshalJSON() error = %v, want ErrFoundationContract", err)
+			}
+			if got != SigningDomainReleaseManifest {
+				t.Fatalf("SigningDomain.UnmarshalJSON() mutated receiver to %v", got)
+			}
+		})
 	}
 }
 
@@ -151,6 +336,66 @@ func TestSignedVerifyRejectsSignatureBoundToDifferentKeyID(t *testing.T) {
 	keyring := SigningKeyring{Keys: []SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
 	if err := signed.Verify(keyring); !errors.Is(err, ErrFoundationContract) {
 		t.Fatalf("Verify wrong-key-id-bound signature error = %v, want ErrFoundationContract", err)
+	}
+}
+
+func TestSignedVerifyRejectsSignatureBoundToDifferentDomain(t *testing.T) {
+	t.Parallel()
+	keyID, publicKey, privateKey := signingTestKey(t, "server-key-1")
+	body := signedTestBody{Value: "ok"}
+	message, err := AppendSignedMessage(nil, keyID, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signed := Signed[signedOtherTestBody]{
+		KeyID:     keyID,
+		Signature: signTestMessage(t, privateKey, message),
+		Body:      signedOtherTestBody(body),
+	}
+	keyring := SigningKeyring{Keys: []SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
+	if err := signed.Verify(keyring); !errors.Is(err, ErrFoundationContract) {
+		t.Fatalf("Verify wrong-domain-bound signature error = %v, want ErrFoundationContract", err)
+	}
+}
+
+func TestSignedVerifyRejectsRetiredFramingTable(t *testing.T) {
+	t.Parallel()
+	keyID, publicKey, privateKey := signingTestKey(t, signedTestKeyIDToken)
+	body := signedTestBody{Value: "ok"}
+	separator := string([]byte{SignedMessageSep})
+	for _, tc := range []struct {
+		name    string
+		message string
+	}{
+		{
+			name:    "retired v1 domainless frame rejected",
+			message: retiredSignedMessageDomainV1 + separator + signedTestKeyIDToken + separator + signedTestCanonicalJSON,
+		},
+		{
+			name:    "retired v2 typed frame rejected",
+			message: retiredSignedMessageDomainV2 + separator + SigningDomainTokenReleaseCommandRun + separator + signedTestKeyIDToken + separator + signedTestCanonicalJSON,
+		},
+		{
+			name:    "current year frame missing signing domain rejected",
+			message: SignedMessageDomain + separator + signedTestKeyIDToken + separator + signedTestCanonicalJSON,
+		},
+		{
+			name:    "current year frame with key and domain reordered rejected",
+			message: SignedMessageDomain + separator + signedTestKeyIDToken + separator + SigningDomainTokenReleaseCommandRun + separator + signedTestCanonicalJSON,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			signed := Signed[signedTestBody]{
+				KeyID:     keyID,
+				Signature: signTestMessage(t, privateKey, []byte(tc.message)),
+				Body:      body,
+			}
+			keyring := SigningKeyring{Keys: []SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
+			if err := signed.Verify(keyring); !errors.Is(err, ErrFoundationContract) {
+				t.Fatalf("Verify retired framing error = %v, want ErrFoundationContract", err)
+			}
+		})
 	}
 }
 
@@ -181,10 +426,9 @@ func TestSigningKeyringRejectsUnboundedKeySet(t *testing.T) {
 
 func signingTestKey(t *testing.T, id string) (SigningKeyID, Ed25519PublicKeyHex, ed25519.PrivateKey) {
 	t.Helper()
-	public, private, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
+	seed := sha256.Sum256([]byte(id))
+	private := ed25519.NewKeyFromSeed(seed[:])
+	public := ed25519.PublicKey(private[ed25519.SeedSize:])
 	keyID, err := ParseSigningKeyID(id)
 	if err != nil {
 		t.Fatal(err)

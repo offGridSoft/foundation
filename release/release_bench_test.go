@@ -76,6 +76,7 @@ func benchmarkReleasePlan(b *testing.B, toolCount int) ReleasePlan {
 	b.Helper()
 	tools := benchmarkTools(b, toolCount)
 	return ReleasePlan{
+		Schema:    core.SchemaReleasePlan,
 		Product:   core.ProductWitness,
 		Version:   benchmarkVersion(b),
 		ReleaseID: benchmarkReleaseID(b),

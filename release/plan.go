@@ -6,6 +6,8 @@ import (
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
+var _ core.CanonicalBody = ReleasePlan{}
+
 const (
 	ReleasePlanValidateAllocationBudget     float64 = 12
 	ReleasePlanBuildRequestAllocationBudget float64 = 34
@@ -75,10 +77,14 @@ type ReleasePlan struct {
 	Tools     []ToolProvenance    `json:"tools"`
 	Spec      ProductReleaseSpec  `json:"spec"`
 	ToolCount uint32              `json:"tool_count"`
+	Schema    core.SchemaID       `json:"schema"`
 	Product   core.Product        `json:"product"`
 }
 
 func (p ReleasePlan) Validate() error {
+	if p.Schema != core.SchemaReleasePlan {
+		return fmt.Errorf(ErrFmtReleasePlan, core.ErrReleaseContract)
+	}
 	if err := validateReleasePlanIdentity(p); err != nil {
 		return err
 	}
@@ -102,6 +108,10 @@ func (p ReleasePlan) Canonical(dst []byte) ([]byte, error) {
 	return appendReleasePlanJSON(dst, p)
 }
 
+func (p ReleasePlan) SigningSchema() core.SchemaID {
+	return p.Schema
+}
+
 func (p ReleasePlan) MarshalJSON() ([]byte, error) {
 	if err := p.Validate(); err != nil {
 		return nil, err
@@ -112,7 +122,8 @@ func (p ReleasePlan) MarshalJSON() ([]byte, error) {
 func appendReleasePlanJSON(dst []byte, p ReleasePlan) ([]byte, error) {
 	dst = append(dst, '{')
 	var err error
-	dst, err = core.AppendJSONField(dst, jsonFieldProduct, p.Product)
+	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, p.Schema)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldProduct, p.Product)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldVersion, p.Version)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldReleaseID, p.ReleaseID)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDate, p.Date)

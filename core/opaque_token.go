@@ -12,6 +12,9 @@ func ValidateOpaqueToken(value string, maxRunes int) error {
 	if maxRunes < 1 {
 		return ErrFoundationContract
 	}
+	if !utf8.ValidString(value) {
+		return ErrFoundationContract
+	}
 	if value == "" || strings.TrimSpace(value) != value {
 		return ErrFoundationContract
 	}
