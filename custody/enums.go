@@ -10,6 +10,13 @@ import (
 type RetentionClass uint8
 
 const (
+	RetentionClassTokenConditional            = "conditional"
+	RetentionClassTokenPrepaid                = "prepaid"
+	SessionOpenDispositionTokenUploadRequired = "upload_required"
+	SessionOpenDispositionTokenReceiptReused  = "receipt_reused"
+)
+
+const (
 	retentionClassInvalid RetentionClass = iota
 	RetentionClassConditional
 	RetentionClassPrepaid
@@ -17,9 +24,71 @@ const (
 
 func retentionClassNames() [RetentionClassPrepaid + 1]string {
 	return [...]string{
-		RetentionClassConditional: "conditional",
-		RetentionClassPrepaid:     "prepaid",
+		RetentionClassConditional: RetentionClassTokenConditional,
+		RetentionClassPrepaid:     RetentionClassTokenPrepaid,
 	}
+}
+
+type SessionOpenDisposition uint8
+
+const (
+	sessionOpenDispositionInvalid SessionOpenDisposition = iota
+	SessionOpenDispositionUploadRequired
+	SessionOpenDispositionReceiptReused
+)
+
+func sessionOpenDispositionNames() [SessionOpenDispositionReceiptReused + 1]string {
+	return [...]string{
+		SessionOpenDispositionUploadRequired: SessionOpenDispositionTokenUploadRequired,
+		SessionOpenDispositionReceiptReused:  SessionOpenDispositionTokenReceiptReused,
+	}
+}
+
+func (d SessionOpenDisposition) String() string {
+	if d.IsValid() {
+		return sessionOpenDispositionNames()[d]
+	}
+	return ""
+}
+
+func (d SessionOpenDisposition) IsValid() bool {
+	return d > sessionOpenDispositionInvalid && int(d) < len(sessionOpenDispositionNames()) && sessionOpenDispositionNames()[d] != ""
+}
+
+func (d SessionOpenDisposition) Validate() error {
+	if !d.IsValid() {
+		return fmt.Errorf(ErrFmtOpenDisposition, core.ErrCustodyContract)
+	}
+	return nil
+}
+
+func ParseSessionOpenDisposition(token string) (SessionOpenDisposition, error) {
+	for disposition := SessionOpenDispositionUploadRequired; int(disposition) < len(sessionOpenDispositionNames()); disposition++ {
+		if sessionOpenDispositionNames()[disposition] == token {
+			return disposition, nil
+		}
+	}
+	return sessionOpenDispositionInvalid, fmt.Errorf(ErrFmtOpenDisposition, core.ErrCustodyContract)
+}
+
+func (d SessionOpenDisposition) MarshalJSON() ([]byte, error) {
+	if err := d.Validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(d.String())
+}
+
+func (d *SessionOpenDisposition) UnmarshalJSON(data []byte) error {
+	var token string
+	if err := json.Unmarshal(data, &token); err != nil {
+		return fmt.Errorf(ErrFmtOpenDisposition, core.ErrCustodyContract)
+	}
+	parsed, err := ParseSessionOpenDisposition(token)
+	if err != nil {
+		return err
+	}
+	*d = parsed
+	return nil
 }
 
 func (c RetentionClass) String() string {

@@ -6,8 +6,13 @@ import (
 )
 
 const (
-	FileNameTokenMaxRunes = 256
-	PathTokenMaxRunes     = 1024
+	FileNameTokenMaxRunes  = 256
+	PathTokenMaxRunes      = 1024
+	WitnessCustodyPathRoot = "witness"
+	CustodyYearTextLength  = 4
+	CustodyMonthTextLength = 2
+	CustodyMonthMinimum    = 1
+	CustodyMonthMaximum    = 12
 )
 
 func ValidateFileNameToken(value string, maxRunes int) error {

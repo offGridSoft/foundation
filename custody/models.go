@@ -43,6 +43,7 @@ type SessionOpenRequest struct {
 	Release       ReleaseIdentity      `json:"release"`
 	Lease         OpenLeaseRef         `json:"lease"`
 	Customer      CustomerID           `json:"customer_id"`
+	BundleRoot    core.BLAKE3Hex       `json:"bundle_root"`
 	Artifacts     []ArtifactDescriptor `json:"artifacts"`
 	TotalBytes    core.ByteCount       `json:"total_bytes"`
 	ArtifactCount uint32               `json:"artifact_count"`
@@ -54,6 +55,9 @@ func (r SessionOpenRequest) Validate() error {
 		return fmt.Errorf(ErrFmtOpenRequest, core.ErrCustodyContract)
 	}
 	if err := r.Customer.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtOpenRequest, err)
+	}
+	if err := r.BundleRoot.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtOpenRequest, err)
 	}
 	if err := r.Lease.Validate(); err != nil {
@@ -70,33 +74,81 @@ func (r SessionOpenRequest) Validate() error {
 }
 
 type SessionOpenResponse struct {
+	ExistingReceipt *core.Signed[ReceiptBody] `json:"existing_receipt,omitempty"`
+	Upload          *SessionUploadGrant       `json:"upload,omitempty"`
+	Customer        CustomerID                `json:"customer_id"`
+	BundleRoot      core.BLAKE3Hex            `json:"bundle_root"`
+	Schema          core.SchemaID             `json:"schema"`
+	Disposition     SessionOpenDisposition    `json:"disposition"`
+}
+
+type SessionUploadGrant struct {
 	Session   SessionID         `json:"session_id"`
 	Targets   []UploadTarget    `json:"targets"`
 	Retention RetentionPolicy   `json:"retention"`
 	ExpiresAt core.UnixNanoTime `json:"expires_at"`
-	Schema    core.SchemaID     `json:"schema"`
+}
+
+func (g SessionUploadGrant) Validate(customer CustomerID, bundleRoot core.BLAKE3Hex) error {
+	if err := g.Session.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtOpenResponse, err)
+	}
+	if err := validateUploadTargetSet(g.Targets, customer, bundleRoot, ErrFmtOpenResponse); err != nil {
+		return err
+	}
+	if err := g.Retention.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtOpenResponse, err)
+	}
+	if err := core.ValidateRequiredUnixNanoTime(g.ExpiresAt); err != nil {
+		return fmt.Errorf(ErrFmtOpenResponse, core.ErrCustodyContract)
+	}
+	return nil
 }
 
 func (r SessionOpenResponse) Validate() error {
 	if r.Schema != core.SchemaCustodySessionOpenResponse {
 		return fmt.Errorf(ErrFmtOpenResponse, core.ErrCustodyContract)
 	}
-	if err := r.Session.Validate(); err != nil {
+	if err := r.Customer.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtOpenResponse, err)
 	}
-	if err := validateUploadTargetSet(r.Targets, ErrFmtOpenResponse); err != nil {
-		return err
-	}
-	if err := r.Retention.Validate(); err != nil {
+	if err := r.BundleRoot.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtOpenResponse, err)
 	}
-	if err := core.ValidateRequiredUnixNanoTime(r.ExpiresAt); err != nil {
+	if err := r.Disposition.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtOpenResponse, err)
+	}
+	switch r.Disposition {
+	case SessionOpenDispositionUploadRequired:
+		return r.validateUploadRequired()
+	case SessionOpenDispositionReceiptReused:
+		return r.validateReceiptReused()
+	default:
+		return fmt.Errorf(ErrFmtOpenResponse, core.ErrCustodyContract)
+	}
+}
+
+func (r SessionOpenResponse) validateUploadRequired() error {
+	if r.ExistingReceipt != nil || r.Upload == nil {
+		return fmt.Errorf(ErrFmtOpenResponse, core.ErrCustodyContract)
+	}
+	return r.Upload.Validate(r.Customer, r.BundleRoot)
+}
+
+func (r SessionOpenResponse) validateReceiptReused() error {
+	if r.ExistingReceipt == nil || r.Upload != nil {
+		return fmt.Errorf(ErrFmtOpenResponse, core.ErrCustodyContract)
+	}
+	if err := r.ExistingReceipt.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtOpenResponse, err)
+	}
+	if r.ExistingReceipt.Body.Customer != r.Customer || r.ExistingReceipt.Body.BundleRoot != r.BundleRoot {
 		return fmt.Errorf(ErrFmtOpenResponse, core.ErrCustodyContract)
 	}
 	return nil
 }
 
-func validateUploadTargetSet(targets []UploadTarget, errFmt string) error {
+func validateUploadTargetSet(targets []UploadTarget, customer CustomerID, bundleRoot core.BLAKE3Hex, errFmt string) error {
 	if err := (core.CollectionCardinality{
 		Length:  len(targets),
 		Minimum: 1,
@@ -108,13 +160,28 @@ func validateUploadTargetSet(targets []UploadTarget, errFmt string) error {
 		if err := target.Validate(); err != nil {
 			return fmt.Errorf(errFmt, err)
 		}
+		if err := target.Object.ValidateWitnessIdentity(customer, bundleRoot, target.Artifact); err != nil {
+			return fmt.Errorf(errFmt, err)
+		}
 		for _, prior := range targets[:index] {
-			if prior.Artifact == target.Artifact || prior.Object == target.Object {
+			if prior.Provider == target.Provider && (prior.Artifact == target.Artifact || prior.Object == target.Object) {
 				return fmt.Errorf(errFmt, core.ErrCustodyContract)
 			}
 		}
+		if !hasMatchingUploadTarget(targets, target) {
+			return fmt.Errorf(errFmt, core.ErrCustodyContract)
+		}
 	}
 	return nil
+}
+
+func hasMatchingUploadTarget(targets []UploadTarget, target UploadTarget) bool {
+	for _, candidate := range targets {
+		if candidate.Provider != target.Provider && candidate.Artifact == target.Artifact && candidate.Object == target.Object {
+			return true
+		}
+	}
+	return false
 }
 
 type UploadTarget struct {
@@ -182,8 +249,9 @@ func (h UploadHeader) Validate() error {
 
 // Field order is signature-load-bearing when nested inside ReceiptBody.
 type RetentionPolicy struct {
-	RetainUntil core.UnixNanoTime `json:"retain_until"`
-	Class       RetentionClass    `json:"class"`
+	RetainUntil        core.UnixNanoTime `json:"retain_until"`
+	MaximumRetainUntil core.UnixNanoTime `json:"maximum_retain_until"`
+	Class              RetentionClass    `json:"class"`
 }
 
 func (p RetentionPolicy) Validate() error {
@@ -193,17 +261,21 @@ func (p RetentionPolicy) Validate() error {
 	if err := core.ValidateRequiredUnixNanoTime(p.RetainUntil); err != nil {
 		return fmt.Errorf(ErrFmtRetention, core.ErrCustodyContract)
 	}
+	if err := core.ValidateRequiredUnixNanoTime(p.MaximumRetainUntil); err != nil || p.MaximumRetainUntil.Before(p.RetainUntil) {
+		return fmt.Errorf(ErrFmtRetention, core.ErrCustodyContract)
+	}
 	return nil
 }
 
 // Field order is signature-load-bearing when nested inside ReceiptBody.
 type UploadedObject struct {
-	Artifact   ArtifactName   `json:"artifact"`
-	Object     ObjectPath     `json:"object"`
-	Generation Generation     `json:"generation"`
-	SHA256     core.SHA256Hex `json:"sha256"`
-	BLAKE3     core.BLAKE3Hex `json:"blake3"`
-	Size       core.ByteCount `json:"size_bytes"`
+	Artifact   ArtifactName         `json:"artifact"`
+	Object     ObjectPath           `json:"object"`
+	Generation Generation           `json:"generation"`
+	SHA256     core.SHA256Hex       `json:"sha256"`
+	BLAKE3     core.BLAKE3Hex       `json:"blake3"`
+	Size       core.ByteCount       `json:"size_bytes"`
+	Provider   core.StorageProvider `json:"provider"`
 }
 
 func (o UploadedObject) Validate() error {
@@ -211,6 +283,9 @@ func (o UploadedObject) Validate() error {
 		return fmt.Errorf(ErrFmtUploadedObject, err)
 	}
 	if err := o.Object.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtUploadedObject, err)
+	}
+	if err := o.Provider.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtUploadedObject, err)
 	}
 	if err := o.Generation.Validate(); err != nil {
@@ -237,9 +312,11 @@ func (o UploadedObject) ArtifactSetSize() core.ByteCount {
 }
 
 type FinalizeRequest struct {
-	Session SessionID        `json:"session_id"`
-	Objects []UploadedObject `json:"objects"`
-	Schema  core.SchemaID    `json:"schema"`
+	Customer   CustomerID       `json:"customer_id"`
+	BundleRoot core.BLAKE3Hex   `json:"bundle_root"`
+	Session    SessionID        `json:"session_id"`
+	Objects    []UploadedObject `json:"objects"`
+	Schema     core.SchemaID    `json:"schema"`
 }
 
 func (r FinalizeRequest) Validate() error {
@@ -249,21 +326,29 @@ func (r FinalizeRequest) Validate() error {
 	if err := r.Session.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtFinalize, err)
 	}
-	return validateUploadedObjectSet(r.Objects, ErrFmtFinalize)
+	if err := r.Customer.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtFinalize, err)
+	}
+	if err := r.BundleRoot.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtFinalize, err)
+	}
+	return validateUploadedObjectSet(r.Objects, r.Customer, r.BundleRoot, ErrFmtFinalize)
 }
 
 // Field order is storage-only; MarshalJSON owns the signature-load-bearing order.
 type ReceiptBody struct {
-	Release   ReleaseIdentity      `json:"release"`
-	Customer  CustomerID           `json:"customer_id"`
-	Session   SessionID            `json:"session_id"`
-	ChainHash core.SHA256Hex       `json:"chain_hash"`
-	Objects   []UploadedObject     `json:"objects"`
-	Retention RetentionPolicy      `json:"retention"`
-	IssuedAt  core.UnixNanoTime    `json:"issued_at"`
-	LedgerSeq LedgerSeq            `json:"ledger_seq"`
-	Schema    core.SchemaID        `json:"schema"`
-	Provider  core.StorageProvider `json:"provider"`
+	ReceiptID  ReceiptID         `json:"receipt_id"`
+	Release    ReleaseIdentity   `json:"release"`
+	Customer   CustomerID        `json:"customer_id"`
+	BundleRoot core.BLAKE3Hex    `json:"bundle_root"`
+	Session    SessionID         `json:"session_id"`
+	ChainHash  core.SHA256Hex    `json:"chain_hash"`
+	Objects    []UploadedObject  `json:"objects"`
+	Retention  RetentionPolicy   `json:"retention"`
+	IssuedAt   core.UnixNanoTime `json:"issued_at"`
+	AcceptedAt core.UnixNanoTime `json:"accepted_at"`
+	LedgerSeq  LedgerSeq         `json:"ledger_seq"`
+	Schema     core.SchemaID     `json:"schema"`
 }
 
 func (b ReceiptBody) Validate() error {
@@ -277,7 +362,7 @@ func validateReceiptFields(b ReceiptBody) error {
 	if err := validateReceiptIdentity(b); err != nil {
 		return err
 	}
-	if err := validateUploadedObjectSet(b.Objects, ErrFmtReceipt); err != nil {
+	if err := validateUploadedObjectSet(b.Objects, b.Customer, b.BundleRoot, ErrFmtReceipt); err != nil {
 		return err
 	}
 	if err := validateReceiptStorage(b); err != nil {
@@ -287,6 +372,9 @@ func validateReceiptFields(b ReceiptBody) error {
 }
 
 func validateReceiptIdentity(b ReceiptBody) error {
+	if err := b.ReceiptID.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtReceipt, err)
+	}
 	if err := b.Customer.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtReceipt, err)
 	}
@@ -296,10 +384,13 @@ func validateReceiptIdentity(b ReceiptBody) error {
 	if err := b.Release.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtReceipt, err)
 	}
+	if err := b.BundleRoot.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtReceipt, err)
+	}
 	return nil
 }
 
-func validateUploadedObjectSet(objects []UploadedObject, errFmt string) error {
+func validateUploadedObjectSet(objects []UploadedObject, customer CustomerID, bundleRoot core.BLAKE3Hex, errFmt string) error {
 	if err := (core.CollectionCardinality{
 		Length:  len(objects),
 		Minimum: 1,
@@ -311,20 +402,32 @@ func validateUploadedObjectSet(objects []UploadedObject, errFmt string) error {
 		if err := object.Validate(); err != nil {
 			return fmt.Errorf(errFmt, err)
 		}
+		if err := object.Object.ValidateWitnessIdentity(customer, bundleRoot, object.Artifact); err != nil {
+			return fmt.Errorf(errFmt, err)
+		}
 		for _, prior := range objects[:index] {
-			if prior.Artifact == object.Artifact || prior.Object == object.Object {
+			if prior.Provider == object.Provider && (prior.Artifact == object.Artifact || prior.Object == object.Object) {
 				return fmt.Errorf(errFmt, core.ErrCustodyContract)
 			}
+		}
+		if !hasMatchingUploadedObject(objects, object) {
+			return fmt.Errorf(errFmt, core.ErrCustodyContract)
 		}
 	}
 	return nil
 }
 
+func hasMatchingUploadedObject(objects []UploadedObject, object UploadedObject) bool {
+	for _, candidate := range objects {
+		if candidate.Provider != object.Provider && candidate.Artifact == object.Artifact && candidate.Object == object.Object && candidate.SHA256 == object.SHA256 && candidate.BLAKE3 == object.BLAKE3 && candidate.Size == object.Size {
+			return true
+		}
+	}
+	return false
+}
+
 func validateReceiptStorage(b ReceiptBody) error {
 	if err := b.Retention.Validate(); err != nil {
-		return fmt.Errorf(ErrFmtReceipt, err)
-	}
-	if err := b.Provider.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtReceipt, err)
 	}
 	return nil
@@ -332,6 +435,9 @@ func validateReceiptStorage(b ReceiptBody) error {
 
 func validateReceiptLedger(b ReceiptBody) error {
 	if err := core.ValidateRequiredUnixNanoTime(b.IssuedAt); err != nil {
+		return fmt.Errorf(ErrFmtReceipt, core.ErrCustodyContract)
+	}
+	if err := core.ValidateRequiredUnixNanoTime(b.AcceptedAt); err != nil || b.IssuedAt.Before(b.AcceptedAt) {
 		return fmt.Errorf(ErrFmtReceipt, core.ErrCustodyContract)
 	}
 	if err := b.LedgerSeq.Validate(); err != nil {
@@ -362,14 +468,16 @@ func appendReceiptBodyJSON(dst []byte, b ReceiptBody) ([]byte, error) {
 	var err error
 	dst, err = core.AppendJSONField(dst, core.JSONFieldRelease, b.Release)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldSchema, b.Schema)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldReceiptID, b.ReceiptID)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldCustomerID, b.Customer)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldBundleRoot, b.BundleRoot)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldSessionID, b.Session)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldChainHash, b.ChainHash)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldObjects, b.Objects)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldRetention, b.Retention)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldIssuedAt, b.IssuedAt)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldAcceptedAt, b.AcceptedAt)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldLedgerSeq, b.LedgerSeq)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldProvider, b.Provider)
 	if err != nil {
 		return nil, err
 	}

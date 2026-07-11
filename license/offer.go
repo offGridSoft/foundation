@@ -26,9 +26,6 @@ const (
 	BugOfflineCheckInAfterDuration  = 365 * 24 * time.Hour
 	BugOfflineCheckInByDuration     = 5 * 365 * 24 * time.Hour
 	DefaultWriteGraceDuration       = 72 * time.Hour
-	WitnessBronzeRetentionDuration  = 90 * 24 * time.Hour
-	WitnessSilverRetentionDuration  = 3 * 365 * 24 * time.Hour
-	WitnessGoldRetentionDuration    = 10 * 365 * 24 * time.Hour
 )
 
 type LeaseWindow struct {
@@ -202,7 +199,6 @@ type Offer struct {
 	CheckInAfter        core.NanosecondsDuration `json:"check_in_after_ns"`
 	CheckInBy           core.NanosecondsDuration `json:"check_in_by_ns"`
 	WriteGrace          core.NanosecondsDuration `json:"write_grace_ns"`
-	Retention           core.NanosecondsDuration `json:"retention_ns"`
 	Code                OfferCode                `json:"code"`
 	Product             core.Product             `json:"product"`
 	BillingPeriod       BillingPeriod            `json:"billing_period"`
@@ -239,26 +235,26 @@ func OfferForSeatPlan(plan SeatPlan) (Offer, error) {
 func OfferForSubscriptionPlan(plan SubscriptionPlan) (Offer, error) {
 	switch plan {
 	case SubscriptionPlanBronze:
-		return witnessOffer(OfferWitnessBronze, WitnessBronzePricePennies, WitnessBronzeRetentionDuration), nil
+		return witnessOffer(OfferWitnessBronze, WitnessBronzePricePennies), nil
 	case SubscriptionPlanSilver:
-		return witnessOffer(OfferWitnessSilver, WitnessSilverPricePennies, WitnessSilverRetentionDuration), nil
+		return witnessOffer(OfferWitnessSilver, WitnessSilverPricePennies), nil
 	case SubscriptionPlanGold:
-		return witnessOffer(OfferWitnessGold, WitnessGoldStartingPricePennies, WitnessGoldRetentionDuration), nil
+		return witnessOffer(OfferWitnessGold, WitnessGoldStartingPricePennies), nil
 	default:
 		return Offer{}, fmt.Errorf(ErrFmtOffer, core.ErrLicenseContract)
 	}
 }
 
 func bugStandardOffer() Offer {
-	return connectedOffer(OfferBugStandard, core.ProductBug, BugStandardPricePennies, 0)
+	return connectedOffer(OfferBugStandard, core.ProductBug, BugStandardPricePennies)
 }
 
 func bugEnterpriseOffer() Offer {
-	return connectedOffer(OfferBugEnterprise, core.ProductBug, BugEnterpriseMonthlyPennies, 0)
+	return connectedOffer(OfferBugEnterprise, core.ProductBug, BugEnterpriseMonthlyPennies)
 }
 
 func bugEnterpriseOfflineOffer() Offer {
-	offer := connectedOffer(OfferBugEnterpriseOffline, core.ProductBug, BugEnterpriseOfflinePennies, 0)
+	offer := connectedOffer(OfferBugEnterpriseOffline, core.ProductBug, BugEnterpriseOfflinePennies)
 	offer.BillingPeriod = BillingPeriodPrepaidYears
 	offer.LeaseDuration = core.NewNanosecondsDuration(BugOfflineCheckInByDuration)
 	offer.CheckInAfter = core.NewNanosecondsDuration(BugOfflineCheckInAfterDuration)
@@ -270,14 +266,14 @@ func bugEnterpriseOfflineOffer() Offer {
 }
 
 func bugOSSOffer() Offer {
-	return connectedOffer(OfferBugOSS, core.ProductBug, 0, 0)
+	return connectedOffer(OfferBugOSS, core.ProductBug, 0)
 }
 
-func witnessOffer(code OfferCode, price uint64, retention time.Duration) Offer {
-	return connectedOffer(code, core.ProductWitness, price, retention)
+func witnessOffer(code OfferCode, price uint64) Offer {
+	return connectedOffer(code, core.ProductWitness, price)
 }
 
-func connectedOffer(code OfferCode, product core.Product, price uint64, retention time.Duration) Offer {
+func connectedOffer(code OfferCode, product core.Product, price uint64) Offer {
 	return Offer{
 		Code:          code,
 		Product:       product,
@@ -287,7 +283,6 @@ func connectedOffer(code OfferCode, product core.Product, price uint64, retentio
 		CheckInAfter:  core.NewNanosecondsDuration(ConnectedCheckInAfterDuration),
 		CheckInBy:     core.NewNanosecondsDuration(ConnectedCheckInByDuration),
 		WriteGrace:    core.NewNanosecondsDuration(DefaultWriteGraceDuration),
-		Retention:     core.NewNanosecondsDuration(retention),
 	}
 }
 
@@ -319,7 +314,7 @@ func offerProductMatches(code OfferCode, product core.Product) bool {
 }
 
 func validateOfferDurations(o Offer) error {
-	for _, duration := range []core.NanosecondsDuration{o.LeaseDuration, o.CheckInAfter, o.CheckInBy, o.WriteGrace, o.Retention} {
+	for _, duration := range []core.NanosecondsDuration{o.LeaseDuration, o.CheckInAfter, o.CheckInBy, o.WriteGrace} {
 		if err := duration.Validate(); err != nil {
 			return fmt.Errorf(ErrFmtOffer, core.ErrLicenseContract)
 		}

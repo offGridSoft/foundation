@@ -392,6 +392,7 @@ func TestWitnessCheckInHostileTable(t *testing.T) {
 		{name: "bad sha", mutate: func(c *WitnessCheckIn) { c.BinarySHA256 = core.SHA256Hex{} }},
 		{name: "bad platform", mutate: func(c *WitnessCheckIn) { c.Platform = core.PlatformUnknown }},
 		{name: "blank account token", mutate: func(c *WitnessCheckIn) { c.AccountToken = AccountToken{} }},
+		{name: "bad usage", mutate: func(c *WitnessCheckIn) { c.Usage.Schema = core.SchemaUnknown }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -431,6 +432,46 @@ func goodWitnessCheckIn(t *testing.T) WitnessCheckIn {
 		BinarySHA256:      testSHA256(t),
 		Platform:          core.PlatformDarwinARM64,
 		AccountToken:      token,
+		Usage:             goodWitnessUsage(),
+	}
+}
+
+func goodWitnessUsage() WitnessUsage {
+	return WitnessUsage{
+		Schema:      core.SchemaWitnessUsage,
+		WindowStart: testTime(1782302400000000000),
+		WindowEnd:   testTime(1782302401000000000),
+		Quiz:        1,
+		Test:        2,
+		Midterm:     3,
+		Final:       4,
+		Store:       5,
+		Verify:      6,
+	}
+}
+
+func TestWitnessUsageHostileTable(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		mutate func(*WitnessUsage)
+		name   string
+	}{
+		{name: "bad schema", mutate: func(u *WitnessUsage) { u.Schema = core.SchemaUnknown }},
+		{name: "unset window start", mutate: func(u *WitnessUsage) { u.WindowStart = core.UnixNanoTime{} }},
+		{name: "equal window rejected", mutate: func(u *WitnessUsage) { u.WindowEnd = u.WindowStart }},
+		{name: "reversed window rejected", mutate: func(u *WitnessUsage) { u.WindowEnd = u.WindowStart.Add(-1) }},
+		{name: "negative window start rejected", mutate: func(u *WitnessUsage) { u.WindowStart = core.UnixNanoTimeFromInt64(-1) }},
+		{name: "negative window end rejected", mutate: func(u *WitnessUsage) { u.WindowEnd = core.UnixNanoTimeFromInt64(-1) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			usage := goodWitnessUsage()
+			tc.mutate(&usage)
+			if err := usage.Validate(); !errors.Is(err, core.ErrLicenseContract) {
+				t.Fatalf("WitnessUsage.Validate() error = %v, want ErrLicenseContract", err)
+			}
+		})
 	}
 }
 

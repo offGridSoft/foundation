@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/offGridSoft/foundation/v2026/core"
@@ -58,6 +59,46 @@ func (id *CustomerID) UnmarshalJSON(data []byte) error {
 
 type SessionID struct {
 	value string
+}
+
+type ReceiptID struct {
+	value string
+}
+
+func ParseReceiptID(value string) (ReceiptID, error) {
+	if !validULIDText(value) {
+		return ReceiptID{}, fmt.Errorf(ErrFmtULID, core.ErrCustodyContract)
+	}
+	return ReceiptID{value: value}, nil
+}
+
+func (id ReceiptID) String() string {
+	return id.value
+}
+
+func (id ReceiptID) Validate() error {
+	_, err := ParseReceiptID(id.value)
+	return err
+}
+
+func (id ReceiptID) MarshalJSON() ([]byte, error) {
+	if err := id.Validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(id.value)
+}
+
+func (id *ReceiptID) UnmarshalJSON(data []byte) error {
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return fmt.Errorf(ErrFmtULID, core.ErrCustodyContract)
+	}
+	parsed, err := ParseReceiptID(value)
+	if err != nil {
+		return err
+	}
+	*id = parsed
+	return nil
 }
 
 func ParseSessionID(value string) (SessionID, error) {
@@ -214,6 +255,46 @@ func (p ObjectPath) String() string {
 func (p ObjectPath) Validate() error {
 	_, err := ParseObjectPath(p.value)
 	return err
+}
+
+func (p ObjectPath) ValidateWitnessIdentity(customer CustomerID, bundleRoot core.BLAKE3Hex, artifact ArtifactName) error {
+	if err := p.Validate(); err != nil {
+		return err
+	}
+	if err := customer.Validate(); err != nil {
+		return err
+	}
+	if err := bundleRoot.Validate(); err != nil {
+		return err
+	}
+	if err := artifact.Validate(); err != nil {
+		return err
+	}
+	parts := strings.Split(p.value, "/")
+	if !matchesWitnessObjectIdentity(parts, customer, bundleRoot, artifact) {
+		return fmt.Errorf(ErrFmtObjectPath, core.ErrCustodyContract)
+	}
+	if !validCustodyDatePath(parts[2], parts[3]) {
+		return fmt.Errorf(ErrFmtObjectPath, core.ErrCustodyContract)
+	}
+	return nil
+}
+
+func matchesWitnessObjectIdentity(parts []string, customer CustomerID, bundleRoot core.BLAKE3Hex, artifact ArtifactName) bool {
+	return len(parts) == 6 &&
+		parts[0] == core.WitnessCustodyPathRoot &&
+		parts[1] == customer.String() &&
+		parts[4] == bundleRoot.String() &&
+		parts[5] == artifact.String()
+}
+
+func validCustodyDatePath(year, month string) bool {
+	if len(year) != core.CustodyYearTextLength || len(month) != core.CustodyMonthTextLength {
+		return false
+	}
+	yearNumber, yearErr := strconv.Atoi(year)
+	monthNumber, monthErr := strconv.Atoi(month)
+	return yearErr == nil && monthErr == nil && yearNumber > 0 && monthNumber >= core.CustodyMonthMinimum && monthNumber <= core.CustodyMonthMaximum
 }
 
 func (p ObjectPath) MarshalJSON() ([]byte, error) {

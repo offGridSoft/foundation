@@ -324,7 +324,7 @@ func TestClientRejectsRawResponseWithoutEnvelope(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(CheckInResponse[SeatLeaseBody]{
 			Granted:     false,
 			Refusal:     RefusalPaymentRequired,
-			Remediation: "update payment",
+			Remediation: RemediationUpdatePayment,
 		})
 	}))
 	defer server.Close()
@@ -661,29 +661,28 @@ func TestCheckInResponseHostileCombinations(t *testing.T) {
 		{name: "granted with remediation", response: CheckInResponse[SeatLeaseBody]{
 			Granted:     true,
 			Refusal:     RefusalNone,
-			Remediation: "pay",
+			Remediation: RemediationUpdatePayment,
 			Lease:       lease,
 		}},
 		{name: "refused with lease", response: CheckInResponse[SeatLeaseBody]{
 			Refusal:     RefusalPaymentRequired,
-			Remediation: "pay",
+			Remediation: RemediationUpdatePayment,
 			Lease:       lease,
 		}},
 		{name: "refused none refusal", response: CheckInResponse[SeatLeaseBody]{
 			Refusal:     RefusalNone,
-			Remediation: "pay",
+			Remediation: RemediationUpdatePayment,
 		}},
-		{name: "refused blank remediation", response: CheckInResponse[SeatLeaseBody]{
-			Refusal:     RefusalPaymentRequired,
-			Remediation: " \t ",
+		{name: "refused missing remediation", response: CheckInResponse[SeatLeaseBody]{
+			Refusal: RefusalPaymentRequired,
 		}},
-		{name: "refused control remediation", response: CheckInResponse[SeatLeaseBody]{
+		{name: "refused mismatched remediation", response: CheckInResponse[SeatLeaseBody]{
 			Refusal:     RefusalPaymentRequired,
-			Remediation: "pay\nnow",
+			Remediation: RemediationDeactivateMachine,
 		}},
-		{name: "refused oversized remediation", response: CheckInResponse[SeatLeaseBody]{
+		{name: "refused unknown remediation ordinal", response: CheckInResponse[SeatLeaseBody]{
 			Refusal:     RefusalPaymentRequired,
-			Remediation: strings.Repeat("a", CheckInRemediationMaxRunes+1),
+			Remediation: Remediation(RemediationRetryUpload + 1),
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -709,7 +708,7 @@ func TestCheckInTransportContractLayerTriad(t *testing.T) {
 	}{
 		{name: "positive granted response", body: CheckInResponse[SeatLeaseBody]{Granted: true, Refusal: RefusalNone, Lease: lease}},
 		{name: "negative zero response", body: CheckInResponse[SeatLeaseBody]{}, wantErr: true},
-		{name: "neutral refused response", body: CheckInResponse[SeatLeaseBody]{Refusal: RefusalPaymentRequired, Remediation: "update payment"}},
+		{name: "neutral refused response", body: CheckInResponse[SeatLeaseBody]{Refusal: RefusalPaymentRequired, Remediation: RemediationUpdatePayment}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

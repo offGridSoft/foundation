@@ -18,13 +18,12 @@ import (
 )
 
 const (
-	CheckInResponseByteCap     = 1 << 16
-	CheckInBudget              = 8 * time.Second
-	CheckInMinInterval         = 24 * time.Hour
-	WarnWindow                 = 7 * 24 * time.Hour
-	ClockSkewAllowance         = 60 * time.Minute
-	CheckInMaxRetryAfter       = 24 * time.Hour
-	CheckInRemediationMaxRunes = 512
+	CheckInResponseByteCap = 1 << 16
+	CheckInBudget          = 8 * time.Second
+	CheckInMinInterval     = 24 * time.Hour
+	WarnWindow             = 7 * 24 * time.Hour
+	ClockSkewAllowance     = 60 * time.Minute
+	CheckInMaxRetryAfter   = 24 * time.Hour
 )
 
 type CheckInAPIError struct {
@@ -88,7 +87,7 @@ type CheckInPayload interface {
 
 type CheckInResponse[B Body] struct {
 	Lease       *core.Signed[B] `json:"lease,omitempty"`
-	Remediation string          `json:"remediation"`
+	Remediation Remediation     `json:"remediation"`
 	Refusal     Refusal         `json:"refusal"`
 	Granted     bool            `json:"granted"`
 }
@@ -99,21 +98,30 @@ func (CheckInResponse[B]) APIBody() {}
 
 func (r CheckInResponse[B]) Validate() error {
 	if r.Granted {
-		if r.Refusal != RefusalNone || r.Remediation != "" || r.Lease == nil {
-			return fmt.Errorf(ErrFmtCheckInResponse, core.ErrLicenseContract)
-		}
-		if err := r.Lease.Validate(); err != nil {
-			return fmt.Errorf(ErrFmtCheckInResponse, errors.Join(core.ErrLicenseContract, err))
-		}
-		return nil
+		return r.validateGranted()
 	}
+	return r.validateRefused()
+}
+
+func (r CheckInResponse[B]) validateGranted() error {
+	if r.Refusal != RefusalNone || r.Remediation != RemediationNone || r.Lease == nil {
+		return fmt.Errorf(ErrFmtCheckInResponse, core.ErrLicenseContract)
+	}
+	if err := r.Lease.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtCheckInResponse, errors.Join(core.ErrLicenseContract, err))
+	}
+	return nil
+}
+
+func (r CheckInResponse[B]) validateRefused() error {
 	if r.Lease != nil {
 		return fmt.Errorf(ErrFmtCheckInResponse, core.ErrLicenseContract)
 	}
 	if err := r.Refusal.Validate(); err != nil || r.Refusal == RefusalNone {
 		return fmt.Errorf(ErrFmtCheckInResponse, core.ErrLicenseContract)
 	}
-	if err := core.ValidateOpaqueToken(r.Remediation, CheckInRemediationMaxRunes); err != nil {
+	want, err := RemediationForRefusal(r.Refusal)
+	if err != nil || r.Remediation != want {
 		return fmt.Errorf(ErrFmtCheckInResponse, core.ErrLicenseContract)
 	}
 	return nil

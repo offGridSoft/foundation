@@ -14,6 +14,7 @@ type SchemaID uint16
 const (
 	SchemaUnknown SchemaID = iota
 	SchemaBugUsage
+	SchemaWitnessUsage
 	SchemaBugCheckIn
 	SchemaBugSeatLease
 	SchemaWitnessCheckIn
@@ -29,14 +30,15 @@ const (
 
 const (
 	SchemaTokenBugUsage                   = ProductTokenBug + "-usage-v1"
+	SchemaTokenWitnessUsage               = ProductTokenWitness + "-usage-v1"
 	SchemaTokenBugCheckIn                 = ProductTokenBug + "-license-check-in-v1"
 	SchemaTokenBugSeatLease               = ProductTokenBug + "-license-lease-v1"
 	SchemaTokenWitnessCheckIn             = ProductTokenWitness + "-subscription-check-in-v1"
 	SchemaTokenWitnessSubscription        = ProductTokenWitness + "-subscription-lease-v1"
-	SchemaTokenCustodySessionOpenRequest  = ProductTokenWitness + "-custody-session-open-v1"
-	SchemaTokenCustodySessionOpenResponse = ProductTokenWitness + "-custody-session-targets-v1"
-	SchemaTokenCustodyFinalizeRequest     = ProductTokenWitness + "-custody-finalize-v1"
-	SchemaTokenCustodyReceipt             = ProductTokenWitness + "-custody-receipt-v1"
+	SchemaTokenCustodySessionOpenRequest  = ProductTokenWitness + "-custody-session-open-v2"
+	SchemaTokenCustodySessionOpenResponse = ProductTokenWitness + "-custody-session-targets-v2"
+	SchemaTokenCustodyFinalizeRequest     = ProductTokenWitness + "-custody-finalize-v2"
+	SchemaTokenCustodyReceipt             = ProductTokenWitness + "-custody-receipt-v2"
 	SchemaTokenReleaseManifest            = "offgrid-release-manifest-v1"
 	SchemaTokenReleaseUploadReceipt       = "offgrid-release-upload-receipt-v1"
 	SchemaTokenReleaseDownloadIndex       = "offgrid-release-download-index-v1"
@@ -45,6 +47,7 @@ const (
 func schemaNames() [SchemaReleaseDownloadIndex + 1]string {
 	return [...]string{
 		SchemaBugUsage:                   SchemaTokenBugUsage,
+		SchemaWitnessUsage:               SchemaTokenWitnessUsage,
 		SchemaBugCheckIn:                 SchemaTokenBugCheckIn,
 		SchemaBugSeatLease:               SchemaTokenBugSeatLease,
 		SchemaWitnessCheckIn:             SchemaTokenWitnessCheckIn,

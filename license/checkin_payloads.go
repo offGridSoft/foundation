@@ -29,6 +29,43 @@ type BugUsage struct {
 	Schema       core.SchemaID     `json:"schema"`
 }
 
+type WitnessUsage struct {
+	WindowEnd   core.UnixNanoTime `json:"window_end"`
+	WindowStart core.UnixNanoTime `json:"window_start"`
+	Quiz        uint32            `json:"quiz"`
+	Test        uint32            `json:"test"`
+	Midterm     uint32            `json:"midterm"`
+	Final       uint32            `json:"final"`
+	Store       uint32            `json:"store"`
+	Verify      uint32            `json:"verify"`
+	Schema      core.SchemaID     `json:"schema"`
+}
+
+func (u WitnessUsage) IsZero() bool {
+	return u == WitnessUsage{}
+}
+
+func (u WitnessUsage) Validate() error {
+	if u.IsZero() {
+		return nil
+	}
+	if u.Schema != core.SchemaWitnessUsage {
+		return fmt.Errorf(ErrFmtCheckInPayload, core.ErrLicenseContract)
+	}
+	return validateUsageWindow(u.WindowStart, u.WindowEnd)
+}
+
+func (u WitnessUsage) MarshalJSON() ([]byte, error) {
+	if u.IsZero() {
+		return []byte("{}"), nil
+	}
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	type witnessUsageJSON WitnessUsage
+	return json.Marshal(witnessUsageJSON(u))
+}
+
 func (u BugUsage) IsZero() bool {
 	return u == BugUsage{}
 }
@@ -40,7 +77,17 @@ func (u BugUsage) Validate() error {
 	if u.Schema != core.SchemaBugUsage {
 		return fmt.Errorf(ErrFmtCheckInPayload, core.ErrLicenseContract)
 	}
-	if u.WindowStart.IsZero() || !u.WindowEnd.After(u.WindowStart) {
+	return validateUsageWindow(u.WindowStart, u.WindowEnd)
+}
+
+func validateUsageWindow(start, end core.UnixNanoTime) error {
+	if err := start.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtCheckInPayload, errors.Join(core.ErrLicenseContract, err))
+	}
+	if err := end.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtCheckInPayload, errors.Join(core.ErrLicenseContract, err))
+	}
+	if !end.After(start) {
 		return fmt.Errorf(ErrFmtCheckInPayload, core.ErrLicenseContract)
 	}
 	return nil
@@ -106,6 +153,7 @@ type WitnessCheckIn struct {
 	BinarySHA256      core.SHA256Hex         `json:"binary_sha256"`
 	LeaseID           core.LeaseID           `json:"lease_id"`
 	AccountToken      AccountToken           `json:"account_token"`
+	Usage             WitnessUsage           `json:"usage"`
 	Schema            core.SchemaID          `json:"schema"`
 	Platform          core.Platform          `json:"platform"`
 }
@@ -130,6 +178,9 @@ func (c WitnessCheckIn) Validate() error {
 		return checkInPayloadError(err)
 	}
 	if err := c.AccountToken.Validate(); err != nil {
+		return checkInPayloadError(err)
+	}
+	if err := c.Usage.Validate(); err != nil {
 		return checkInPayloadError(err)
 	}
 	return nil

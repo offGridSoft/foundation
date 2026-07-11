@@ -10,6 +10,11 @@ import (
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
+type testFatalHelper interface {
+	Helper()
+	Fatal(args ...any)
+}
+
 func TestSessionOpenRequestHostileTable(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -129,11 +134,16 @@ func TestSessionOpenResponseAndUploadTargetContracts(t *testing.T) {
 		t.Fatal(err)
 	}
 	response := SessionOpenResponse{
-		Schema:    core.SchemaCustodySessionOpenResponse,
-		Session:   mustSessionID(t),
-		Targets:   []UploadTarget{target},
-		Retention: mustRetention(),
-		ExpiresAt: core.UnixNanoTimeFromInt64(1782302400000000000),
+		Schema:     core.SchemaCustodySessionOpenResponse,
+		Customer:   mustCustomerID(t),
+		BundleRoot: mustBundleRoot(t),
+		Upload: &SessionUploadGrant{
+			Session:   mustSessionID(t),
+			Targets:   validUploadTargets(t),
+			Retention: mustRetention(),
+			ExpiresAt: core.UnixNanoTimeFromInt64(1782302400000000000),
+		},
+		Disposition: SessionOpenDispositionUploadRequired,
 	}
 	if err := response.Validate(); err != nil {
 		t.Fatal(err)
@@ -157,13 +167,34 @@ func TestSessionOpenResponseAndUploadTargetContracts(t *testing.T) {
 	if err := target.Validate(); !errors.Is(err, core.ErrCustodyContract) {
 		t.Fatalf("UploadTarget oversized headers error = %v, want ErrCustodyContract", err)
 	}
-	response.Targets = append(response.Targets, target)
+	response.Upload.Targets = append(response.Upload.Targets, response.Upload.Targets[0])
 	if err := response.Validate(); !errors.Is(err, core.ErrCustodyContract) {
 		t.Fatalf("SessionOpenResponse duplicate target error = %v, want ErrCustodyContract", err)
 	}
-	response.Targets = make([]UploadTarget, core.CollectionMaximumDefault+1)
+	response.Upload.Targets = make([]UploadTarget, core.CollectionMaximumDefault+1)
 	if err := response.Validate(); !errors.Is(err, core.ErrCustodyContract) {
 		t.Fatalf("SessionOpenResponse oversized targets error = %v, want ErrCustodyContract", err)
+	}
+}
+
+func TestSessionOpenResponseReusesSignedReceipt(t *testing.T) {
+	t.Parallel()
+
+	signed := mustSignedReceipt(t)
+	response := SessionOpenResponse{
+		Schema:          core.SchemaCustodySessionOpenResponse,
+		Customer:        signed.Body.Customer,
+		BundleRoot:      signed.Body.BundleRoot,
+		ExistingReceipt: &signed,
+		Disposition:     SessionOpenDispositionReceiptReused,
+	}
+	if err := response.Validate(); err != nil {
+		t.Fatalf("SessionOpenResponse.Validate() error = %v, want nil", err)
+	}
+
+	response.Upload = &SessionUploadGrant{Targets: validUploadTargets(t)}
+	if err := response.Validate(); !errors.Is(err, core.ErrCustodyContract) {
+		t.Fatalf("receipt reuse with upload targets error = %v, want ErrCustodyContract", err)
 	}
 }
 
@@ -198,13 +229,15 @@ func TestReceiptCanonicalWireForm(t *testing.T) {
 	}
 	want := `{"release":{"version":"2026.0.0",` +
 		`"commit":"` + strings.Repeat("a", 40) + `","tool_manifest_sha":"` + strings.Repeat("b", 64) + `"},` +
-		`"schema":"witness-custody-receipt-v1",` +
-		`"customer_id":"01HZZZZZZZZZZZZZZZZZZZZZZZ",` +
+		`"schema":"witness-custody-receipt-v2","receipt_id":"01J00000000000000000000001",` +
+		`"customer_id":"01HZZZZZZZZZZZZZZZZZZZZZZZ","bundle_root":"` + strings.Repeat("f", 64) + `",` +
 		`"session_id":"01J00000000000000000000000","chain_hash":"` + strings.Repeat("e", 64) + `",` +
-		`"objects":[{"artifact":"bundle.tar","object":"customers/01HZZZZZZZZZZZZZZZZZZZZZZZ/witness/2026/07/07/01J00000000000000000000000/bundle.tar",` +
-		`"generation":"1710000000000000","sha256":"` + strings.Repeat("c", 64) + `","blake3":"` + strings.Repeat("d", 64) + `","size_bytes":12}],` +
-		`"retention":{"retain_until":1815000000000000000,"class":"conditional"},` +
-		`"issued_at":1782302400000000000,"ledger_seq":7,"provider":"gcs"}`
+		`"objects":[{"artifact":"bundle.tar","object":"` + witnessObjectPath(t) + `",` +
+		`"generation":"1710000000000000","sha256":"` + strings.Repeat("c", 64) + `","blake3":"` + strings.Repeat("d", 64) + `","size_bytes":12,"provider":"gcs"},` +
+		`{"artifact":"bundle.tar","object":"` + witnessObjectPath(t) + `",` +
+		`"generation":"1710000000000000","sha256":"` + strings.Repeat("c", 64) + `","blake3":"` + strings.Repeat("d", 64) + `","size_bytes":12,"provider":"s3"}],` +
+		`"retention":{"retain_until":1815000000000000000,"maximum_retain_until":1878000000000000000,"class":"conditional"},` +
+		`"issued_at":1782302400000000000,"accepted_at":1782302399000000000,"ledger_seq":7}`
 	if string(got) != want {
 		t.Fatalf("receipt canonical\n got: %s\nwant: %s", got, want)
 	}
@@ -286,8 +319,10 @@ func TestReceiptRejectsDuplicateObjects(t *testing.T) {
 func TestFinalizeRejectsEmptyObjects(t *testing.T) {
 	t.Parallel()
 	req := FinalizeRequest{
-		Schema:  core.SchemaCustodyFinalizeRequest,
-		Session: mustSessionID(t),
+		Schema:     core.SchemaCustodyFinalizeRequest,
+		Customer:   mustCustomerID(t),
+		BundleRoot: mustBundleRoot(t),
+		Session:    mustSessionID(t),
 	}
 	if err := req.Validate(); !errors.Is(err, core.ErrCustodyContract) {
 		t.Fatalf("FinalizeRequest error = %v, want ErrCustodyContract", err)
@@ -298,12 +333,60 @@ func TestFinalizeRejectsDuplicateObjects(t *testing.T) {
 	t.Parallel()
 	object := mustUploadedObject(t)
 	req := FinalizeRequest{
-		Schema:  core.SchemaCustodyFinalizeRequest,
-		Session: mustSessionID(t),
-		Objects: []UploadedObject{object, object},
+		Schema:     core.SchemaCustodyFinalizeRequest,
+		Customer:   mustCustomerID(t),
+		BundleRoot: mustBundleRoot(t),
+		Session:    mustSessionID(t),
+		Objects:    []UploadedObject{object, object},
 	}
 	if err := req.Validate(); !errors.Is(err, core.ErrCustodyContract) {
 		t.Fatalf("FinalizeRequest duplicate object error = %v, want ErrCustodyContract", err)
+	}
+}
+
+func TestFinalizeDualProviderContract(t *testing.T) {
+	t.Parallel()
+
+	req := FinalizeRequest{
+		Schema:     core.SchemaCustodyFinalizeRequest,
+		Customer:   mustCustomerID(t),
+		BundleRoot: mustBundleRoot(t),
+		Session:    mustSessionID(t),
+		Objects:    mustUploadedObjects(t),
+	}
+	if err := req.Validate(); err != nil {
+		t.Fatalf("FinalizeRequest.Validate() error = %v, want nil", err)
+	}
+
+	req.Objects[1].SHA256 = mustSHA256(t, "a")
+	if err := req.Validate(); !errors.Is(err, core.ErrCustodyContract) {
+		t.Fatalf("FinalizeRequest provider hash drift error = %v, want ErrCustodyContract", err)
+	}
+}
+
+func TestReceiptRejectsCustodyIdentityDrift(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		mutate func(*testing.T, *ReceiptBody)
+		name   string
+	}{
+		{name: "secondary provider missing", mutate: func(_ *testing.T, b *ReceiptBody) { b.Objects = b.Objects[:1] }},
+		{name: "provider byte count drift", mutate: func(_ *testing.T, b *ReceiptBody) { b.Objects[1].Size = core.NewByteCount(13) }},
+		{name: "retention exceeds plan ceiling", mutate: func(_ *testing.T, b *ReceiptBody) {
+			b.Retention.RetainUntil = b.Retention.MaximumRetainUntil.Add(time.Nanosecond)
+		}},
+		{name: "issued before accepted", mutate: func(_ *testing.T, b *ReceiptBody) { b.IssuedAt = b.AcceptedAt.Add(-time.Nanosecond) }},
+		{name: "bundle root differs from object key", mutate: func(t *testing.T, b *ReceiptBody) { b.BundleRoot = mustBLAKE3(t, "a") }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			body := validReceipt(t)
+			tc.mutate(t, &body)
+			if err := body.Validate(); !errors.Is(err, core.ErrCustodyContract) {
+				t.Fatalf("ReceiptBody.Validate() error = %v, want ErrCustodyContract", err)
+			}
+		})
 	}
 }
 
@@ -316,11 +399,12 @@ func TestGenerationRejectsControlToken(t *testing.T) {
 	}
 }
 
-func validOpenRequest(t *testing.T) SessionOpenRequest {
+func validOpenRequest(t testFatalHelper) SessionOpenRequest {
 	t.Helper()
 	return SessionOpenRequest{
 		Schema:        core.SchemaCustodySessionOpenRequest,
 		Customer:      mustCustomerID(t),
+		BundleRoot:    mustBundleRoot(t),
 		Lease:         mustOpenLeaseRef(t),
 		Release:       mustRelease(t),
 		Artifacts:     []ArtifactDescriptor{mustArtifact(t)},
@@ -329,23 +413,25 @@ func validOpenRequest(t *testing.T) SessionOpenRequest {
 	}
 }
 
-func validReceipt(t *testing.T) ReceiptBody {
+func validReceipt(t testFatalHelper) ReceiptBody {
 	t.Helper()
 	return ReceiptBody{
-		Schema:    core.SchemaCustodyReceipt,
-		Customer:  mustCustomerID(t),
-		Session:   mustSessionID(t),
-		Release:   mustRelease(t),
-		Objects:   []UploadedObject{mustUploadedObject(t)},
-		Retention: mustRetention(),
-		Provider:  core.StorageProviderGCS,
-		LedgerSeq: mustLedgerSeq(t, 7),
-		ChainHash: mustSHA256(t, "e"),
-		IssuedAt:  core.UnixNanoTimeFromInt64(1782302400000000000),
+		Schema:     core.SchemaCustodyReceipt,
+		ReceiptID:  mustReceiptID(t),
+		Customer:   mustCustomerID(t),
+		BundleRoot: mustBundleRoot(t),
+		Session:    mustSessionID(t),
+		Release:    mustRelease(t),
+		Objects:    mustUploadedObjects(t),
+		Retention:  mustRetention(),
+		LedgerSeq:  mustLedgerSeq(t, 7),
+		ChainHash:  mustSHA256(t, "e"),
+		AcceptedAt: core.UnixNanoTimeFromInt64(1782302399000000000),
+		IssuedAt:   core.UnixNanoTimeFromInt64(1782302400000000000),
 	}
 }
 
-func mustOpenLeaseRef(t *testing.T) OpenLeaseRef {
+func mustOpenLeaseRef(t testFatalHelper) OpenLeaseRef {
 	t.Helper()
 	leaseID, err := core.ParseLeaseID("lease-1")
 	if err != nil {
@@ -358,7 +444,7 @@ func mustOpenLeaseRef(t *testing.T) OpenLeaseRef {
 	return OpenLeaseRef{LeaseID: leaseID, DeviceFingerprint: fp}
 }
 
-func mustRelease(t *testing.T) ReleaseIdentity {
+func mustRelease(t testFatalHelper) ReleaseIdentity {
 	t.Helper()
 	version, err := core.ParseProductVersion(core.FoundationVersion2026)
 	if err != nil {
@@ -375,12 +461,12 @@ func mustRelease(t *testing.T) ReleaseIdentity {
 	}
 }
 
-func mustArtifact(t *testing.T) ArtifactDescriptor {
+func mustArtifact(t testFatalHelper) ArtifactDescriptor {
 	t.Helper()
 	return artifactWithNameAndSize(t, "bundle.tar", 12)
 }
 
-func artifactWithNameAndSize(t *testing.T, name string, size uint64) ArtifactDescriptor {
+func artifactWithNameAndSize(t testFatalHelper, name string, size uint64) ArtifactDescriptor {
 	t.Helper()
 	return ArtifactDescriptor{
 		Name:   mustArtifactNameValue(t, name),
@@ -390,9 +476,9 @@ func artifactWithNameAndSize(t *testing.T, name string, size uint64) ArtifactDes
 	}
 }
 
-func mustUploadedObject(t *testing.T) UploadedObject {
+func mustUploadedObject(t testFatalHelper) UploadedObject {
 	t.Helper()
-	object, err := ParseObjectPath("customers/01HZZZZZZZZZZZZZZZZZZZZZZZ/witness/2026/07/07/01J00000000000000000000000/bundle.tar")
+	object, err := ParseObjectPath(witnessObjectPath(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -403,10 +489,19 @@ func mustUploadedObject(t *testing.T) UploadedObject {
 		Size:       core.NewByteCount(12),
 		SHA256:     mustSHA256(t, "c"),
 		BLAKE3:     mustBLAKE3(t, "d"),
+		Provider:   core.StorageProviderGCS,
 	}
 }
 
-func validUploadTarget(t *testing.T) UploadTarget {
+func mustUploadedObjects(t testFatalHelper) []UploadedObject {
+	t.Helper()
+	gcs := mustUploadedObject(t)
+	s3 := gcs
+	s3.Provider = core.StorageProviderS3
+	return []UploadedObject{gcs, s3}
+}
+
+func validUploadTarget(t testFatalHelper) UploadTarget {
 	t.Helper()
 	return UploadTarget{
 		Artifact: mustArtifactNameValue(t, "bundle.tar"),
@@ -421,16 +516,24 @@ func validUploadTarget(t *testing.T) UploadTarget {
 	}
 }
 
-func mustObjectPath(t *testing.T) ObjectPath {
+func validUploadTargets(t testFatalHelper) []UploadTarget {
 	t.Helper()
-	object, err := ParseObjectPath("customers/01HZZZZZZZZZZZZZZZZZZZZZZZ/witness/2026/07/07/01J00000000000000000000000/bundle.tar")
+	gcs := validUploadTarget(t)
+	s3 := gcs
+	s3.Provider = core.StorageProviderS3
+	return []UploadTarget{gcs, s3}
+}
+
+func mustObjectPath(t testFatalHelper) ObjectPath {
+	t.Helper()
+	object, err := ParseObjectPath(witnessObjectPath(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return object
 }
 
-func mustSignedUploadURL(t *testing.T) SignedUploadURL {
+func mustSignedUploadURL(t testFatalHelper) SignedUploadURL {
 	t.Helper()
 	signedURL, err := ParseSignedUploadURL("https://storage.googleapis.com/offgrid-custody/bundle.tar?signature=abc")
 	if err != nil {
@@ -439,7 +542,7 @@ func mustSignedUploadURL(t *testing.T) SignedUploadURL {
 	return signedURL
 }
 
-func mustGeneration(t *testing.T) Generation {
+func mustGeneration(t testFatalHelper) Generation {
 	t.Helper()
 	generation, err := ParseGeneration("1710000000000000")
 	if err != nil {
@@ -448,7 +551,7 @@ func mustGeneration(t *testing.T) Generation {
 	return generation
 }
 
-func mustLedgerSeq(t *testing.T, value int64) LedgerSeq {
+func mustLedgerSeq(t testFatalHelper, value int64) LedgerSeq {
 	t.Helper()
 	seq, err := NewLedgerSeq(value)
 	if err != nil {
@@ -459,12 +562,13 @@ func mustLedgerSeq(t *testing.T, value int64) LedgerSeq {
 
 func mustRetention() RetentionPolicy {
 	return RetentionPolicy{
-		Class:       RetentionClassConditional,
-		RetainUntil: core.NewUnixNanoTime(time.Unix(0, 1815000000000000000)),
+		Class:              RetentionClassConditional,
+		RetainUntil:        core.NewUnixNanoTime(time.Unix(0, 1815000000000000000)),
+		MaximumRetainUntil: core.NewUnixNanoTime(time.Unix(0, 1878000000000000000)),
 	}
 }
 
-func mustCustomerID(t *testing.T) CustomerID {
+func mustCustomerID(t testFatalHelper) CustomerID {
 	t.Helper()
 	id, err := ParseCustomerID("01HZZZZZZZZZZZZZZZZZZZZZZZ")
 	if err != nil {
@@ -473,7 +577,7 @@ func mustCustomerID(t *testing.T) CustomerID {
 	return id
 }
 
-func mustSessionID(t *testing.T) SessionID {
+func mustSessionID(t testFatalHelper) SessionID {
 	t.Helper()
 	id, err := ParseSessionID("01J00000000000000000000000")
 	if err != nil {
@@ -482,7 +586,39 @@ func mustSessionID(t *testing.T) SessionID {
 	return id
 }
 
-func mustArtifactNameValue(t *testing.T, value string) ArtifactName {
+func mustReceiptID(t testFatalHelper) ReceiptID {
+	t.Helper()
+	id, err := ParseReceiptID("01J00000000000000000000001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func mustBundleRoot(t testFatalHelper) core.BLAKE3Hex {
+	t.Helper()
+	return mustBLAKE3(t, "f")
+}
+
+func mustSignedReceipt(t testFatalHelper) core.Signed[ReceiptBody] {
+	t.Helper()
+	keyID, err := core.ParseSigningKeyID("custody-receipt-key-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	signature, err := core.ParseEd25519SignatureHex(strings.Repeat("a", 128))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return core.Signed[ReceiptBody]{Body: validReceipt(t), KeyID: keyID, Signature: signature}
+}
+
+func witnessObjectPath(t testFatalHelper) string {
+	t.Helper()
+	return core.WitnessCustodyPathRoot + "/" + mustCustomerID(t).String() + "/2026/07/" + mustBundleRoot(t).String() + "/bundle.tar"
+}
+
+func mustArtifactNameValue(t testFatalHelper, value string) ArtifactName {
 	t.Helper()
 	name, err := ParseArtifactName(value)
 	if err != nil {
@@ -491,7 +627,7 @@ func mustArtifactNameValue(t *testing.T, value string) ArtifactName {
 	return name
 }
 
-func mustSHA256(t *testing.T, digit string) core.SHA256Hex {
+func mustSHA256(t testFatalHelper, digit string) core.SHA256Hex {
 	t.Helper()
 	sum, err := core.ParseSHA256Hex(strings.Repeat(digit, 64))
 	if err != nil {
@@ -500,7 +636,7 @@ func mustSHA256(t *testing.T, digit string) core.SHA256Hex {
 	return sum
 }
 
-func mustBLAKE3(t *testing.T, digit string) core.BLAKE3Hex {
+func mustBLAKE3(t testFatalHelper, digit string) core.BLAKE3Hex {
 	t.Helper()
 	sum, err := core.ParseBLAKE3Hex(strings.Repeat(digit, 64))
 	if err != nil {

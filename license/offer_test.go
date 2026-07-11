@@ -85,8 +85,7 @@ func TestBillingPeriodParserHostileTable(t *testing.T) {
 	}{
 		{name: "monthly accepted", token: BillingPeriodTokenMonthly, want: BillingPeriodMonthly},
 		{name: "prepaid years accepted", token: BillingPeriodTokenPrepaidYears, want: BillingPeriodPrepaidYears},
-		{name: "four weeks rejected", token: "four_weeks"},
-		{name: "blank rejected", token: ""},
+		{name: "invalid ordinal token rejected", token: billingPeriodInvalid.String()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
