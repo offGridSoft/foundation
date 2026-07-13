@@ -16,4 +16,5 @@ const (
 	jsonFieldWriterKeyID       = "writer_key_id"
 	jsonFieldOperationSHA256   = "operation_sha256"
 	jsonFieldOccurredAt        = "occurred_at"
+	jsonFieldRevokedAt         = "revoked_at"
 )

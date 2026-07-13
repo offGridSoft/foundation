@@ -19,6 +19,7 @@ const (
 	SchemaBugSeatLease
 	SchemaBugWriterAttestation
 	SchemaBugWriterCertificate
+	SchemaBugWriterRevocation
 	SchemaWitnessCheckIn
 	SchemaWitnessSubscription
 	SchemaCustodySessionOpenRequest
@@ -40,6 +41,7 @@ const (
 	SchemaTokenBugSeatLease               = ProductTokenBug + "-license-lease-" + ContractVersionToken
 	SchemaTokenBugWriterAttestation       = ProductTokenBug + "-writer-attestation-" + ContractVersionToken
 	SchemaTokenBugWriterCertificate       = ProductTokenBug + "-writer-certificate-" + ContractVersionToken
+	SchemaTokenBugWriterRevocation        = ProductTokenBug + "-writer-revocation-" + ContractVersionToken
 	SchemaTokenWitnessCheckIn             = ProductTokenWitness + "-subscription-check-in-" + ContractVersionToken
 	SchemaTokenWitnessSubscription        = ProductTokenWitness + "-subscription-lease-" + ContractVersionToken
 	SchemaTokenCustodySessionOpenRequest  = ProductTokenWitness + "-custody-session-open-" + ContractVersionToken
@@ -62,6 +64,7 @@ func schemaNames() [SchemaReleaseCommandRun + 1]string {
 		SchemaBugSeatLease:               SchemaTokenBugSeatLease,
 		SchemaBugWriterAttestation:       SchemaTokenBugWriterAttestation,
 		SchemaBugWriterCertificate:       SchemaTokenBugWriterCertificate,
+		SchemaBugWriterRevocation:        SchemaTokenBugWriterRevocation,
 		SchemaWitnessCheckIn:             SchemaTokenWitnessCheckIn,
 		SchemaWitnessSubscription:        SchemaTokenWitnessSubscription,
 		SchemaCustodySessionOpenRequest:  SchemaTokenCustodySessionOpenRequest,
