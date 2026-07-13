@@ -29,6 +29,22 @@ func (b BugWriterRevocationBody) Validate() error {
 	return nil
 }
 
+// VerifyAttestationAllowed owns the revocation cutoff rule. A revocation for
+// another writer is irrelevant; the named writer remains valid strictly
+// before RevokedAt and is refused at or after the cutoff.
+func (b BugWriterRevocationBody) VerifyAttestationAllowed(attestation BugWriterAttestationBody) error {
+	if err := b.Validate(); err != nil {
+		return err
+	}
+	if err := attestation.Validate(); err != nil {
+		return err
+	}
+	if attestation.WriterKeyID == b.WriterKeyID && !attestation.OccurredAt.Before(b.RevokedAt) {
+		return writerRevocationError(core.ErrLicenseContract)
+	}
+	return nil
+}
+
 func writerRevocationError(err error) error {
 	if err == nil {
 		err = core.ErrFoundationContract
