@@ -1,6 +1,7 @@
 package release
 
 import (
+	"crypto/sha256"
 	"fmt"
 
 	"github.com/offGridSoft/foundation/v2026/core"
@@ -300,6 +301,13 @@ func validateDeployPlanCrossIdentity(p DeployPlan) error {
 		return fmt.Errorf(ErrFmtDeployPlan, core.ErrReleaseContract)
 	}
 	if p.Manifest.ReleaseID.String() != p.ReleaseID.String() || p.Layout.ReleaseID.String() != p.ReleaseID.String() {
+		return fmt.Errorf(ErrFmtDeployPlan, core.ErrReleaseContract)
+	}
+	canonical, err := p.Manifest.Canonical(nil)
+	if err != nil {
+		return wrapReleaseContract(ErrFmtDeployPlan, err)
+	}
+	if core.NewSHA256Hex(sha256.Sum256(canonical)) != p.ManifestSHA256 {
 		return fmt.Errorf(ErrFmtDeployPlan, core.ErrReleaseContract)
 	}
 	return nil

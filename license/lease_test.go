@@ -38,6 +38,8 @@ func TestSeatLeaseCanonicalWireForm(t *testing.T) {
 	t.Parallel()
 	window := testLeaseWindow(t, SeatPlanStandard, 0)
 	body := SeatLeaseBody{
+		LeaseID:            testLeaseID(t),
+		Generation:         1,
 		IssuedAt:           window.IssuedAt,
 		PaidUntil:          window.PaidUntil,
 		TokenExpiresAt:     window.TokenExpiresAt,
@@ -56,7 +58,7 @@ func TestSeatLeaseCanonicalWireForm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"schema":"bug-license-lease-v2026","developer_key_id":"OGS-DEV-alpha",` +
+	want := `{"schema":"bug-license-lease-v2026","lease_id":"lease-2026-test","lease_generation":1,"developer_key_id":"OGS-DEV-alpha",` +
 		`"device_fingerprint":"sha256:` + strings.Repeat("a", 64) + `",` +
 		`"writer":{"key_id":"` + body.Writer.KeyID.String() + `","public_key":"` + body.Writer.PublicKey.String() + `"},` +
 		`"issued_at":1782302400000000000,"paid_until":1784894400000000000,` +
@@ -72,6 +74,8 @@ func TestSubscriptionLeaseCanonicalWireForm(t *testing.T) {
 	t.Parallel()
 	window := testSubscriptionLeaseWindow(t, SubscriptionPlanSilver, 0)
 	body := SubscriptionLeaseBody{
+		LeaseID:            testLeaseID(t),
+		Generation:         1,
 		DeviceFingerprint:  testDeviceFingerprint(t),
 		IssuedAt:           window.IssuedAt,
 		PaidUntil:          window.PaidUntil,
@@ -88,7 +92,7 @@ func TestSubscriptionLeaseCanonicalWireForm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"schema":"witness-subscription-lease-v2026","device_fingerprint":"sha256:` +
+	want := `{"schema":"witness-subscription-lease-v2026","lease_id":"lease-2026-test","lease_generation":1,"device_fingerprint":"sha256:` +
 		strings.Repeat("a", 64) + `","issued_at":1782302400000000000,` +
 		`"paid_until":1784894400000000000,` +
 		`"lease_not_after":1785240000000000000,"check_in_after":1785153600000000000,` +
@@ -370,6 +374,8 @@ func testSubscriptionLeaseBody() SubscriptionLeaseBody {
 		panic(err)
 	}
 	return SubscriptionLeaseBody{
+		LeaseID:            mustLeaseIDNoT(),
+		Generation:         1,
 		DeviceFingerprint:  testDeviceFingerprintNoT(),
 		IssuedAt:           window.IssuedAt,
 		PaidUntil:          window.PaidUntil,
@@ -382,6 +388,14 @@ func testSubscriptionLeaseBody() SubscriptionLeaseBody {
 		BillingPeriod:      BillingPeriodMonthly,
 		PrepaidYears:       0,
 	}
+}
+
+func mustLeaseIDNoT() core.LeaseID {
+	id, err := core.ParseLeaseID("lease-2026-test")
+	if err != nil {
+		panic(err)
+	}
+	return id
 }
 
 func testLeaseWindow(t *testing.T, plan SeatPlan, prepaidYears uint8) LeaseWindow {

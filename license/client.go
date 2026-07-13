@@ -83,6 +83,7 @@ func DefaultCheckInBackoff() core.BackoffPolicy {
 
 type CheckInPayload interface {
 	core.Validatable
+	CheckInRequestNonce() CheckInNonce
 }
 
 type Client[P CheckInPayload, R CheckInResponseBody] struct {
@@ -134,10 +135,10 @@ func (c Client[P, R]) Do(ctx context.Context, in P) (R, error) {
 	if err != nil {
 		return zero, transportError(err)
 	}
-	return c.roundTrip(ctx, body)
+	return c.roundTrip(ctx, body, in.CheckInRequestNonce())
 }
 
-func (c Client[P, R]) roundTrip(ctx context.Context, body []byte) (R, error) {
+func (c Client[P, R]) roundTrip(ctx context.Context, body []byte, nonce CheckInNonce) (R, error) {
 	var zero R
 	policy := c.backoffPolicy()
 	var lastErr error
@@ -160,6 +161,9 @@ func (c Client[P, R]) roundTrip(ctx context.Context, body []byte) (R, error) {
 		switch result.Outcome {
 		case core.HTTPOutcomeSuccess:
 			if verr := result.Response.Validate(); verr != nil {
+				return zero, verr
+			}
+			if verr := result.Response.VerifyRequestNonce(nonce); verr != nil {
 				return zero, verr
 			}
 			return result.Response, nil

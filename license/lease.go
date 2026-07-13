@@ -18,14 +18,16 @@ type Body interface {
 
 // Field order is storage-only; MarshalJSON owns the signature-load-bearing order.
 type SeatLeaseBody struct {
+	Writer             BugWriterKey             `json:"writer"`
+	LeaseID            core.LeaseID             `json:"lease_id"`
 	DeveloperKeyID     DeveloperKeyID           `json:"developer_key_id"`
 	DeviceFingerprint  core.DeviceFingerprint   `json:"device_fingerprint"`
-	Writer             BugWriterKey             `json:"writer"`
-	IssuedAt           core.UnixNanoTime        `json:"issued_at"`
 	PaidUntil          core.UnixNanoTime        `json:"paid_until"`
+	IssuedAt           core.UnixNanoTime        `json:"issued_at"`
 	TokenExpiresAt     core.UnixNanoTime        `json:"lease_not_after"`
 	CheckInAfterAt     core.UnixNanoTime        `json:"check_in_after"`
 	CheckInByAt        core.UnixNanoTime        `json:"check_in_by"`
+	Generation         LeaseGeneration          `json:"lease_generation"`
 	WriteGraceDuration core.NanosecondsDuration `json:"write_grace_ns"`
 	Schema             core.SchemaID            `json:"schema"`
 	Plan               SeatPlan                 `json:"plan"`
@@ -43,6 +45,19 @@ func (b SeatLeaseBody) Validate() error {
 	if err := b.BillingPeriod.Validate(); err != nil {
 		return err
 	}
+	if err := b.validateIdentity(); err != nil {
+		return err
+	}
+	return b.validateWindowAndBilling()
+}
+
+func (b SeatLeaseBody) validateIdentity() error {
+	if err := b.LeaseID.Validate(); err != nil {
+		return err
+	}
+	if err := b.Generation.Validate(); err != nil {
+		return err
+	}
 	if err := b.DeveloperKeyID.Validate(); err != nil {
 		return err
 	}
@@ -52,6 +67,10 @@ func (b SeatLeaseBody) Validate() error {
 	if err := b.Writer.Validate(); err != nil {
 		return err
 	}
+	return nil
+}
+
+func (b SeatLeaseBody) validateWindowAndBilling() error {
 	if err := validateCommonLeaseWindow(b); err != nil {
 		return err
 	}
@@ -182,11 +201,13 @@ func validateCollectionLeaseWindow(period BillingPeriod, checkInAfter core.UnixN
 // Field order is storage-only; MarshalJSON owns the signature-load-bearing order.
 type SubscriptionLeaseBody struct {
 	DeviceFingerprint  core.DeviceFingerprint   `json:"device_fingerprint"`
+	LeaseID            core.LeaseID             `json:"lease_id"`
+	CheckInAfterAt     core.UnixNanoTime        `json:"check_in_after"`
 	IssuedAt           core.UnixNanoTime        `json:"issued_at"`
 	PaidUntil          core.UnixNanoTime        `json:"paid_until"`
 	TokenExpiresAt     core.UnixNanoTime        `json:"lease_not_after"`
-	CheckInAfterAt     core.UnixNanoTime        `json:"check_in_after"`
 	CheckInByAt        core.UnixNanoTime        `json:"check_in_by"`
+	Generation         LeaseGeneration          `json:"lease_generation"`
 	WriteGraceDuration core.NanosecondsDuration `json:"write_grace_ns"`
 	Schema             core.SchemaID            `json:"schema"`
 	Plan               SubscriptionPlan         `json:"plan"`
@@ -204,9 +225,26 @@ func (b SubscriptionLeaseBody) Validate() error {
 	if err := b.BillingPeriod.Validate(); err != nil {
 		return err
 	}
+	if err := b.validateIdentity(); err != nil {
+		return err
+	}
+	return b.validateWindowAndBilling()
+}
+
+func (b SubscriptionLeaseBody) validateIdentity() error {
+	if err := b.LeaseID.Validate(); err != nil {
+		return err
+	}
+	if err := b.Generation.Validate(); err != nil {
+		return err
+	}
 	if err := b.DeviceFingerprint.Validate(); err != nil {
 		return err
 	}
+	return nil
+}
+
+func (b SubscriptionLeaseBody) validateWindowAndBilling() error {
 	if err := validateCommonLeaseWindow(b); err != nil {
 		return err
 	}
@@ -241,6 +279,8 @@ func appendSeatLeaseBodyJSON(dst []byte, b SeatLeaseBody) ([]byte, error) {
 	dst = append(dst, '{')
 	var err error
 	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, b.Schema)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldLeaseID, b.LeaseID)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldLeaseGeneration, b.Generation)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDeveloperKeyID, b.DeveloperKeyID)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDeviceFingerprint, b.DeviceFingerprint)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldWriter, b.Writer)
@@ -263,6 +303,8 @@ func appendSubscriptionLeaseBodyJSON(dst []byte, b SubscriptionLeaseBody) ([]byt
 	dst = append(dst, '{')
 	var err error
 	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, b.Schema)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldLeaseID, b.LeaseID)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldLeaseGeneration, b.Generation)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDeviceFingerprint, b.DeviceFingerprint)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldIssuedAt, b.IssuedAt)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldPaidUntil, b.PaidUntil)

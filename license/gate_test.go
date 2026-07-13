@@ -239,6 +239,8 @@ func gateLease(now core.UnixNanoTime) SeatLeaseBody {
 		panic(err)
 	}
 	return SeatLeaseBody{
+		LeaseID:            mustLeaseIDNoT(),
+		Generation:         1,
 		IssuedAt:           window.IssuedAt,
 		PaidUntil:          window.PaidUntil,
 		TokenExpiresAt:     window.TokenExpiresAt,

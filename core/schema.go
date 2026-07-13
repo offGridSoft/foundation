@@ -16,11 +16,13 @@ const (
 	SchemaBugUsage
 	SchemaWitnessUsage
 	SchemaBugCheckIn
+	SchemaBugCheckInResponse
 	SchemaBugSeatLease
 	SchemaBugWriterAttestation
 	SchemaBugWriterCertificate
 	SchemaBugWriterRevocation
 	SchemaWitnessCheckIn
+	SchemaWitnessCheckInResponse
 	SchemaWitnessSubscription
 	SchemaCustodySessionOpenRequest
 	SchemaCustodySessionOpenResponse
@@ -38,11 +40,13 @@ const (
 	SchemaTokenBugUsage                   = ProductTokenBug + "-usage-" + ContractVersionToken
 	SchemaTokenWitnessUsage               = ProductTokenWitness + "-usage-" + ContractVersionToken
 	SchemaTokenBugCheckIn                 = ProductTokenBug + "-license-check-in-" + ContractVersionToken
+	SchemaTokenBugCheckInResponse         = ProductTokenBug + "-license-check-in-response-" + ContractVersionToken
 	SchemaTokenBugSeatLease               = ProductTokenBug + "-license-lease-" + ContractVersionToken
 	SchemaTokenBugWriterAttestation       = ProductTokenBug + "-writer-attestation-" + ContractVersionToken
 	SchemaTokenBugWriterCertificate       = ProductTokenBug + "-writer-certificate-" + ContractVersionToken
 	SchemaTokenBugWriterRevocation        = ProductTokenBug + "-writer-revocation-" + ContractVersionToken
 	SchemaTokenWitnessCheckIn             = ProductTokenWitness + "-subscription-check-in-" + ContractVersionToken
+	SchemaTokenWitnessCheckInResponse     = ProductTokenWitness + "-subscription-check-in-response-" + ContractVersionToken
 	SchemaTokenWitnessSubscription        = ProductTokenWitness + "-subscription-lease-" + ContractVersionToken
 	SchemaTokenCustodySessionOpenRequest  = ProductTokenWitness + "-custody-session-open-" + ContractVersionToken
 	SchemaTokenCustodySessionOpenResponse = ProductTokenWitness + "-custody-session-targets-" + ContractVersionToken
@@ -61,11 +65,13 @@ func schemaNames() [SchemaReleaseCommandRun + 1]string {
 		SchemaBugUsage:                   SchemaTokenBugUsage,
 		SchemaWitnessUsage:               SchemaTokenWitnessUsage,
 		SchemaBugCheckIn:                 SchemaTokenBugCheckIn,
+		SchemaBugCheckInResponse:         SchemaTokenBugCheckInResponse,
 		SchemaBugSeatLease:               SchemaTokenBugSeatLease,
 		SchemaBugWriterAttestation:       SchemaTokenBugWriterAttestation,
 		SchemaBugWriterCertificate:       SchemaTokenBugWriterCertificate,
 		SchemaBugWriterRevocation:        SchemaTokenBugWriterRevocation,
 		SchemaWitnessCheckIn:             SchemaTokenWitnessCheckIn,
+		SchemaWitnessCheckInResponse:     SchemaTokenWitnessCheckInResponse,
 		SchemaWitnessSubscription:        SchemaTokenWitnessSubscription,
 		SchemaCustodySessionOpenRequest:  SchemaTokenCustodySessionOpenRequest,
 		SchemaCustodySessionOpenResponse: SchemaTokenCustodySessionOpenResponse,

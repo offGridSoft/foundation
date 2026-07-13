@@ -22,23 +22,49 @@ func TestBugCheckInResponseBoundaryTable(t *testing.T) {
 	overMaximum := makeRevocationDelivery(t, keyID, BugWriterRevocationDeliveryMax+1)
 
 	granted := func(values ...core.Signed[BugWriterRevocationBody]) BugCheckInResponse {
-		return BugCheckInResponse{
+		body := BugCheckInResponseBody{
+			Schema:            core.SchemaBugCheckInResponse,
+			RequestNonce:      testCheckInNonce(t),
 			Decision:          CheckInDecision{Granted: true, Refusal: RefusalNone},
 			Grant:             grant,
 			WriterRevocations: BugWriterRevocationSet{Values: values},
 		}
+		if body.Validate() == nil {
+			return signBugCheckInResponse(t, body)
+		}
+		response := signBugCheckInResponse(t, BugCheckInResponseBody{
+			Schema:       core.SchemaBugCheckInResponse,
+			RequestNonce: testCheckInNonce(t),
+			Decision:     CheckInDecision{Granted: true, Refusal: RefusalNone},
+			Grant:        grant,
+		})
+		response.Authority.Body = body
+		return response
 	}
 	refused := func(refusal Refusal, remediation Remediation, values ...core.Signed[BugWriterRevocationBody]) BugCheckInResponse {
-		return BugCheckInResponse{
-			Decision:          CheckInDecision{Refusal: refusal, Remediation: remediation},
-			WriterRevocations: BugWriterRevocationSet{Values: values},
+		valid := signBugCheckInResponse(t, BugCheckInResponseBody{
+			Schema:       core.SchemaBugCheckInResponse,
+			RequestNonce: testCheckInNonce(t),
+			Decision:     CheckInDecision{Refusal: RefusalPaymentRequired, Remediation: RemediationUpdatePayment},
+		})
+		valid.Authority.Body.Decision = CheckInDecision{Refusal: refusal, Remediation: remediation}
+		valid.Authority.Body.WriterRevocations = BugWriterRevocationSet{Values: values}
+		if valid.Authority.Body.Validate() == nil {
+			keyID, _, privateKey := testServerSigningKey(t)
+			valid.Authority = signTestBody(t, keyID, privateKey, valid.Authority.Body)
 		}
+		return valid
 	}
+	grantMissing := granted()
+	grantMissing.Authority.Body.Grant = nil
+	refusalWithGrant := refused(RefusalPaymentRequired, RemediationUpdatePayment)
+	refusalWithGrant.Authority.Body.Grant = grant
+	zeroResponse := BugCheckInResponse{}
 
 	cases := []struct {
+		response BugCheckInResponse
 		name     string
 		keyring  core.SigningKeyring
-		response BugCheckInResponse
 		wantErr  bool
 	}{
 		{name: "grant without revocations", response: granted(), keyring: keyring},
@@ -51,9 +77,9 @@ func TestBugCheckInResponseBoundaryTable(t *testing.T) {
 		{name: "unsupported build refusal carries two", response: refused(RefusalUnsupportedBuild, RemediationInstallSupportedBuild, one, two), keyring: keyring},
 		{name: "grant accepts exact revocation maximum", response: granted(maximum...), keyring: keyring},
 		{name: "refusal accepts exact revocation maximum", response: refused(RefusalDeviceLimit, RemediationDeactivateMachine, maximum...), keyring: keyring},
-		{name: "zero response rejected", response: BugCheckInResponse{}, keyring: keyring, wantErr: true},
-		{name: "grant decision missing grant rejected", response: BugCheckInResponse{Decision: CheckInDecision{Granted: true, Refusal: RefusalNone}}, keyring: keyring, wantErr: true},
-		{name: "refusal carrying grant rejected", response: BugCheckInResponse{Decision: CheckInDecision{Refusal: RefusalPaymentRequired, Remediation: RemediationUpdatePayment}, Grant: grant}, keyring: keyring, wantErr: true},
+		{name: "zero response rejected", response: zeroResponse, keyring: keyring, wantErr: true},
+		{name: "grant decision missing grant rejected", response: grantMissing, keyring: keyring, wantErr: true},
+		{name: "refusal carrying grant rejected", response: refusalWithGrant, keyring: keyring, wantErr: true},
 		{name: "refusal remediation mismatch rejected", response: refused(RefusalPaymentRequired, RemediationDeactivateMachine), keyring: keyring, wantErr: true},
 		{name: "duplicate writer cutoff rejected", response: granted(one, one), keyring: keyring, wantErr: true},
 		{name: "descending writer order rejected", response: granted(two, one), keyring: keyring, wantErr: true},
@@ -84,22 +110,44 @@ func TestBugCheckInResponseBoundaryTable(t *testing.T) {
 	}
 }
 
+func TestUnsignedRefusalCannotCrossVerificationBoundary(t *testing.T) {
+	t.Parallel()
+
+	keyID, publicKey, _ := testServerSigningKey(t)
+	response := BugCheckInResponse{Authority: core.Signed[BugCheckInResponseBody]{
+		Body: BugCheckInResponseBody{
+			Schema:       core.SchemaBugCheckInResponse,
+			RequestNonce: testCheckInNonce(t),
+			Decision:     CheckInDecision{Refusal: RefusalPaymentRequired, Remediation: RemediationUpdatePayment},
+		},
+		KeyID: keyID,
+	}}
+	keyring := core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
+	if err := response.Verify(keyring); !errors.Is(err, core.ErrLicenseContract) {
+		t.Fatalf("BugCheckInResponse.Verify(unsigned refusal) error = %v, want %v", err, core.ErrLicenseContract)
+	}
+}
+
 func TestBugWriterRevocationSetMergeBoundaryTable(t *testing.T) {
 	t.Parallel()
 
 	keyID, _, privateKey := testServerSigningKey(t)
 	one := signedRevocationDelivery(t, keyID, 1)
 	two := signedRevocationDelivery(t, keyID, 2)
-	conflict := one
-	conflict.Body.RevokedAt = conflict.Body.RevokedAt.Add(time.Nanosecond)
-	conflict = signTestBody(t, keyID, privateKey, conflict.Body)
+	later := one
+	later.Body.RevokedAt = later.Body.RevokedAt.Add(time.Nanosecond)
+	later = signTestBody(t, keyID, privateKey, later.Body)
+	earlier := one
+	earlier.Body.RevokedAt = earlier.Body.RevokedAt.Add(-time.Nanosecond)
+	earlier = signTestBody(t, keyID, privateKey, earlier.Body)
 	maximum := BugWriterRevocationSet{Values: makeRevocationDelivery(t, keyID, BugWriterRevocationDeliveryMax)}
 	cases := []struct {
-		name      string
-		left      BugWriterRevocationSet
-		right     BugWriterRevocationSet
-		wantCount int
-		wantErr   bool
+		name       string
+		left       BugWriterRevocationSet
+		right      BugWriterRevocationSet
+		wantCount  int
+		wantCutoff core.UnixNanoTime
+		wantErr    bool
 	}{
 		{name: "two empty sets remain empty", wantCount: 0},
 		{name: "empty left accepts one", right: BugWriterRevocationSet{Values: []core.Signed[BugWriterRevocationBody]{one}}, wantCount: 1},
@@ -108,7 +156,8 @@ func TestBugWriterRevocationSetMergeBoundaryTable(t *testing.T) {
 		{name: "new greater writer appends", left: BugWriterRevocationSet{Values: []core.Signed[BugWriterRevocationBody]{one}}, right: BugWriterRevocationSet{Values: []core.Signed[BugWriterRevocationBody]{two}}, wantCount: 2},
 		{name: "new lesser writer prepends", left: BugWriterRevocationSet{Values: []core.Signed[BugWriterRevocationBody]{two}}, right: BugWriterRevocationSet{Values: []core.Signed[BugWriterRevocationBody]{one}}, wantCount: 2},
 		{name: "overlapping sorted sets preserve union", left: BugWriterRevocationSet{Values: []core.Signed[BugWriterRevocationBody]{one, two}}, right: BugWriterRevocationSet{Values: []core.Signed[BugWriterRevocationBody]{two}}, wantCount: 2},
-		{name: "conflicting signed cutoff rejected", left: BugWriterRevocationSet{Values: []core.Signed[BugWriterRevocationBody]{one}}, right: BugWriterRevocationSet{Values: []core.Signed[BugWriterRevocationBody]{conflict}}, wantErr: true},
+		{name: "earlier signed cutoff broadens existing revocation", left: BugWriterRevocationSet{Values: []core.Signed[BugWriterRevocationBody]{one}}, right: BugWriterRevocationSet{Values: []core.Signed[BugWriterRevocationBody]{earlier}}, wantCount: 1, wantCutoff: earlier.Body.RevokedAt},
+		{name: "later signed cutoff cannot narrow existing revocation", left: BugWriterRevocationSet{Values: []core.Signed[BugWriterRevocationBody]{one}}, right: BugWriterRevocationSet{Values: []core.Signed[BugWriterRevocationBody]{later}}, wantCount: 1, wantCutoff: one.Body.RevokedAt},
 		{name: "descending left rejected", left: BugWriterRevocationSet{Values: []core.Signed[BugWriterRevocationBody]{two, one}}, wantErr: true},
 		{name: "duplicate right rejected", right: BugWriterRevocationSet{Values: []core.Signed[BugWriterRevocationBody]{one, one}}, wantErr: true},
 		{name: "merged result above delivery cap rejected", left: maximum, right: BugWriterRevocationSet{Values: []core.Signed[BugWriterRevocationBody]{signedRevocationDelivery(t, keyID, BugWriterRevocationDeliveryMax+1)}}, wantErr: true},
@@ -125,6 +174,9 @@ func TestBugWriterRevocationSetMergeBoundaryTable(t *testing.T) {
 			}
 			if err != nil || len(got.Values) != tc.wantCount {
 				t.Fatalf("BugWriterRevocationSet.Merge() count = %d, error = %v, want count = %d", len(got.Values), err, tc.wantCount)
+			}
+			if !tc.wantCutoff.IsZero() && got.Values[0].Body.RevokedAt != tc.wantCutoff {
+				t.Fatalf("BugWriterRevocationSet.Merge() cutoff = %v, want %v", got.Values[0].Body.RevokedAt, tc.wantCutoff)
 			}
 		})
 	}

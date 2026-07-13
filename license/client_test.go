@@ -74,10 +74,7 @@ func TestClientDecodesOffgridEnvelope(t *testing.T) {
 		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
 		_ = json.NewEncoder(w).Encode(core.APIEnvelope[BugCheckInResponse]{
 			RequestID: core.NewAPIRequestID("req-1"),
-			Data: &BugCheckInResponse{
-				Decision: CheckInDecision{Granted: true, Refusal: RefusalNone},
-				Grant:    grant,
-			},
+			Data:      new(testGrantedBugResponse(t, grant)),
 		})
 	}))
 	defer server.Close()
@@ -101,12 +98,48 @@ func TestClientDecodesOffgridEnvelope(t *testing.T) {
 		t.Fatal(err)
 	default:
 	}
-	if response.Grant == nil {
+	if response.Authority.Body.Grant == nil {
 		t.Fatalf("response.Grant = nil, want signed Bug grant")
 	}
 	keyring := core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
-	if err := response.Grant.Verify(keyring); err != nil {
+	if err := response.Authority.Body.Grant.Verify(keyring); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestClientRejectsSignedResponseForDifferentRequestNonce(t *testing.T) {
+	t.Parallel()
+
+	grant, keyID, publicKey := signedBugGrant(t)
+	foreignNonce, err := ParseCheckInNonce("0202020202020202020202020202020202020202020202020202020202020202")
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := signBugCheckInResponse(t, BugCheckInResponseBody{
+		Schema:       core.SchemaBugCheckInResponse,
+		RequestNonce: foreignNonce,
+		Decision:     CheckInDecision{Granted: true, Refusal: RefusalNone},
+		Grant:        grant,
+	})
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
+		_ = json.NewEncoder(w).Encode(core.APIEnvelope[BugCheckInResponse]{
+			RequestID: core.NewAPIRequestID("req-replayed-response"),
+			Data:      &response,
+		})
+	}))
+	defer server.Close()
+	endpoint, err := ParseCheckInEndpoint(server.URL + OffgridBugCheckInPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := Client[BugCheckIn, BugCheckInResponse]{
+		HTTP:     server.Client(),
+		Endpoint: endpoint,
+		Keyring:  core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}},
+	}
+	if _, err := client.Do(context.Background(), testBugCheckIn(t)); !errors.Is(err, core.ErrCheckInNonce) {
+		t.Fatalf("Client.Do(replayed response) error = %v, want %v", err, core.ErrCheckInNonce)
 	}
 }
 
@@ -129,10 +162,7 @@ func TestClientSendsFirstCheckInWithoutUsage(t *testing.T) {
 		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
 		_ = json.NewEncoder(w).Encode(core.APIEnvelope[BugCheckInResponse]{
 			RequestID: core.NewAPIRequestID("req-first"),
-			Data: &BugCheckInResponse{
-				Decision: CheckInDecision{Granted: true, Refusal: RefusalNone},
-				Grant:    grant,
-			},
+			Data:      new(testGrantedBugResponse(t, grant)),
 		})
 	}))
 	defer server.Close()
@@ -165,10 +195,7 @@ func TestWitnessClientDecodesSubscriptionEnvelope(t *testing.T) {
 		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
 		_ = json.NewEncoder(w).Encode(core.APIEnvelope[WitnessCheckInResponse]{
 			RequestID: core.NewAPIRequestID("req-witness"),
-			Data: &WitnessCheckInResponse{
-				Decision: CheckInDecision{Granted: true, Refusal: RefusalNone},
-				Grant:    grant,
-			},
+			Data:      new(testGrantedWitnessResponse(t, grant)),
 		})
 	}))
 	defer server.Close()
@@ -186,11 +213,11 @@ func TestWitnessClientDecodesSubscriptionEnvelope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response.Grant == nil {
+	if response.Authority.Body.Grant == nil {
 		t.Fatalf("response.Grant = nil, want signed Witness grant")
 	}
 	keyring := core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
-	if err := response.Grant.Verify(keyring); err != nil {
+	if err := response.Authority.Body.Grant.Verify(keyring); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -240,10 +267,7 @@ func runForgedSeatLeaseCheckIn(t *testing.T) error {
 		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
 		_ = json.NewEncoder(w).Encode(core.APIEnvelope[BugCheckInResponse]{
 			RequestID: core.NewAPIRequestID("req-forged-seat"),
-			Data: &BugCheckInResponse{
-				Decision: CheckInDecision{Granted: true, Refusal: RefusalNone},
-				Grant:    grant,
-			},
+			Data:      new(testGrantedBugResponse(t, grant)),
 		})
 	}))
 	defer server.Close()
@@ -268,10 +292,7 @@ func runForgedSubscriptionLeaseCheckIn(t *testing.T) error {
 		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
 		_ = json.NewEncoder(w).Encode(core.APIEnvelope[WitnessCheckInResponse]{
 			RequestID: core.NewAPIRequestID("req-forged-subscription"),
-			Data: &WitnessCheckInResponse{
-				Decision: CheckInDecision{Granted: true, Refusal: RefusalNone},
-				Grant:    grant,
-			},
+			Data:      new(testGrantedWitnessResponse(t, grant)),
 		})
 	}))
 	defer server.Close()
@@ -292,9 +313,7 @@ func TestClientRejectsRawResponseWithoutEnvelope(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
-		_ = json.NewEncoder(w).Encode(BugCheckInResponse{Decision: CheckInDecision{
-			Refusal: RefusalPaymentRequired, Remediation: RemediationUpdatePayment,
-		}})
+		_ = json.NewEncoder(w).Encode(testRefusedBugResponse(t))
 	}))
 	defer server.Close()
 	endpoint, err := ParseCheckInEndpoint(server.URL + OffgridBugCheckInPath)
@@ -395,10 +414,7 @@ func TestRetryLoopRetriesThenAcceptsEnvelope(t *testing.T) {
 		}
 		_ = json.NewEncoder(w).Encode(core.APIEnvelope[BugCheckInResponse]{
 			RequestID: core.NewAPIRequestID("req-ok"),
-			Data: &BugCheckInResponse{
-				Decision: CheckInDecision{Granted: true, Refusal: RefusalNone},
-				Grant:    grant,
-			},
+			Data:      new(testGrantedBugResponse(t, grant)),
 		})
 	}))
 	defer server.Close()
@@ -442,10 +458,7 @@ func TestWitnessClientRetryThenAcceptsSubscriptionEnvelope(t *testing.T) {
 		}
 		_ = json.NewEncoder(w).Encode(core.APIEnvelope[WitnessCheckInResponse]{
 			RequestID: core.NewAPIRequestID("req-witness-ok"),
-			Data: &WitnessCheckInResponse{
-				Decision: CheckInDecision{Granted: true, Refusal: RefusalNone},
-				Grant:    grant,
-			},
+			Data:      new(testGrantedWitnessResponse(t, grant)),
 		})
 	}))
 	defer server.Close()
@@ -601,35 +614,25 @@ func TestJitterFractionZeroFailsToMaxDelay(t *testing.T) {
 func TestCheckInResponseHostileCombinations(t *testing.T) {
 	t.Parallel()
 	grant := testBugGrantContract(t)
+	valid := testGrantedBugResponse(t, grant)
+	unchecked := func(decision CheckInDecision, candidate *BugCheckInGrant) BugCheckInResponse {
+		response := valid
+		response.Authority.Body.Decision = decision
+		response.Authority.Body.Grant = candidate
+		return response
+	}
 	for _, tc := range []struct {
 		name     string
 		response BugCheckInResponse
 	}{
-		{name: "granted missing grant", response: BugCheckInResponse{Decision: CheckInDecision{Granted: true, Refusal: RefusalNone}}},
-		{name: "granted with refusal", response: BugCheckInResponse{
-			Decision: CheckInDecision{Granted: true, Refusal: RefusalPaymentRequired},
-			Grant:    grant,
-		}},
-		{name: "granted with remediation", response: BugCheckInResponse{
-			Decision: CheckInDecision{Granted: true, Remediation: RemediationUpdatePayment},
-			Grant:    grant,
-		}},
-		{name: "refused with grant", response: BugCheckInResponse{
-			Decision: CheckInDecision{Refusal: RefusalPaymentRequired, Remediation: RemediationUpdatePayment},
-			Grant:    grant,
-		}},
-		{name: "refused none refusal", response: BugCheckInResponse{
-			Decision: CheckInDecision{Refusal: RefusalNone, Remediation: RemediationUpdatePayment},
-		}},
-		{name: "refused missing remediation", response: BugCheckInResponse{
-			Decision: CheckInDecision{Refusal: RefusalPaymentRequired},
-		}},
-		{name: "refused mismatched remediation", response: BugCheckInResponse{
-			Decision: CheckInDecision{Refusal: RefusalPaymentRequired, Remediation: RemediationDeactivateMachine},
-		}},
-		{name: "refused unknown remediation ordinal", response: BugCheckInResponse{
-			Decision: CheckInDecision{Refusal: RefusalPaymentRequired, Remediation: Remediation(RemediationRetryUpload + 1)},
-		}},
+		{name: "granted missing grant", response: unchecked(CheckInDecision{Granted: true, Refusal: RefusalNone}, nil)},
+		{name: "granted with refusal", response: unchecked(CheckInDecision{Granted: true, Refusal: RefusalPaymentRequired}, grant)},
+		{name: "granted with remediation", response: unchecked(CheckInDecision{Granted: true, Remediation: RemediationUpdatePayment}, grant)},
+		{name: "refused with grant", response: unchecked(CheckInDecision{Refusal: RefusalPaymentRequired, Remediation: RemediationUpdatePayment}, grant)},
+		{name: "refused none refusal", response: unchecked(CheckInDecision{Refusal: RefusalNone, Remediation: RemediationUpdatePayment}, nil)},
+		{name: "refused missing remediation", response: unchecked(CheckInDecision{Refusal: RefusalPaymentRequired}, nil)},
+		{name: "refused mismatched remediation", response: unchecked(CheckInDecision{Refusal: RefusalPaymentRequired, Remediation: RemediationDeactivateMachine}, nil)},
+		{name: "refused unknown remediation ordinal", response: unchecked(CheckInDecision{Refusal: RefusalPaymentRequired, Remediation: Remediation(RemediationRetryUpload + 1)}, nil)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -648,9 +651,9 @@ func TestCheckInTransportContractLayerTriad(t *testing.T) {
 		name    string
 		wantErr bool
 	}{
-		{name: "positive granted response", body: BugCheckInResponse{Decision: CheckInDecision{Granted: true, Refusal: RefusalNone}, Grant: grant}},
+		{name: "positive granted response", body: testGrantedBugResponse(t, grant)},
 		{name: "negative zero response", body: BugCheckInResponse{}, wantErr: true},
-		{name: "neutral refused response", body: BugCheckInResponse{Decision: CheckInDecision{Refusal: RefusalPaymentRequired, Remediation: RemediationUpdatePayment}}},
+		{name: "neutral refused response", body: testRefusedBugResponse(t)},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -700,12 +703,8 @@ func TestCompilerOwnedDefaultsCannotBeMutatedGlobally(t *testing.T) {
 
 func TestCheckInResponseMalformedGrantCarriesLicenseIdentity(t *testing.T) {
 	t.Parallel()
-	grant := testBugGrantContract(t)
-	grant.Lease.Signature = core.Ed25519SignatureHex{}
-	response := BugCheckInResponse{
-		Decision: CheckInDecision{Granted: true, Refusal: RefusalNone},
-		Grant:    grant,
-	}
+	response := testGrantedBugResponse(t, testBugGrantContract(t))
+	response.Authority.Body.Grant.Lease.Signature = core.Ed25519SignatureHex{}
 	if err := response.Validate(); !errors.Is(err, core.ErrLicenseContract) {
 		t.Fatalf("CheckInResponse.Validate() error = %v, want ErrLicenseContract", err)
 	}
@@ -727,12 +726,12 @@ func TestClientBoundaryErrorsCarryLicenseIdentityTable(t *testing.T) {
 		}},
 		{name: "success envelope decode failure", run: func() error {
 			reply := &http.Response{Body: io.NopCloser(strings.NewReader("<html>"))}
-			_, err := readResponse[BugCheckInGrant](reply, testClientKeyring(t))
+			_, err := readResponse[BugCheckInResponse](reply, testClientKeyring(t))
 			return err
 		}},
 		{name: "failure envelope decode failure", run: func() error {
 			reply := &http.Response{Body: io.NopCloser(strings.NewReader("<html>"))}
-			err := readFailureResponse[BugCheckInGrant](reply, http.StatusBadGateway, 0)
+			err := readFailureResponse[BugCheckInResponse](reply, http.StatusBadGateway, 0)
 			var statusErr CheckInHTTPError
 			if !errors.As(err, &statusErr) || statusErr.StatusCode != http.StatusBadGateway {
 				return fmt.Errorf("status error = %v, want CheckInHTTPError 502", err)
@@ -843,6 +842,67 @@ func signTestBody[B core.CanonicalBody](t *testing.T, keyID core.SigningKeyID, p
 	return core.Signed[B]{Body: body, KeyID: keyID, Signature: signature}
 }
 
+func testCheckInNonce(t *testing.T) CheckInNonce {
+	t.Helper()
+	nonce, err := ParseCheckInNonce("0101010101010101010101010101010101010101010101010101010101010101")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return nonce
+}
+
+func testLeaseID(t *testing.T) core.LeaseID {
+	t.Helper()
+	id, err := core.ParseLeaseID("lease-2026-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func signBugCheckInResponse(t *testing.T, body BugCheckInResponseBody) BugCheckInResponse {
+	t.Helper()
+	keyID, _, privateKey := testServerSigningKey(t)
+	return BugCheckInResponse{Authority: signTestBody(t, keyID, privateKey, body)}
+}
+
+func signWitnessCheckInResponse(t *testing.T, body WitnessCheckInResponseBody) WitnessCheckInResponse {
+	t.Helper()
+	keyID, _, privateKey := testServerSigningKey(t)
+	return WitnessCheckInResponse{Authority: signTestBody(t, keyID, privateKey, body)}
+}
+
+func testGrantedBugResponse(t *testing.T, grant *BugCheckInGrant) BugCheckInResponse {
+	t.Helper()
+	return signBugCheckInResponse(t, BugCheckInResponseBody{
+		Schema:       core.SchemaBugCheckInResponse,
+		RequestNonce: testCheckInNonce(t),
+		Decision:     CheckInDecision{Granted: true, Refusal: RefusalNone},
+		Grant:        grant,
+	})
+}
+
+func testRefusedBugResponse(t *testing.T) BugCheckInResponse {
+	t.Helper()
+	return signBugCheckInResponse(t, BugCheckInResponseBody{
+		Schema:       core.SchemaBugCheckInResponse,
+		RequestNonce: testCheckInNonce(t),
+		Decision:     CheckInDecision{Refusal: RefusalPaymentRequired, Remediation: RemediationUpdatePayment},
+	})
+}
+
+func testGrantedWitnessResponse(t *testing.T, grant *WitnessCheckInGrant) WitnessCheckInResponse {
+	t.Helper()
+	return signWitnessCheckInResponse(t, WitnessCheckInResponseBody{
+		Schema:       core.SchemaWitnessCheckInResponse,
+		RequestNonce: testCheckInNonce(t),
+		Decision:     CheckInDecision{Granted: true, Refusal: RefusalNone},
+		Grant:        grant,
+	})
+}
+
+//go:fix inline
+
 func testBugGrantContract(t *testing.T) *BugCheckInGrant {
 	t.Helper()
 	grant, _, _ := signedBugGrant(t)
@@ -883,6 +943,8 @@ func testSeatLeaseBody(t *testing.T) SeatLeaseBody {
 		t.Fatal(err)
 	}
 	return SeatLeaseBody{
+		LeaseID:            testLeaseID(t),
+		Generation:         1,
 		IssuedAt:           window.IssuedAt,
 		PaidUntil:          window.PaidUntil,
 		TokenExpiresAt:     window.TokenExpiresAt,
@@ -917,6 +979,7 @@ func testBugCheckIn(t *testing.T) BugCheckIn {
 		Writer:            testBugWriterKey(t),
 		BinaryVersion:     testProductVersion(t),
 		BinarySHA256:      testSHA256(t),
+		RequestNonce:      testCheckInNonce(t),
 		Platform:          core.PlatformDarwinARM64,
 		Usage: BugUsage{
 			Schema:      core.SchemaBugUsage,
@@ -937,6 +1000,7 @@ func testWitnessCheckIn(t *testing.T) WitnessCheckIn {
 		DeviceFingerprint: testDeviceFingerprint(t),
 		BinaryVersion:     testProductVersion(t),
 		BinarySHA256:      testSHA256(t),
+		RequestNonce:      testCheckInNonce(t),
 		Platform:          core.PlatformDarwinARM64,
 		AccountToken:      token,
 	}

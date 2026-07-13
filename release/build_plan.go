@@ -746,6 +746,9 @@ func validateBuildImportPathSegments(value string) error {
 
 func validatePathSegments(value string) error {
 	clean := strings.ReplaceAll(value, `\`, "/")
+	if strings.HasPrefix(clean, "/") || hasWindowsVolumePrefix(clean) {
+		return core.ErrFoundationContract
+	}
 	for segment := range strings.SplitSeq(clean, "/") {
 		if segment == "" {
 			continue
@@ -755,4 +758,8 @@ func validatePathSegments(value string) error {
 		}
 	}
 	return nil
+}
+
+func hasWindowsVolumePrefix(value string) bool {
+	return len(value) >= 3 && ((value[0] >= 'A' && value[0] <= 'Z') || (value[0] >= 'a' && value[0] <= 'z')) && value[1] == ':' && value[2] == '/'
 }

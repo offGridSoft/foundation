@@ -289,6 +289,8 @@ func TestPrepaidLeaseCheckInDueBeforeExpiryHostileTable(t *testing.T) {
 				t.Fatalf("BuildLeaseWindow() error = %v", err)
 			}
 			body := SeatLeaseBody{
+				LeaseID:            testLeaseID(t),
+				Generation:         1,
 				Schema:             core.SchemaBugSeatLease,
 				DeveloperKeyID:     testDeveloperKeyID(t),
 				DeviceFingerprint:  testDeviceFingerprint(t),

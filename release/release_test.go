@@ -3,6 +3,7 @@ package release
 import (
 	"bytes"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"math"
@@ -1314,20 +1315,11 @@ func TestGarbleBuildArgsHostileTable(t *testing.T) {
 			"dist/linux-amd64/witness",
 			"./cmd/witness",
 		}},
-		{name: "absolute output path accepted for release temp roots", mutate: func(r *ReleaseGarbleBuildRequest) {
-			r.Output = mustBuildOutputPath(t, "/private/tmp/witness-release/linux-amd64/witness")
-		}, want: []string{
-			GarbleSeedFlagPrefix + seed.String(),
-			GarbleArgLiterals,
-			GarbleArgTiny,
-			GoArgBuild,
-			GoArgTrimPath,
-			GoArgBuildVCS,
-			GoBuildTagsPrefix + "osusergo,netgo,witness_production",
-			GoBuildLDFlagsPrefix + "-s -w -buildid= -X github.com/offGridSoft/witness/internal/release.BuildCommit=" + strings.Repeat("a", 40),
-			GoBuildOutputFlag,
-			"/private/tmp/witness-release/linux-amd64/witness",
-			"./cmd/witness",
+		{name: "absolute unix output path rejected", mutate: func(r *ReleaseGarbleBuildRequest) {
+			r.Output = BuildOutputPath{value: "/private/tmp/witness-release/linux-amd64/witness"}
+		}},
+		{name: "absolute windows output path rejected", mutate: func(r *ReleaseGarbleBuildRequest) {
+			r.Output = BuildOutputPath{value: `C:\\tmp\\witness.exe`}
 		}},
 		{name: "random seed cannot build release", mutate: func(r *ReleaseGarbleBuildRequest) {
 			r.Seed = GarbleSeed{value: GarbleSeedRandom}
@@ -1569,6 +1561,7 @@ func TestDeployPlanHostileTable(t *testing.T) {
 		{name: "manifest product drift rejected", wantErr: true, mutate: func(p *DeployPlan) { p.Manifest.Product = core.ProductBug }},
 		{name: "layout release id drift rejected", wantErr: true, mutate: func(p *DeployPlan) { p.Layout.ReleaseID = mustOtherReleaseID(t) }},
 		{name: "manifest sha missing rejected", wantErr: true, mutate: func(p *DeployPlan) { p.ManifestSHA256 = core.SHA256Hex{} }},
+		{name: "manifest sha does not bind embedded manifest rejected", wantErr: true, mutate: func(p *DeployPlan) { p.ManifestSHA256 = mustSHA256(t, "d") }},
 		{name: "duplicate upload target rejected", mutate: func(p *DeployPlan) {
 			p.Targets = append(p.Targets, p.Targets[0])
 			p.TargetCount = uint32(len(p.Targets))
@@ -1816,12 +1809,17 @@ func validToolProvenance(t *testing.T) []ToolProvenance {
 
 func validDeployPlan(t *testing.T) DeployPlan {
 	t.Helper()
+	manifest := validManifest(t)
+	canonical, err := manifest.Canonical(nil)
+	if err != nil {
+		t.Fatalf("Manifest.Canonical() error = %v", err)
+	}
 	return DeployPlan{
 		Product:        core.ProductWitness,
 		Version:        mustVersion(t),
 		ReleaseID:      mustReleaseID(t),
-		Manifest:       validManifest(t),
-		ManifestSHA256: mustSHA256(t, "f"),
+		Manifest:       manifest,
+		ManifestSHA256: core.NewSHA256Hex(sha256.Sum256(canonical)),
 		Layout:         validWitnessReleaseRootLayout(t),
 		Targets:        []UploadTarget{validUploadTarget(t)},
 		TargetCount:    1,

@@ -25,11 +25,13 @@ type SigningDomain uint16
 
 const (
 	SigningDomainUnknown                  = SigningDomain(SchemaUnknown)
+	SigningDomainBugCheckInResponse       = SigningDomain(SchemaBugCheckInResponse)
 	SigningDomainBugSeatLease             = SigningDomain(SchemaBugSeatLease)
 	SigningDomainBugWriterAttestation     = SigningDomain(SchemaBugWriterAttestation)
 	SigningDomainBugWriterCertificate     = SigningDomain(SchemaBugWriterCertificate)
 	SigningDomainBugWriterRevocation      = SigningDomain(SchemaBugWriterRevocation)
 	SigningDomainWitnessSubscriptionLease = SigningDomain(SchemaWitnessSubscription)
+	SigningDomainWitnessCheckInResponse   = SigningDomain(SchemaWitnessCheckInResponse)
 	SigningDomainWitnessCustodyReceipt    = SigningDomain(SchemaCustodyReceipt)
 	SigningDomainReleaseManifest          = SigningDomain(SchemaReleaseManifest)
 	SigningDomainReleaseUploadReceipt     = SigningDomain(SchemaReleaseUploadReceipt)
@@ -41,10 +43,12 @@ const (
 
 const (
 	SigningDomainTokenBugSeatLease             = "bug-seat-lease-" + ContractYear // #nosec G101 -- public signing-domain token, not a credential.
+	SigningDomainTokenBugCheckInResponse       = "bug-check-in-response-" + ContractYear
 	SigningDomainTokenBugWriterAttestation     = "bug-writer-attestation-" + ContractYear
 	SigningDomainTokenBugWriterCertificate     = "bug-writer-certificate-" + ContractYear
 	SigningDomainTokenBugWriterRevocation      = "bug-writer-revocation-" + ContractYear
 	SigningDomainTokenWitnessSubscriptionLease = "witness-subscription-lease-" + ContractYear
+	SigningDomainTokenWitnessCheckInResponse   = "witness-check-in-response-" + ContractYear
 	SigningDomainTokenWitnessCustodyReceipt    = "witness-custody-receipt-" + ContractYear
 	SigningDomainTokenReleaseManifest          = "release-manifest-" + ContractYear
 	SigningDomainTokenReleaseUploadReceipt     = "release-upload-receipt-" + ContractYear
@@ -57,11 +61,13 @@ const (
 
 func signingDomainNames() [SchemaReleaseCommandRun + 1]string {
 	return [...]string{
+		SigningDomainBugCheckInResponse:       SigningDomainTokenBugCheckInResponse,
 		SigningDomainBugSeatLease:             SigningDomainTokenBugSeatLease,
 		SigningDomainBugWriterAttestation:     SigningDomainTokenBugWriterAttestation,
 		SigningDomainBugWriterCertificate:     SigningDomainTokenBugWriterCertificate,
 		SigningDomainBugWriterRevocation:      SigningDomainTokenBugWriterRevocation,
 		SigningDomainWitnessSubscriptionLease: SigningDomainTokenWitnessSubscriptionLease,
+		SigningDomainWitnessCheckInResponse:   SigningDomainTokenWitnessCheckInResponse,
 		SigningDomainWitnessCustodyReceipt:    SigningDomainTokenWitnessCustodyReceipt,
 		SigningDomainReleaseManifest:          SigningDomainTokenReleaseManifest,
 		SigningDomainReleaseUploadReceipt:     SigningDomainTokenReleaseUploadReceipt,

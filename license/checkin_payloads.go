@@ -113,6 +113,8 @@ type BugCheckIn struct {
 	BinaryVersion     core.ProductVersion    `json:"binary_version"`
 	BinarySHA256      core.SHA256Hex         `json:"binary_sha256"`
 	LeaseID           core.LeaseID           `json:"lease_id"`
+	LeaseGeneration   LeaseGeneration        `json:"lease_generation"`
+	RequestNonce      CheckInNonce           `json:"request_nonce"`
 	Usage             BugUsage               `json:"usage"`
 	Schema            core.SchemaID          `json:"schema"`
 	Platform          core.Platform          `json:"platform"`
@@ -131,7 +133,17 @@ func (c BugCheckIn) Validate() error {
 	if err := c.LeaseID.ValidateOptional(); err != nil {
 		return checkInPayloadError(err)
 	}
+	if err := validateLeaseProgressionReference(c.LeaseID, c.LeaseGeneration); err != nil {
+		return err
+	}
+	if err := c.RequestNonce.Validate(); err != nil {
+		return checkInPayloadError(err)
+	}
 	return checkInPayloadErrorOptional(c.Usage.Validate())
+}
+
+func (c BugCheckIn) CheckInRequestNonce() CheckInNonce {
+	return c.RequestNonce
 }
 
 func (c BugCheckIn) validateIdentity() error {
@@ -170,7 +182,9 @@ type WitnessCheckIn struct {
 	LeaseID           core.LeaseID           `json:"lease_id"`
 	AccountToken      AccountToken           `json:"account_token"`
 	Usage             WitnessUsage           `json:"usage"`
+	LeaseGeneration   LeaseGeneration        `json:"lease_generation"`
 	Schema            core.SchemaID          `json:"schema"`
+	RequestNonce      CheckInNonce           `json:"request_nonce"`
 	Platform          core.Platform          `json:"platform"`
 }
 
@@ -178,6 +192,10 @@ func (c WitnessCheckIn) Validate() error {
 	if c.Schema != core.SchemaWitnessCheckIn {
 		return fmt.Errorf(ErrFmtSchema, core.ErrLicenseContract)
 	}
+	return c.validateFields()
+}
+
+func (c WitnessCheckIn) validateFields() error {
 	if err := c.DeviceFingerprint.Validate(); err != nil {
 		return checkInPayloadError(err)
 	}
@@ -190,6 +208,12 @@ func (c WitnessCheckIn) Validate() error {
 	if err := c.LeaseID.ValidateOptional(); err != nil {
 		return checkInPayloadError(err)
 	}
+	if err := validateLeaseProgressionReference(c.LeaseID, c.LeaseGeneration); err != nil {
+		return err
+	}
+	if err := c.RequestNonce.Validate(); err != nil {
+		return checkInPayloadError(err)
+	}
 	if err := c.Platform.Validate(); err != nil {
 		return checkInPayloadError(err)
 	}
@@ -200,6 +224,17 @@ func (c WitnessCheckIn) Validate() error {
 		return checkInPayloadError(err)
 	}
 	return nil
+}
+
+func validateLeaseProgressionReference(id core.LeaseID, generation LeaseGeneration) error {
+	if id.IsZero() != generation.IsZero() {
+		return checkInPayloadError(core.ErrLeaseGeneration)
+	}
+	return checkInPayloadErrorOptional(generation.ValidateOptional())
+}
+
+func (c WitnessCheckIn) CheckInRequestNonce() CheckInNonce {
+	return c.RequestNonce
 }
 
 func checkInPayloadError(err error) error {

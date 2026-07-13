@@ -13,6 +13,7 @@ const (
 	ErrFmtLeaseCheckInWindow = "license.Lease.CheckInWindow: %w"
 	ErrFmtLeaseWriteGrace    = "license.Lease.WriteGrace: %w"
 	ErrFmtLeaseTrust         = "license.LeaseTrust: %w"
+	ErrFmtLeaseGeneration    = "license.LeaseGeneration: %w"
 	ErrFmtGateOutcome        = "license.GateOutcome: %w"
 	ErrFmtGateReason         = "license.GateReason: %w"
 	ErrFmtGateInput          = "license.GateInput: %w"

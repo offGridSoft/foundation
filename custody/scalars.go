@@ -292,9 +292,21 @@ func validCustodyDatePath(year, month string) bool {
 	if len(year) != core.CustodyYearTextLength || len(month) != core.CustodyMonthTextLength {
 		return false
 	}
+	if !decimalDigitsOnly(year) || !decimalDigitsOnly(month) {
+		return false
+	}
 	yearNumber, yearErr := strconv.Atoi(year)
 	monthNumber, monthErr := strconv.Atoi(month)
 	return yearErr == nil && monthErr == nil && yearNumber > 0 && monthNumber >= core.CustodyMonthMinimum && monthNumber <= core.CustodyMonthMaximum
+}
+
+func decimalDigitsOnly(value string) bool {
+	for _, character := range value {
+		if character < '0' || character > '9' {
+			return false
+		}
+	}
+	return value != ""
 }
 
 func (p ObjectPath) MarshalJSON() ([]byte, error) {

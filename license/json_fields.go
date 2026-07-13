@@ -8,6 +8,8 @@ const (
 	jsonFieldDeviceFingerprint = "device_fingerprint"
 	jsonFieldIssuedAt          = "issued_at"
 	jsonFieldLeaseNotAfter     = "lease_not_after"
+	jsonFieldLeaseID           = "lease_id"
+	jsonFieldLeaseGeneration   = "lease_generation"
 	jsonFieldPaidUntil         = "paid_until"
 	jsonFieldPlan              = "plan"
 	jsonFieldPrepaidYears      = "prepaid_years"
@@ -17,4 +19,8 @@ const (
 	jsonFieldOperationSHA256   = "operation_sha256"
 	jsonFieldOccurredAt        = "occurred_at"
 	jsonFieldRevokedAt         = "revoked_at"
+	jsonFieldRequestNonce      = "request_nonce"
+	jsonFieldDecision          = "decision"
+	jsonFieldGrant             = "grant"
+	jsonFieldWriterRevocations = "writer_revocations"
 )

@@ -405,6 +405,39 @@ func TestWitnessCheckInHostileTable(t *testing.T) {
 	}
 }
 
+func TestCheckInLeaseProgressionReferenceHostileTable(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name       string
+		leaseID    core.LeaseID
+		generation LeaseGeneration
+		wantErr    bool
+	}{
+		{name: "first check-in has no progression reference"},
+		{name: "signed lease identity and generation travel together", leaseID: testLeaseID(t), generation: 1},
+		{name: "lease identity without generation rejected", leaseID: testLeaseID(t), wantErr: true},
+		{name: "generation without lease identity rejected", generation: 1, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			payload := goodBugCheckIn(t)
+			payload.LeaseID = tc.leaseID
+			payload.LeaseGeneration = tc.generation
+			err := payload.Validate()
+			if tc.wantErr {
+				if !errors.Is(err, core.ErrLeaseGeneration) {
+					t.Fatalf("BugCheckIn.Validate() error = %v, want %v", err, core.ErrLeaseGeneration)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("BugCheckIn.Validate() error = %v", err)
+			}
+		})
+	}
+}
+
 func goodBugCheckIn(t *testing.T) BugCheckIn {
 	t.Helper()
 	return BugCheckIn{
@@ -415,6 +448,7 @@ func goodBugCheckIn(t *testing.T) BugCheckIn {
 		Writer:            testBugWriterKey(t),
 		BinaryVersion:     testProductVersion(t),
 		BinarySHA256:      testSHA256(t),
+		RequestNonce:      testCheckInNonce(t),
 		Platform:          core.PlatformDarwinARM64,
 		Usage:             goodBugUsage(),
 	}
@@ -431,6 +465,7 @@ func goodWitnessCheckIn(t *testing.T) WitnessCheckIn {
 		DeviceFingerprint: testDeviceFingerprint(t),
 		BinaryVersion:     testProductVersion(t),
 		BinarySHA256:      testSHA256(t),
+		RequestNonce:      testCheckInNonce(t),
 		Platform:          core.PlatformDarwinARM64,
 		AccountToken:      token,
 		Usage:             goodWitnessUsage(),

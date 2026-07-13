@@ -15,6 +15,7 @@ const BugWriterRevocationDeliveryMax = 256
 type CheckInResponseBody interface {
 	core.Validatable
 	Verify(core.SigningKeyring) error
+	VerifyRequestNonce(CheckInNonce) error
 }
 
 // CheckInDecision owns the mutually exclusive grant/refusal state shared by
@@ -42,10 +43,60 @@ func (d CheckInDecision) Validate() error {
 	return nil
 }
 
-type BugCheckInResponse struct {
+type BugCheckInResponseBody struct {
 	Grant             *BugCheckInGrant       `json:"grant,omitempty"`
 	WriterRevocations BugWriterRevocationSet `json:"writer_revocations"`
 	Decision          CheckInDecision        `json:"decision"`
+	RequestNonce      CheckInNonce           `json:"request_nonce"`
+	Schema            core.SchemaID          `json:"schema"`
+}
+
+func (b BugCheckInResponseBody) Validate() error {
+	if b.Schema != core.SchemaBugCheckInResponse {
+		return checkInResponseError(core.ErrLicenseContract)
+	}
+	if err := b.RequestNonce.Validate(); err != nil {
+		return checkInResponseError(err)
+	}
+	if err := b.Decision.Validate(); err != nil {
+		return err
+	}
+	if b.Decision.Granted != (b.Grant != nil) {
+		return checkInResponseError(core.ErrLicenseContract)
+	}
+	if b.Grant != nil {
+		if err := b.Grant.Validate(); err != nil {
+			return checkInResponseError(err)
+		}
+	}
+	return b.WriterRevocations.Validate()
+}
+
+func (b BugCheckInResponseBody) Canonical(dst []byte) ([]byte, error) {
+	if err := b.Validate(); err != nil {
+		return nil, err
+	}
+	dst = append(dst, '{')
+	var err error
+	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, b.Schema)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldRequestNonce, b.RequestNonce)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDecision, b.Decision)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldGrant, b.Grant)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldWriterRevocations, b.WriterRevocations)
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, '}'), nil
+}
+
+func (b BugCheckInResponseBody) SigningSchema() core.SchemaID { return b.Schema }
+
+func (b BugCheckInResponseBody) MarshalJSON() ([]byte, error) {
+	return b.Canonical(nil)
+}
+
+type BugCheckInResponse struct {
+	Authority core.Signed[BugCheckInResponseBody] `json:"authority"`
 }
 
 // APIBody lets the response satisfy lfw/api.Body structurally without a
@@ -53,33 +104,27 @@ type BugCheckInResponse struct {
 func (BugCheckInResponse) APIBody() {}
 
 func (r BugCheckInResponse) Validate() error {
-	if err := r.Decision.Validate(); err != nil {
-		return err
-	}
-	if r.Decision.Granted != (r.Grant != nil) {
-		return checkInResponseError(core.ErrLicenseContract)
-	}
-	if r.Grant != nil {
-		if err := r.Grant.Validate(); err != nil {
-			return checkInResponseError(err)
-		}
-	}
-	return r.WriterRevocations.Validate()
+	return checkInResponseErrorOptional(r.Authority.Validate())
 }
 
 func (r BugCheckInResponse) Verify(keyring core.SigningKeyring) error {
-	if err := r.Validate(); err != nil {
-		return err
-	}
-	if err := keyring.Validate(); err != nil {
+	if err := r.Authority.Verify(keyring); err != nil {
 		return checkInResponseError(err)
 	}
-	if r.Grant != nil {
-		if err := r.Grant.Verify(keyring); err != nil {
+	body := r.Authority.Body
+	if body.Grant != nil {
+		if err := body.Grant.Verify(keyring); err != nil {
 			return checkInResponseError(err)
 		}
 	}
-	return r.WriterRevocations.Verify(keyring)
+	return body.WriterRevocations.Verify(keyring)
+}
+
+func (r BugCheckInResponse) VerifyRequestNonce(nonce CheckInNonce) error {
+	if err := nonce.Validate(); err != nil || r.Authority.Body.RequestNonce != nonce {
+		return checkInResponseError(core.ErrCheckInNonce)
+	}
+	return nil
 }
 
 // BugWriterRevocationSet is the bounded, deterministic delivery and
@@ -121,9 +166,9 @@ func (s BugWriterRevocationSet) Verify(keyring core.SigningKeyring) error {
 	return nil
 }
 
-// Merge preserves every previously observed cutoff. Re-delivery is
-// idempotent, while a second signed value for the same writer is a contract
-// conflict rather than authority to rewrite history.
+// Merge preserves the earliest signed cutoff ever observed for each writer.
+// An earlier server cutoff broadens revocation and therefore replaces a later
+// one; a later delivery can never narrow already-revoked history.
 func (s BugWriterRevocationSet) Merge(incoming BugWriterRevocationSet) (BugWriterRevocationSet, error) {
 	if err := s.Validate(); err != nil {
 		return BugWriterRevocationSet{}, err
@@ -143,10 +188,7 @@ func (s BugWriterRevocationSet) Merge(incoming BugWriterRevocationSet) (BugWrite
 			merged.Values = append(merged.Values, rightValue)
 			right++
 		default:
-			if leftValue != rightValue {
-				return BugWriterRevocationSet{}, checkInResponseError(core.ErrLicenseContract)
-			}
-			merged.Values = append(merged.Values, leftValue)
+			merged.Values = append(merged.Values, earliestWriterRevocation(leftValue, rightValue))
 			left++
 			right++
 		}
@@ -157,6 +199,13 @@ func (s BugWriterRevocationSet) Merge(incoming BugWriterRevocationSet) (BugWrite
 		return BugWriterRevocationSet{}, err
 	}
 	return merged, nil
+}
+
+func earliestWriterRevocation(left, right core.Signed[BugWriterRevocationBody]) core.Signed[BugWriterRevocationBody] {
+	if right.Body.RevokedAt.Before(left.Body.RevokedAt) {
+		return right
+	}
+	return left
 }
 
 func (s BugWriterRevocationSet) VerifyWriterAllowed(writerKeyID core.SigningKeyID, occurredAt core.UnixNanoTime) error {
@@ -180,43 +229,92 @@ func (s BugWriterRevocationSet) VerifyWriterAllowed(writerKeyID core.SigningKeyI
 	return nil
 }
 
-type WitnessCheckInResponse struct {
-	Grant    *WitnessCheckInGrant `json:"grant,omitempty"`
-	Decision CheckInDecision      `json:"decision"`
+type WitnessCheckInResponseBody struct {
+	Grant        *WitnessCheckInGrant `json:"grant,omitempty"`
+	Decision     CheckInDecision      `json:"decision"`
+	RequestNonce CheckInNonce         `json:"request_nonce"`
+	Schema       core.SchemaID        `json:"schema"`
 }
 
-func (WitnessCheckInResponse) APIBody() {}
-
-func (r WitnessCheckInResponse) Validate() error {
-	if err := r.Decision.Validate(); err != nil {
-		return err
-	}
-	if r.Decision.Granted != (r.Grant != nil) {
+func (b WitnessCheckInResponseBody) Validate() error {
+	if b.Schema != core.SchemaWitnessCheckInResponse {
 		return checkInResponseError(core.ErrLicenseContract)
 	}
-	if r.Grant != nil {
-		if err := r.Grant.Validate(); err != nil {
+	if err := b.RequestNonce.Validate(); err != nil {
+		return checkInResponseError(err)
+	}
+	if err := b.Decision.Validate(); err != nil {
+		return err
+	}
+	if b.Decision.Granted != (b.Grant != nil) {
+		return checkInResponseError(core.ErrLicenseContract)
+	}
+	if b.Grant != nil {
+		if err := b.Grant.Validate(); err != nil {
 			return checkInResponseError(err)
 		}
 	}
 	return nil
 }
 
-func (r WitnessCheckInResponse) Verify(keyring core.SigningKeyring) error {
-	if err := r.Validate(); err != nil {
-		return err
+func (b WitnessCheckInResponseBody) Canonical(dst []byte) ([]byte, error) {
+	if err := b.Validate(); err != nil {
+		return nil, err
 	}
-	if err := keyring.Validate(); err != nil {
+	dst = append(dst, '{')
+	var err error
+	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, b.Schema)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldRequestNonce, b.RequestNonce)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDecision, b.Decision)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldGrant, b.Grant)
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, '}'), nil
+}
+
+func (b WitnessCheckInResponseBody) SigningSchema() core.SchemaID { return b.Schema }
+
+func (b WitnessCheckInResponseBody) MarshalJSON() ([]byte, error) {
+	return b.Canonical(nil)
+}
+
+type WitnessCheckInResponse struct {
+	Authority core.Signed[WitnessCheckInResponseBody] `json:"authority"`
+}
+
+func (WitnessCheckInResponse) APIBody() {}
+
+func (r WitnessCheckInResponse) Validate() error {
+	return checkInResponseErrorOptional(r.Authority.Validate())
+}
+
+func (r WitnessCheckInResponse) Verify(keyring core.SigningKeyring) error {
+	if err := r.Authority.Verify(keyring); err != nil {
 		return checkInResponseError(err)
 	}
-	if r.Grant != nil {
-		if err := r.Grant.Verify(keyring); err != nil {
+	if r.Authority.Body.Grant != nil {
+		if err := r.Authority.Body.Grant.Verify(keyring); err != nil {
 			return checkInResponseError(err)
 		}
+	}
+	return nil
+}
+
+func (r WitnessCheckInResponse) VerifyRequestNonce(nonce CheckInNonce) error {
+	if err := nonce.Validate(); err != nil || r.Authority.Body.RequestNonce != nonce {
+		return checkInResponseError(core.ErrCheckInNonce)
 	}
 	return nil
 }
 
 func checkInResponseError(err error) error {
 	return fmt.Errorf(ErrFmtCheckInResponse, errors.Join(core.ErrLicenseContract, err))
+}
+
+func checkInResponseErrorOptional(err error) error {
+	if err == nil {
+		return nil
+	}
+	return checkInResponseError(err)
 }
