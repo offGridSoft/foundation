@@ -67,7 +67,7 @@ func TestBugCheckInGrantVerificationLayerTriad(t *testing.T) {
 		t.Fatalf("BugCheckInGrant.Verify(forged certificate) error = %v, want %v", err, core.ErrLicenseContract)
 	}
 
-	refused := CheckInResponse[BugCheckInGrant]{Refusal: RefusalPaymentRequired, Remediation: RemediationUpdatePayment}
+	refused := BugCheckInResponse{Decision: CheckInDecision{Refusal: RefusalPaymentRequired, Remediation: RemediationUpdatePayment}}
 	if err := refused.Validate(); err != nil {
 		t.Fatalf("CheckInResponse.Validate(refused neutral) error = %v", err)
 	}

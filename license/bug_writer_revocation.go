@@ -39,7 +39,20 @@ func (b BugWriterRevocationBody) VerifyAttestationAllowed(attestation BugWriterA
 	if err := attestation.Validate(); err != nil {
 		return err
 	}
-	if attestation.WriterKeyID == b.WriterKeyID && !attestation.OccurredAt.Before(b.RevokedAt) {
+	return b.VerifyWriterAllowed(attestation.WriterKeyID, attestation.OccurredAt)
+}
+
+func (b BugWriterRevocationBody) VerifyWriterAllowed(writerKeyID core.SigningKeyID, occurredAt core.UnixNanoTime) error {
+	if err := b.Validate(); err != nil {
+		return err
+	}
+	if err := writerKeyID.Validate(); err != nil {
+		return writerRevocationError(err)
+	}
+	if err := core.ValidateRequiredUnixNanoTime(occurredAt); err != nil || occurredAt.IsZero() {
+		return writerRevocationError(err)
+	}
+	if writerKeyID == b.WriterKeyID && !occurredAt.Before(b.RevokedAt) {
 		return writerRevocationError(core.ErrLicenseContract)
 	}
 	return nil
