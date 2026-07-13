@@ -28,6 +28,7 @@ const (
 	SigningDomainBugSeatLease             = SigningDomain(SchemaBugSeatLease)
 	SigningDomainBugWriterAttestation     = SigningDomain(SchemaBugWriterAttestation)
 	SigningDomainBugWriterCertificate     = SigningDomain(SchemaBugWriterCertificate)
+	SigningDomainBugWriterRevocation      = SigningDomain(SchemaBugWriterRevocation)
 	SigningDomainWitnessSubscriptionLease = SigningDomain(SchemaWitnessSubscription)
 	SigningDomainWitnessCustodyReceipt    = SigningDomain(SchemaCustodyReceipt)
 	SigningDomainReleaseManifest          = SigningDomain(SchemaReleaseManifest)
@@ -42,6 +43,7 @@ const (
 	SigningDomainTokenBugSeatLease             = "bug-seat-lease-" + ContractYear // #nosec G101 -- public signing-domain token, not a credential.
 	SigningDomainTokenBugWriterAttestation     = "bug-writer-attestation-" + ContractYear
 	SigningDomainTokenBugWriterCertificate     = "bug-writer-certificate-" + ContractYear
+	SigningDomainTokenBugWriterRevocation      = "bug-writer-revocation-" + ContractYear
 	SigningDomainTokenWitnessSubscriptionLease = "witness-subscription-lease-" + ContractYear
 	SigningDomainTokenWitnessCustodyReceipt    = "witness-custody-receipt-" + ContractYear
 	SigningDomainTokenReleaseManifest          = "release-manifest-" + ContractYear
@@ -58,6 +60,7 @@ func signingDomainNames() [SchemaReleaseCommandRun + 1]string {
 		SigningDomainBugSeatLease:             SigningDomainTokenBugSeatLease,
 		SigningDomainBugWriterAttestation:     SigningDomainTokenBugWriterAttestation,
 		SigningDomainBugWriterCertificate:     SigningDomainTokenBugWriterCertificate,
+		SigningDomainBugWriterRevocation:      SigningDomainTokenBugWriterRevocation,
 		SigningDomainWitnessSubscriptionLease: SigningDomainTokenWitnessSubscriptionLease,
 		SigningDomainWitnessCustodyReceipt:    SigningDomainTokenWitnessCustodyReceipt,
 		SigningDomainReleaseManifest:          SigningDomainTokenReleaseManifest,

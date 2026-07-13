@@ -84,6 +84,9 @@ func TestBugWriterRevocationCanonicalLayerTriad(t *testing.T) {
 	if body.SigningSchema() != core.SchemaBugWriterRevocation {
 		t.Fatalf("SigningSchema() = %v, want %v", body.SigningSchema(), core.SchemaBugWriterRevocation)
 	}
+	if body.SigningSchema().ResolveSigningDomain() != core.SigningDomainBugWriterRevocation {
+		t.Fatalf("ResolveSigningDomain() = %v, want %v", body.SigningSchema().ResolveSigningDomain(), core.SigningDomainBugWriterRevocation)
+	}
 }
 
 func TestBugWriterRevocationCutoffTable(t *testing.T) {
