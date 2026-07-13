@@ -247,6 +247,7 @@ func gateLease(now core.UnixNanoTime) SeatLeaseBody {
 		Schema:             core.SchemaBugSeatLease,
 		DeveloperKeyID:     mustDeveloperKeyID(),
 		DeviceFingerprint:  mustDeviceFingerprint(),
+		Writer:             mustTestBugWriterKey(),
 		WriteGraceDuration: window.WriteGraceDuration,
 		Plan:               SeatPlanStandard,
 		BillingPeriod:      BillingPeriodMonthly,

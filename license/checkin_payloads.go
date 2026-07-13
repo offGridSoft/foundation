@@ -14,6 +14,7 @@ type BugUsage struct {
 	WindowEnd    core.UnixNanoTime `json:"window_end"`
 	WindowStart  core.UnixNanoTime `json:"window_start"`
 	Green        uint32            `json:"green"`
+	Reattest     uint32            `json:"reattest"`
 	Verify       uint32            `json:"verify"`
 	Start        uint32            `json:"start"`
 	Show         uint32            `json:"show"`
@@ -108,6 +109,7 @@ type BugCheckIn struct {
 	DeveloperKey      DeveloperKey           `json:"developer_key"`
 	DeviceFingerprint core.DeviceFingerprint `json:"device_fingerprint"`
 	DeviceLabel       DeviceLabel            `json:"device_label"`
+	Writer            BugWriterKey           `json:"writer"`
 	BinaryVersion     core.ProductVersion    `json:"binary_version"`
 	BinarySHA256      core.SHA256Hex         `json:"binary_sha256"`
 	LeaseID           core.LeaseID           `json:"lease_id"`
@@ -120,6 +122,19 @@ func (c BugCheckIn) Validate() error {
 	if c.Schema != core.SchemaBugCheckIn {
 		return fmt.Errorf(ErrFmtSchema, core.ErrLicenseContract)
 	}
+	if err := c.validateIdentity(); err != nil {
+		return err
+	}
+	if err := c.validateBuild(); err != nil {
+		return err
+	}
+	if err := c.LeaseID.ValidateOptional(); err != nil {
+		return checkInPayloadError(err)
+	}
+	return checkInPayloadErrorOptional(c.Usage.Validate())
+}
+
+func (c BugCheckIn) validateIdentity() error {
 	if err := c.DeveloperKey.Validate(); err != nil {
 		return checkInPayloadError(err)
 	}
@@ -129,19 +144,20 @@ func (c BugCheckIn) Validate() error {
 	if err := c.DeviceLabel.Validate(); err != nil {
 		return checkInPayloadError(err)
 	}
+	if err := c.Writer.Validate(); err != nil {
+		return checkInPayloadError(err)
+	}
+	return nil
+}
+
+func (c BugCheckIn) validateBuild() error {
 	if err := c.BinaryVersion.Validate(); err != nil {
 		return checkInPayloadError(err)
 	}
 	if err := c.BinarySHA256.Validate(); err != nil {
 		return checkInPayloadError(err)
 	}
-	if err := c.LeaseID.ValidateOptional(); err != nil {
-		return checkInPayloadError(err)
-	}
 	if err := c.Platform.Validate(); err != nil {
-		return checkInPayloadError(err)
-	}
-	if err := c.Usage.Validate(); err != nil {
 		return checkInPayloadError(err)
 	}
 	return nil
@@ -188,6 +204,13 @@ func (c WitnessCheckIn) Validate() error {
 
 func checkInPayloadError(err error) error {
 	return fmt.Errorf(ErrFmtCheckInPayload, errors.Join(core.ErrLicenseContract, err))
+}
+
+func checkInPayloadErrorOptional(err error) error {
+	if err == nil {
+		return nil
+	}
+	return checkInPayloadError(err)
 }
 
 type AccountToken struct {

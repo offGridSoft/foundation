@@ -229,7 +229,7 @@ func TestReceiptCanonicalWireForm(t *testing.T) {
 	}
 	want := `{"release":{"version":"2026.0.0",` +
 		`"commit":"` + strings.Repeat("a", 40) + `","tool_manifest_sha":"` + strings.Repeat("b", 64) + `"},` +
-		`"schema":"witness-custody-receipt-v2","receipt_id":"01J00000000000000000000001",` +
+		`"schema":"witness-custody-receipt-v2026","receipt_id":"01J00000000000000000000001",` +
 		`"customer_id":"01HZZZZZZZZZZZZZZZZZZZZZZZ","bundle_root":"` + strings.Repeat("f", 64) + `",` +
 		`"session_id":"01J00000000000000000000000","chain_hash":"` + strings.Repeat("e", 64) + `",` +
 		`"objects":[{"artifact":"bundle.tar","object":"` + witnessObjectPath(t) + `",` +

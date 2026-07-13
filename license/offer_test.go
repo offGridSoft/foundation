@@ -292,6 +292,7 @@ func TestPrepaidLeaseCheckInDueBeforeExpiryHostileTable(t *testing.T) {
 				Schema:             core.SchemaBugSeatLease,
 				DeveloperKeyID:     testDeveloperKeyID(t),
 				DeviceFingerprint:  testDeviceFingerprint(t),
+				Writer:             testBugWriterKey(t),
 				IssuedAt:           window.IssuedAt,
 				PaidUntil:          window.PaidUntil,
 				TokenExpiresAt:     window.TokenExpiresAt,

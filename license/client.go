@@ -85,36 +85,36 @@ type CheckInPayload interface {
 	core.Validatable
 }
 
-type CheckInResponse[B Body] struct {
-	Lease       *core.Signed[B] `json:"lease,omitempty"`
-	Remediation Remediation     `json:"remediation"`
-	Refusal     Refusal         `json:"refusal"`
-	Granted     bool            `json:"granted"`
+type CheckInResponse[G CheckInGrant] struct {
+	Grant       *G          `json:"grant,omitempty"`
+	Remediation Remediation `json:"remediation"`
+	Refusal     Refusal     `json:"refusal"`
+	Granted     bool        `json:"granted"`
 }
 
 // APIBody lets Foundation response contracts satisfy lfw/api.Body
 // structurally without reversing the dependency into the transport package.
-func (CheckInResponse[B]) APIBody() {}
+func (CheckInResponse[G]) APIBody() {}
 
-func (r CheckInResponse[B]) Validate() error {
+func (r CheckInResponse[G]) Validate() error {
 	if r.Granted {
 		return r.validateGranted()
 	}
 	return r.validateRefused()
 }
 
-func (r CheckInResponse[B]) validateGranted() error {
-	if r.Refusal != RefusalNone || r.Remediation != RemediationNone || r.Lease == nil {
+func (r CheckInResponse[G]) validateGranted() error {
+	if r.Refusal != RefusalNone || r.Remediation != RemediationNone || r.Grant == nil {
 		return fmt.Errorf(ErrFmtCheckInResponse, core.ErrLicenseContract)
 	}
-	if err := r.Lease.Validate(); err != nil {
+	if err := (*r.Grant).Validate(); err != nil {
 		return fmt.Errorf(ErrFmtCheckInResponse, errors.Join(core.ErrLicenseContract, err))
 	}
 	return nil
 }
 
-func (r CheckInResponse[B]) validateRefused() error {
-	if r.Lease != nil {
+func (r CheckInResponse[G]) validateRefused() error {
+	if r.Grant != nil {
 		return fmt.Errorf(ErrFmtCheckInResponse, core.ErrLicenseContract)
 	}
 	if err := r.Refusal.Validate(); err != nil || r.Refusal == RefusalNone {
@@ -127,7 +127,7 @@ func (r CheckInResponse[B]) validateRefused() error {
 	return nil
 }
 
-type Client[P CheckInPayload, B Body] struct {
+type Client[P CheckInPayload, G CheckInGrant] struct {
 	HTTP     *http.Client
 	Jitter   func() float64
 	Endpoint CheckInEndpoint
@@ -136,7 +136,7 @@ type Client[P CheckInPayload, B Body] struct {
 	Backoff  core.BackoffPolicy
 }
 
-func (c Client[P, B]) Validate() error {
+func (c Client[P, G]) Validate() error {
 	if c.HTTP == nil {
 		return fmt.Errorf(ErrFmtCheckInClient, core.ErrLicenseContract)
 	}
@@ -159,26 +159,26 @@ func (c Client[P, B]) Validate() error {
 	return nil
 }
 
-func (c Client[P, B]) Do(ctx context.Context, in P) (CheckInResponse[B], error) {
+func (c Client[P, G]) Do(ctx context.Context, in P) (CheckInResponse[G], error) {
 	if ctx == nil {
-		return CheckInResponse[B]{}, fmt.Errorf(ErrFmtCheckInClient, errors.Join(core.ErrLicenseContract, core.ErrNilContext))
+		return CheckInResponse[G]{}, fmt.Errorf(ErrFmtCheckInClient, errors.Join(core.ErrLicenseContract, core.ErrNilContext))
 	}
 	if err := c.Validate(); err != nil {
-		return CheckInResponse[B]{}, err
+		return CheckInResponse[G]{}, err
 	}
 	if err := in.Validate(); err != nil {
-		return CheckInResponse[B]{}, err
+		return CheckInResponse[G]{}, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, CheckInBudget)
 	defer cancel()
 	body, err := json.Marshal(in)
 	if err != nil {
-		return CheckInResponse[B]{}, transportError(err)
+		return CheckInResponse[G]{}, transportError(err)
 	}
 	return c.roundTrip(ctx, body)
 }
 
-func (c Client[P, B]) roundTrip(ctx context.Context, body []byte) (CheckInResponse[B], error) {
+func (c Client[P, G]) roundTrip(ctx context.Context, body []byte) (CheckInResponse[G], error) {
 	policy := c.backoffPolicy()
 	var lastErr error
 	var retryAfter time.Duration
@@ -187,11 +187,11 @@ func (c Client[P, B]) roundTrip(ctx context.Context, body []byte) (CheckInRespon
 		if attempt > 0 {
 			delay, err := policy.Delay(attempt-1, c.jitterFraction())
 			if err != nil {
-				return CheckInResponse[B]{}, transportError(err)
+				return CheckInResponse[G]{}, transportError(err)
 			}
 			wait := maxDuration(delay, retryAfter)
 			if err := sleepContext(ctx, wait); err != nil {
-				return CheckInResponse[B]{}, transportError(err)
+				return CheckInResponse[G]{}, transportError(err)
 			}
 		}
 		result := c.attempt(ctx, body, policy.Max)
@@ -200,40 +200,40 @@ func (c Client[P, B]) roundTrip(ctx context.Context, body []byte) (CheckInRespon
 		switch result.Outcome {
 		case core.HTTPOutcomeSuccess:
 			if verr := result.Response.Validate(); verr != nil {
-				return CheckInResponse[B]{}, verr
+				return CheckInResponse[G]{}, verr
 			}
 			return result.Response, nil
 		case core.HTTPOutcomeRetryable:
 			lastErr = result.Err
 		default:
-			return CheckInResponse[B]{}, result.Err
+			return CheckInResponse[G]{}, result.Err
 		}
 	}
 	if lastErr == nil {
 		lastErr = fmt.Errorf(ErrFmtCheckInTransport, core.ErrLicenseContract)
 	}
-	return CheckInResponse[B]{}, CheckInRetryExhaustedError{Cause: lastErr, RetryAfter: retryAfterHint}
+	return CheckInResponse[G]{}, CheckInRetryExhaustedError{Cause: lastErr, RetryAfter: retryAfterHint}
 }
 
-type attemptResult[B Body] struct {
+type attemptResult[G CheckInGrant] struct {
 	Err            error
-	Response       CheckInResponse[B]
+	Response       CheckInResponse[G]
 	RetryAfter     time.Duration
 	RetryAfterHint time.Duration
 	Outcome        core.HTTPOutcome
 }
 
-func (c Client[P, B]) attempt(ctx context.Context, body []byte, maxRetryAfterWait time.Duration) attemptResult[B] {
+func (c Client[P, G]) attempt(ctx context.Context, body []byte, maxRetryAfterWait time.Duration) attemptResult[G] {
 	request, err := c.buildRequest(ctx, body)
 	if err != nil {
-		return attemptResult[B]{Outcome: core.HTTPOutcomeTerminal, Err: err}
+		return attemptResult[G]{Outcome: core.HTTPOutcomeTerminal, Err: err}
 	}
 	reply, err := c.do(request)
 	if err != nil {
-		return attemptResult[B]{Outcome: core.HTTPOutcomeRetryable, Err: transportError(err)}
+		return attemptResult[G]{Outcome: core.HTTPOutcomeRetryable, Err: transportError(err)}
 	}
 	if reply == nil || reply.Body == nil {
-		return attemptResult[B]{
+		return attemptResult[G]{
 			Outcome: core.HTTPOutcomeTerminal,
 			Err:     fmt.Errorf(ErrFmtCheckInTransport, core.ErrLicenseContract),
 		}
@@ -244,22 +244,22 @@ func (c Client[P, B]) attempt(ctx context.Context, body []byte, maxRetryAfterWai
 	outcome := core.ClassifyHTTPStatus(reply.StatusCode)
 	if outcome != core.HTTPOutcomeSuccess {
 		retryAfter := parseRetryAfter(reply.Header.Get(core.HTTPHeaderRetryAfter), time.Now().UTC(), maxRetryAfterWait)
-		err = readFailureResponse[B](reply, reply.StatusCode, retryAfter.Hint)
-		return attemptResult[B]{
+		err = readFailureResponse[G](reply, reply.StatusCode, retryAfter.Hint)
+		return attemptResult[G]{
 			Outcome:        outcome,
 			RetryAfter:     retryAfter.Wait,
 			RetryAfterHint: retryAfter.Hint,
 			Err:            err,
 		}
 	}
-	decoded, err := readResponse[B](reply, c.Keyring)
+	decoded, err := readResponse[G](reply, c.Keyring)
 	if err != nil {
-		return attemptResult[B]{Outcome: core.HTTPOutcomeTerminal, Err: err}
+		return attemptResult[G]{Outcome: core.HTTPOutcomeTerminal, Err: err}
 	}
-	return attemptResult[B]{Response: decoded, Outcome: core.HTTPOutcomeSuccess}
+	return attemptResult[G]{Response: decoded, Outcome: core.HTTPOutcomeSuccess}
 }
 
-func (c Client[P, B]) do(request *http.Request) (*http.Response, error) {
+func (c Client[P, G]) do(request *http.Request) (*http.Response, error) {
 	client := *c.HTTP
 	client.CheckRedirect = rejectCheckInRedirect
 	return client.Do(request) // #nosec G704 -- request URL comes from typed CheckInEndpoint validation and redirects are rejected.
@@ -269,7 +269,7 @@ func rejectCheckInRedirect(*http.Request, []*http.Request) error {
 	return fmt.Errorf(ErrFmtCheckInTransport, core.ErrLicenseContract)
 }
 
-func (c Client[P, B]) buildRequest(ctx context.Context, body []byte) (*http.Request, error) {
+func (c Client[P, G]) buildRequest(ctx context.Context, body []byte) (*http.Request, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.Endpoint.String(), bytes.NewReader(body))
 	if err != nil {
 		return nil, transportError(err)
@@ -281,43 +281,43 @@ func (c Client[P, B]) buildRequest(ctx context.Context, body []byte) (*http.Requ
 	return request, nil
 }
 
-func readResponse[B Body](reply *http.Response, keyring core.SigningKeyring) (CheckInResponse[B], error) {
+func readResponse[G CheckInGrant](reply *http.Response, keyring core.SigningKeyring) (CheckInResponse[G], error) {
 	data, err := readCappedResponseBody(reply.Body)
 	if err != nil {
-		return CheckInResponse[B]{}, err
+		return CheckInResponse[G]{}, err
 	}
-	decoded, err := core.DecodeStrictJSON[core.APIEnvelope[CheckInResponse[B]]](data)
+	decoded, err := core.DecodeStrictJSON[core.APIEnvelope[CheckInResponse[G]]](data)
 	if err != nil {
-		return CheckInResponse[B]{}, fmt.Errorf(ErrFmtCheckInResponse, errors.Join(core.ErrLicenseContract, err))
+		return CheckInResponse[G]{}, fmt.Errorf(ErrFmtCheckInResponse, errors.Join(core.ErrLicenseContract, err))
 	}
 	if err := decoded.ValidateSuccess(); err != nil {
-		return CheckInResponse[B]{}, fmt.Errorf(ErrFmtCheckInResponse, errors.Join(core.ErrLicenseContract, err))
+		return CheckInResponse[G]{}, fmt.Errorf(ErrFmtCheckInResponse, errors.Join(core.ErrLicenseContract, err))
 	}
-	if err := verifyGrantedLease(*decoded.Data, keyring); err != nil {
-		return CheckInResponse[B]{}, err
+	if err := verifyGrantedGrant(*decoded.Data, keyring); err != nil {
+		return CheckInResponse[G]{}, err
 	}
 	return *decoded.Data, nil
 }
 
-func verifyGrantedLease[B Body](response CheckInResponse[B], keyring core.SigningKeyring) error {
+func verifyGrantedGrant[G CheckInGrant](response CheckInResponse[G], keyring core.SigningKeyring) error {
 	if !response.Granted {
 		return nil
 	}
-	if response.Lease == nil {
+	if response.Grant == nil {
 		return fmt.Errorf(ErrFmtCheckInResponse, core.ErrLicenseContract)
 	}
-	if err := response.Lease.Verify(keyring); err != nil {
+	if err := (*response.Grant).Verify(keyring); err != nil {
 		return fmt.Errorf(ErrFmtCheckInResponse, errors.Join(core.ErrLicenseContract, err))
 	}
 	return nil
 }
 
-func readFailureResponse[B Body](reply *http.Response, statusCode int, retryAfter time.Duration) error {
+func readFailureResponse[G CheckInGrant](reply *http.Response, statusCode int, retryAfter time.Duration) error {
 	data, err := readCappedResponseBody(reply.Body)
 	if err != nil {
 		return err
 	}
-	decoded, err := core.DecodeStrictJSON[core.APIEnvelope[CheckInResponse[B]]](data)
+	decoded, err := core.DecodeStrictJSON[core.APIEnvelope[CheckInResponse[G]]](data)
 	if err != nil {
 		return CheckInHTTPError{
 			StatusCode: statusCode,
@@ -349,7 +349,7 @@ func readCappedResponseBody(body io.Reader) ([]byte, error) {
 	return data, nil
 }
 
-func (c Client[P, B]) jitterFraction() float64 {
+func (c Client[P, G]) jitterFraction() float64 {
 	if c.Jitter != nil {
 		return conservativeJitterFraction(c.Jitter())
 	}

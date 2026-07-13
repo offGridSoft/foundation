@@ -13,6 +13,6 @@ type TransportResponseBody interface {
 var (
 	_ core.Validatable      = (*BugCheckIn)(nil)
 	_ core.Validatable      = (*WitnessCheckIn)(nil)
-	_ TransportResponseBody = CheckInResponse[SeatLeaseBody]{}
-	_ TransportResponseBody = CheckInResponse[SubscriptionLeaseBody]{}
+	_ TransportResponseBody = CheckInResponse[BugCheckInGrant]{}
+	_ TransportResponseBody = CheckInResponse[WitnessCheckInGrant]{}
 )

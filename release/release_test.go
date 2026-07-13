@@ -367,7 +367,7 @@ func TestManifestCanonicalWireForm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"schema":"offgrid-release-manifest-v1","version":"2026.0.0","release_id":"2026-07-08-2026.0.0","date":"2026-07-08","commit":"` +
+	want := `{"schema":"offgrid-release-manifest-v2026","version":"2026.0.0","release_id":"2026-07-08-2026.0.0","date":"2026-07-08","commit":"` +
 		strings.Repeat("a", 40) +
 		`","artifacts":[{"name":"tools.tar.gz","sha256":"` +
 		strings.Repeat("b", 64) +

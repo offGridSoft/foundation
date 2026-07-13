@@ -46,6 +46,7 @@ func TestSeatLeaseCanonicalWireForm(t *testing.T) {
 		Schema:             core.SchemaBugSeatLease,
 		DeveloperKeyID:     testDeveloperKeyID(t),
 		DeviceFingerprint:  testDeviceFingerprint(t),
+		Writer:             testBugWriterKey(t),
 		WriteGraceDuration: window.WriteGraceDuration,
 		Plan:               SeatPlanStandard,
 		BillingPeriod:      BillingPeriodMonthly,
@@ -55,8 +56,9 @@ func TestSeatLeaseCanonicalWireForm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"schema":"bug-license-lease-v1","developer_key_id":"OGS-DEV-alpha",` +
+	want := `{"schema":"bug-license-lease-v2026","developer_key_id":"OGS-DEV-alpha",` +
 		`"device_fingerprint":"sha256:` + strings.Repeat("a", 64) + `",` +
+		`"writer":{"key_id":"` + body.Writer.KeyID.String() + `","public_key":"` + body.Writer.PublicKey.String() + `"},` +
 		`"issued_at":1782302400000000000,"paid_until":1784894400000000000,` +
 		`"lease_not_after":1785240000000000000,` +
 		`"check_in_after":1785153600000000000,"check_in_by":1785240000000000000,` +
@@ -86,7 +88,7 @@ func TestSubscriptionLeaseCanonicalWireForm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"schema":"witness-subscription-lease-v1","device_fingerprint":"sha256:` +
+	want := `{"schema":"witness-subscription-lease-v2026","device_fingerprint":"sha256:` +
 		strings.Repeat("a", 64) + `","issued_at":1782302400000000000,` +
 		`"paid_until":1784894400000000000,` +
 		`"lease_not_after":1785240000000000000,"check_in_after":1785153600000000000,` +
@@ -154,7 +156,7 @@ func TestSubscriptionLeaseRejectsDeveloperKeyField(t *testing.T) {
 		`"paid_until":1784894400000000000,"lease_not_after":1785240000000000000,` +
 		`"check_in_after":1785153600000000000,"check_in_by":1785240000000000000,` +
 		`"write_grace_ns":259200000000000,` +
-		`"schema":"witness-subscription-lease-v1","plan":"silver","billing_period":"monthly",` +
+		`"schema":"witness-subscription-lease-v2026","plan":"silver","billing_period":"monthly",` +
 		`"prepaid_years":0,"developer_key_id":"OGS-DEV-alpha"}`)
 
 	if _, err := core.DecodeStrictJSON[SubscriptionLeaseBody](raw); err == nil {

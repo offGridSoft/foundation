@@ -13,8 +13,8 @@ import (
 
 const (
 	OffgridAPIBaseURL         = "https://api.offgridsoftware.ca"
-	OffgridBugCheckInPath     = "/v1/" + core.ProductTokenBug + "/check_in"
-	OffgridWitnessCheckInPath = "/v1/" + core.ProductTokenWitness + "/check_in"
+	OffgridBugCheckInPath     = "/" + core.ContractVersionToken + "/" + core.ProductTokenBug + "/check_in"
+	OffgridWitnessCheckInPath = "/" + core.ContractVersionToken + "/" + core.ProductTokenWitness + "/check_in"
 	OffgridAPICallKeyHeader   = "X-Offgrid-Api-Key"
 )
 

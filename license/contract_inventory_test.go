@@ -7,7 +7,7 @@ type licenseTypedFailure[T any] struct{}
 type licenseContractInventory struct {
 	WitnessPlanPolicy licenseProtocolFact[WitnessPlanPolicy]
 	WitnessUsage      licenseProtocolFact[WitnessUsage]
-	CheckInResponse   licenseProtocolFact[CheckInResponse[SeatLeaseBody]]
+	CheckInResponse   licenseProtocolFact[CheckInResponse[BugCheckInGrant]]
 	RefusalFailure    licenseTypedFailure[RefusalError]
 }
 

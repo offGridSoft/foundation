@@ -17,6 +17,8 @@ const (
 	SchemaWitnessUsage
 	SchemaBugCheckIn
 	SchemaBugSeatLease
+	SchemaBugWriterAttestation
+	SchemaBugWriterCertificate
 	SchemaWitnessCheckIn
 	SchemaWitnessSubscription
 	SchemaCustodySessionOpenRequest
@@ -32,22 +34,24 @@ const (
 )
 
 const (
-	SchemaTokenBugUsage                   = ProductTokenBug + "-usage-v1"
-	SchemaTokenWitnessUsage               = ProductTokenWitness + "-usage-v1"
-	SchemaTokenBugCheckIn                 = ProductTokenBug + "-license-check-in-v1"
-	SchemaTokenBugSeatLease               = ProductTokenBug + "-license-lease-v1"
-	SchemaTokenWitnessCheckIn             = ProductTokenWitness + "-subscription-check-in-v1"
-	SchemaTokenWitnessSubscription        = ProductTokenWitness + "-subscription-lease-v1"
-	SchemaTokenCustodySessionOpenRequest  = ProductTokenWitness + "-custody-session-open-v2"
-	SchemaTokenCustodySessionOpenResponse = ProductTokenWitness + "-custody-session-targets-v2"
-	SchemaTokenCustodyFinalizeRequest     = ProductTokenWitness + "-custody-finalize-v2"
-	SchemaTokenCustodyReceipt             = ProductTokenWitness + "-custody-receipt-v2"
-	SchemaTokenReleaseManifest            = "offgrid-release-manifest-v1"
-	SchemaTokenReleaseUploadReceipt       = "offgrid-release-upload-receipt-v1"
-	SchemaTokenReleaseDownloadIndex       = "offgrid-release-download-index-v1"
-	SchemaTokenReleasePlan                = "offgrid-release-plan-v1"
-	SchemaTokenReleaseRootLayout          = "offgrid-release-root-layout-v1"
-	SchemaTokenReleaseCommandRun          = "offgrid-release-command-run-v1"
+	SchemaTokenBugUsage                   = ProductTokenBug + "-usage-" + ContractVersionToken
+	SchemaTokenWitnessUsage               = ProductTokenWitness + "-usage-" + ContractVersionToken
+	SchemaTokenBugCheckIn                 = ProductTokenBug + "-license-check-in-" + ContractVersionToken
+	SchemaTokenBugSeatLease               = ProductTokenBug + "-license-lease-" + ContractVersionToken
+	SchemaTokenBugWriterAttestation       = ProductTokenBug + "-writer-attestation-" + ContractVersionToken
+	SchemaTokenBugWriterCertificate       = ProductTokenBug + "-writer-certificate-" + ContractVersionToken
+	SchemaTokenWitnessCheckIn             = ProductTokenWitness + "-subscription-check-in-" + ContractVersionToken
+	SchemaTokenWitnessSubscription        = ProductTokenWitness + "-subscription-lease-" + ContractVersionToken
+	SchemaTokenCustodySessionOpenRequest  = ProductTokenWitness + "-custody-session-open-" + ContractVersionToken
+	SchemaTokenCustodySessionOpenResponse = ProductTokenWitness + "-custody-session-targets-" + ContractVersionToken
+	SchemaTokenCustodyFinalizeRequest     = ProductTokenWitness + "-custody-finalize-" + ContractVersionToken
+	SchemaTokenCustodyReceipt             = ProductTokenWitness + "-custody-receipt-" + ContractVersionToken
+	SchemaTokenReleaseManifest            = "offgrid-release-manifest-" + ContractVersionToken
+	SchemaTokenReleaseUploadReceipt       = "offgrid-release-upload-receipt-" + ContractVersionToken
+	SchemaTokenReleaseDownloadIndex       = "offgrid-release-download-index-" + ContractVersionToken
+	SchemaTokenReleasePlan                = "offgrid-release-plan-" + ContractVersionToken
+	SchemaTokenReleaseRootLayout          = "offgrid-release-root-layout-" + ContractVersionToken
+	SchemaTokenReleaseCommandRun          = "offgrid-release-command-run-" + ContractVersionToken
 )
 
 func schemaNames() [SchemaReleaseCommandRun + 1]string {
@@ -56,6 +60,8 @@ func schemaNames() [SchemaReleaseCommandRun + 1]string {
 		SchemaWitnessUsage:               SchemaTokenWitnessUsage,
 		SchemaBugCheckIn:                 SchemaTokenBugCheckIn,
 		SchemaBugSeatLease:               SchemaTokenBugSeatLease,
+		SchemaBugWriterAttestation:       SchemaTokenBugWriterAttestation,
+		SchemaBugWriterCertificate:       SchemaTokenBugWriterCertificate,
 		SchemaWitnessCheckIn:             SchemaTokenWitnessCheckIn,
 		SchemaWitnessSubscription:        SchemaTokenWitnessSubscription,
 		SchemaCustodySessionOpenRequest:  SchemaTokenCustodySessionOpenRequest,

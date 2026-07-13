@@ -12,4 +12,8 @@ const (
 	jsonFieldPlan              = "plan"
 	jsonFieldPrepaidYears      = "prepaid_years"
 	jsonFieldWriteGraceNS      = "write_grace_ns"
+	jsonFieldWriter            = "writer"
+	jsonFieldWriterKeyID       = "writer_key_id"
+	jsonFieldOperationSHA256   = "operation_sha256"
+	jsonFieldOccurredAt        = "occurred_at"
 )

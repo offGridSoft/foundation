@@ -20,6 +20,7 @@ type Body interface {
 type SeatLeaseBody struct {
 	DeveloperKeyID     DeveloperKeyID           `json:"developer_key_id"`
 	DeviceFingerprint  core.DeviceFingerprint   `json:"device_fingerprint"`
+	Writer             BugWriterKey             `json:"writer"`
 	IssuedAt           core.UnixNanoTime        `json:"issued_at"`
 	PaidUntil          core.UnixNanoTime        `json:"paid_until"`
 	TokenExpiresAt     core.UnixNanoTime        `json:"lease_not_after"`
@@ -46,6 +47,9 @@ func (b SeatLeaseBody) Validate() error {
 		return err
 	}
 	if err := b.DeviceFingerprint.Validate(); err != nil {
+		return err
+	}
+	if err := b.Writer.Validate(); err != nil {
 		return err
 	}
 	if err := validateCommonLeaseWindow(b); err != nil {
@@ -239,6 +243,7 @@ func appendSeatLeaseBodyJSON(dst []byte, b SeatLeaseBody) ([]byte, error) {
 	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, b.Schema)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDeveloperKeyID, b.DeveloperKeyID)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDeviceFingerprint, b.DeviceFingerprint)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldWriter, b.Writer)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldIssuedAt, b.IssuedAt)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldPaidUntil, b.PaidUntil)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldLeaseNotAfter, b.TokenExpiresAt)

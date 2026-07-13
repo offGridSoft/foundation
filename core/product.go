@@ -9,9 +9,15 @@ type ProductVersion struct {
 	value string
 }
 
-// FoundationVersion2026 is this module's compiler-owned source version token
-// for the 2026 release line.
-const FoundationVersion2026 = "2026.0.0"
+const (
+	// ContractYear is the one compiler-owned generation for every Foundation
+	// schema, signing domain, and transport path in this release line.
+	ContractYear = "2026"
+	// ContractVersionToken is the canonical schema/transport generation token.
+	ContractVersionToken = "v" + ContractYear
+	// FoundationVersion2026 is this module's compiler-owned source version.
+	FoundationVersion2026 = ContractYear + ".0.0"
+)
 
 func ParseProductVersion(value string) (ProductVersion, error) {
 	if err := ValidateOpaqueToken(value, OpaqueTokenDefaultMaxRunes); err != nil {

@@ -181,11 +181,11 @@ func TestCheckInEndpointWireContract(t *testing.T) {
 		t.Fatalf("CheckInEndpoint roundTrip = %s, want %s", roundTrip, endpoint)
 	}
 	for _, raw := range []string{
-		"http://api.offgridsoftware.ca/v1/bug/check_in",
+		"http://api.offgridsoftware.ca/v2026/bug/check_in",
 		"https://",
 		"https://api.offgridsoftware.ca",
-		"https://api.offgridsoftware.ca@evil.example/v1/bug/check_in",
-		"https://api.offgridsoftware.ca/v1/bug/check_in\nx",
+		"https://api.offgridsoftware.ca@evil.example/v2026/bug/check_in",
+		"https://api.offgridsoftware.ca/v2026/bug/check_in\nx",
 		strings.Repeat("a", core.HTTPSURLDefaultMaxRunes+1),
 		"://bad",
 	} {
@@ -328,7 +328,7 @@ func TestBugUsageMarshalTable(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "zero usage marshals as nullable first check-in body", usage: BugUsage{}, want: `{}`},
-		{name: "schema usage marshals typed usage body", usage: goodBugUsage(), want: `{"window_end":1782302401000000000,"window_start":1782302400000000000,"green":0,"verify":0,"start":0,"show":0,"list":0,"red":0,"license_admin":0,"audit":0,"dupe":0,"init":0,"languages":0,"install_hooks":0,"ledger_admin":0,"schema":"bug-usage-v1"}`},
+		{name: "schema usage marshals typed usage body", usage: goodBugUsage(), want: `{"window_end":1782302401000000000,"window_start":1782302400000000000,"green":0,"reattest":0,"verify":0,"start":0,"show":0,"list":0,"red":0,"license_admin":0,"audit":0,"dupe":0,"init":0,"languages":0,"install_hooks":0,"ledger_admin":0,"schema":"bug-usage-v2026"}`},
 		{name: "invalid nonzero usage returns license contract", usage: BugUsage{
 			Schema:      core.SchemaUnknown,
 			WindowStart: testTime(1782302400000000000),
@@ -412,6 +412,7 @@ func goodBugCheckIn(t *testing.T) BugCheckIn {
 		DeveloperKey:      testDeveloperKey(t),
 		DeviceFingerprint: testDeviceFingerprint(t),
 		DeviceLabel:       testDeviceLabel(t),
+		Writer:            testBugWriterKey(t),
 		BinaryVersion:     testProductVersion(t),
 		BinarySHA256:      testSHA256(t),
 		Platform:          core.PlatformDarwinARM64,

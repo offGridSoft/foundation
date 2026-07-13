@@ -23,6 +23,7 @@ const (
 	JSONFieldRetention  = "retention"
 	JSONFieldSchema     = "schema"
 	JSONFieldSessionID  = "session_id"
+	JSONFieldValidUntil = "valid_until"
 )
 
 func ValidateJSONFieldName(name string) error {

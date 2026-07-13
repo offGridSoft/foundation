@@ -10,7 +10,7 @@ const (
 	ErrFmtSigningKeyID    = "core.SigningKeyID: %w"
 	ErrFmtSigningKeyring  = "core.SigningKeyring: %w"
 	ErrFmtSignedSignature = "core.Signed.Signature: %w"
-	SignedMessageDomain   = "foundation-signed-2026"
+	SignedMessageDomain   = "foundation-signed-" + ContractYear
 	SignedMessageSep      = byte(0)
 	SigningKeyringMaxKeys = 16
 )
@@ -26,6 +26,8 @@ type SigningDomain uint16
 const (
 	SigningDomainUnknown                  = SigningDomain(SchemaUnknown)
 	SigningDomainBugSeatLease             = SigningDomain(SchemaBugSeatLease)
+	SigningDomainBugWriterAttestation     = SigningDomain(SchemaBugWriterAttestation)
+	SigningDomainBugWriterCertificate     = SigningDomain(SchemaBugWriterCertificate)
 	SigningDomainWitnessSubscriptionLease = SigningDomain(SchemaWitnessSubscription)
 	SigningDomainWitnessCustodyReceipt    = SigningDomain(SchemaCustodyReceipt)
 	SigningDomainReleaseManifest          = SigningDomain(SchemaReleaseManifest)
@@ -37,21 +39,25 @@ const (
 )
 
 const (
-	SigningDomainTokenBugSeatLease             = "bug-seat-lease-2026" // #nosec G101 -- public signing-domain token, not a credential.
-	SigningDomainTokenWitnessSubscriptionLease = "witness-subscription-lease-2026"
-	SigningDomainTokenWitnessCustodyReceipt    = "witness-custody-receipt-2026"
-	SigningDomainTokenReleaseManifest          = "release-manifest-2026"
-	SigningDomainTokenReleaseUploadReceipt     = "release-upload-receipt-2026"
-	SigningDomainTokenReleaseDownloadIndex     = "release-download-index-2026"
-	SigningDomainTokenReleasePlan              = "release-plan-2026"
-	SigningDomainTokenReleaseRootLayout        = "release-root-layout-2026"
-	SigningDomainTokenReleaseCommandRun        = "release-command-run-2026"
+	SigningDomainTokenBugSeatLease             = "bug-seat-lease-" + ContractYear // #nosec G101 -- public signing-domain token, not a credential.
+	SigningDomainTokenBugWriterAttestation     = "bug-writer-attestation-" + ContractYear
+	SigningDomainTokenBugWriterCertificate     = "bug-writer-certificate-" + ContractYear
+	SigningDomainTokenWitnessSubscriptionLease = "witness-subscription-lease-" + ContractYear
+	SigningDomainTokenWitnessCustodyReceipt    = "witness-custody-receipt-" + ContractYear
+	SigningDomainTokenReleaseManifest          = "release-manifest-" + ContractYear
+	SigningDomainTokenReleaseUploadReceipt     = "release-upload-receipt-" + ContractYear
+	SigningDomainTokenReleaseDownloadIndex     = "release-download-index-" + ContractYear
+	SigningDomainTokenReleasePlan              = "release-plan-" + ContractYear
+	SigningDomainTokenReleaseRootLayout        = "release-root-layout-" + ContractYear
+	SigningDomainTokenReleaseCommandRun        = "release-command-run-" + ContractYear
 	ErrFmtSigningDomain                        = "core.SigningDomain: %w"
 )
 
 func signingDomainNames() [SchemaReleaseCommandRun + 1]string {
 	return [...]string{
 		SigningDomainBugSeatLease:             SigningDomainTokenBugSeatLease,
+		SigningDomainBugWriterAttestation:     SigningDomainTokenBugWriterAttestation,
+		SigningDomainBugWriterCertificate:     SigningDomainTokenBugWriterCertificate,
 		SigningDomainWitnessSubscriptionLease: SigningDomainTokenWitnessSubscriptionLease,
 		SigningDomainWitnessCustodyReceipt:    SigningDomainTokenWitnessCustodyReceipt,
 		SigningDomainReleaseManifest:          SigningDomainTokenReleaseManifest,

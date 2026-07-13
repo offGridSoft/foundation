@@ -3,7 +3,6 @@ package license
 import (
 	"context"
 	"crypto/ed25519"
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -64,12 +63,7 @@ func testAPICallKey(t *testing.T) APICallKey {
 
 func TestClientDecodesOffgridEnvelope(t *testing.T) {
 	t.Parallel()
-	keyID, publicKey, signature := signedSeatLeaseParts(t)
-	lease := &core.Signed[SeatLeaseBody]{
-		KeyID:     keyID,
-		Signature: signature,
-		Body:      testSeatLeaseBody(t),
-	}
+	grant, keyID, publicKey := signedBugGrant(t)
 	handlerErr := make(chan error, 1)
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get(OffgridAPICallKeyHeader); got != "public-call-key" {
@@ -78,12 +72,12 @@ func TestClientDecodesOffgridEnvelope(t *testing.T) {
 			return
 		}
 		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
-		_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[SeatLeaseBody]]{
+		_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[BugCheckInGrant]]{
 			RequestID: core.NewAPIRequestID("req-1"),
-			Data: &CheckInResponse[SeatLeaseBody]{
+			Data: &CheckInResponse[BugCheckInGrant]{
 				Granted: true,
 				Refusal: RefusalNone,
-				Lease:   lease,
+				Grant:   grant,
 			},
 		})
 	}))
@@ -92,7 +86,7 @@ func TestClientDecodesOffgridEnvelope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := Client[BugCheckIn, SeatLeaseBody]{
+	client := Client[BugCheckIn, BugCheckInGrant]{
 		HTTP:     server.Client(),
 		Endpoint: endpoint,
 		APIKey:   testAPICallKey(t),
@@ -108,23 +102,18 @@ func TestClientDecodesOffgridEnvelope(t *testing.T) {
 		t.Fatal(err)
 	default:
 	}
-	if response.Lease == nil {
-		t.Fatalf("response.Lease = nil, want signed seat lease")
+	if response.Grant == nil {
+		t.Fatalf("response.Grant = nil, want signed Bug grant")
 	}
 	keyring := core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
-	if err := response.Lease.Verify(keyring); err != nil {
+	if err := response.Grant.Verify(keyring); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestClientSendsFirstCheckInWithoutUsage(t *testing.T) {
 	t.Parallel()
-	keyID, publicKey, signature := signedSeatLeaseParts(t)
-	lease := &core.Signed[SeatLeaseBody]{
-		KeyID:     keyID,
-		Signature: signature,
-		Body:      testSeatLeaseBody(t),
-	}
+	grant, keyID, publicKey := signedBugGrant(t)
 	handlerErr := make(chan error, 1)
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var payload BugCheckIn
@@ -139,12 +128,12 @@ func TestClientSendsFirstCheckInWithoutUsage(t *testing.T) {
 			return
 		}
 		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
-		_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[SeatLeaseBody]]{
+		_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[BugCheckInGrant]]{
 			RequestID: core.NewAPIRequestID("req-first"),
-			Data: &CheckInResponse[SeatLeaseBody]{
+			Data: &CheckInResponse[BugCheckInGrant]{
 				Granted: true,
 				Refusal: RefusalNone,
-				Lease:   lease,
+				Grant:   grant,
 			},
 		})
 	}))
@@ -155,7 +144,7 @@ func TestClientSendsFirstCheckInWithoutUsage(t *testing.T) {
 	}
 	payload := testBugCheckIn(t)
 	payload.Usage = BugUsage{}
-	client := Client[BugCheckIn, SeatLeaseBody]{
+	client := Client[BugCheckIn, BugCheckInGrant]{
 		HTTP:     server.Client(),
 		Endpoint: endpoint,
 		Keyring:  core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}},
@@ -173,20 +162,15 @@ func TestClientSendsFirstCheckInWithoutUsage(t *testing.T) {
 
 func TestWitnessClientDecodesSubscriptionEnvelope(t *testing.T) {
 	t.Parallel()
-	keyID, publicKey, signature := signedSubscriptionLeaseParts(t)
-	lease := &core.Signed[SubscriptionLeaseBody]{
-		KeyID:     keyID,
-		Signature: signature,
-		Body:      testSubscriptionLeaseBody(),
-	}
+	grant, keyID, publicKey := signedWitnessGrant(t)
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
-		_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[SubscriptionLeaseBody]]{
+		_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[WitnessCheckInGrant]]{
 			RequestID: core.NewAPIRequestID("req-witness"),
-			Data: &CheckInResponse[SubscriptionLeaseBody]{
+			Data: &CheckInResponse[WitnessCheckInGrant]{
 				Granted: true,
 				Refusal: RefusalNone,
-				Lease:   lease,
+				Grant:   grant,
 			},
 		})
 	}))
@@ -195,7 +179,7 @@ func TestWitnessClientDecodesSubscriptionEnvelope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := Client[WitnessCheckIn, SubscriptionLeaseBody]{
+	client := Client[WitnessCheckIn, WitnessCheckInGrant]{
 		HTTP:     server.Client(),
 		Endpoint: endpoint,
 		Keyring:  core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}},
@@ -205,11 +189,11 @@ func TestWitnessClientDecodesSubscriptionEnvelope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response.Lease == nil {
-		t.Fatalf("response.Lease = nil, want signed subscription lease")
+	if response.Grant == nil {
+		t.Fatalf("response.Grant = nil, want signed Witness grant")
 	}
 	keyring := core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
-	if err := response.Lease.Verify(keyring); err != nil {
+	if err := response.Grant.Verify(keyring); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -253,20 +237,16 @@ func runForgedLeaseSignatureCheckIn(t *testing.T, kind forgedLeaseKind) error {
 
 func runForgedSeatLeaseCheckIn(t *testing.T) error {
 	t.Helper()
-	keyID, publicKey, _ := signedSeatLeaseParts(t)
-	lease := &core.Signed[SeatLeaseBody]{
-		KeyID:     keyID,
-		Signature: testSignatureHex(t),
-		Body:      testSeatLeaseBody(t),
-	}
+	grant, keyID, publicKey := signedBugGrant(t)
+	grant.Lease.Signature = testSignatureHex(t)
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
-		_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[SeatLeaseBody]]{
+		_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[BugCheckInGrant]]{
 			RequestID: core.NewAPIRequestID("req-forged-seat"),
-			Data: &CheckInResponse[SeatLeaseBody]{
+			Data: &CheckInResponse[BugCheckInGrant]{
 				Granted: true,
 				Refusal: RefusalNone,
-				Lease:   lease,
+				Grant:   grant,
 			},
 		})
 	}))
@@ -275,7 +255,7 @@ func runForgedSeatLeaseCheckIn(t *testing.T) error {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := Client[BugCheckIn, SeatLeaseBody]{
+	client := Client[BugCheckIn, BugCheckInGrant]{
 		HTTP:     server.Client(),
 		Endpoint: endpoint,
 		Keyring:  core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}},
@@ -286,20 +266,16 @@ func runForgedSeatLeaseCheckIn(t *testing.T) error {
 
 func runForgedSubscriptionLeaseCheckIn(t *testing.T) error {
 	t.Helper()
-	keyID, publicKey, _ := signedSubscriptionLeaseParts(t)
-	lease := &core.Signed[SubscriptionLeaseBody]{
-		KeyID:     keyID,
-		Signature: testSignatureHex(t),
-		Body:      testSubscriptionLeaseBody(),
-	}
+	grant, keyID, publicKey := signedWitnessGrant(t)
+	grant.Lease.Signature = testSignatureHex(t)
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
-		_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[SubscriptionLeaseBody]]{
+		_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[WitnessCheckInGrant]]{
 			RequestID: core.NewAPIRequestID("req-forged-subscription"),
-			Data: &CheckInResponse[SubscriptionLeaseBody]{
+			Data: &CheckInResponse[WitnessCheckInGrant]{
 				Granted: true,
 				Refusal: RefusalNone,
-				Lease:   lease,
+				Grant:   grant,
 			},
 		})
 	}))
@@ -308,7 +284,7 @@ func runForgedSubscriptionLeaseCheckIn(t *testing.T) error {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := Client[WitnessCheckIn, SubscriptionLeaseBody]{
+	client := Client[WitnessCheckIn, WitnessCheckInGrant]{
 		HTTP:     server.Client(),
 		Endpoint: endpoint,
 		Keyring:  core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}},
@@ -321,7 +297,7 @@ func TestClientRejectsRawResponseWithoutEnvelope(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
-		_ = json.NewEncoder(w).Encode(CheckInResponse[SeatLeaseBody]{
+		_ = json.NewEncoder(w).Encode(CheckInResponse[BugCheckInGrant]{
 			Granted:     false,
 			Refusal:     RefusalPaymentRequired,
 			Remediation: RemediationUpdatePayment,
@@ -332,7 +308,7 @@ func TestClientRejectsRawResponseWithoutEnvelope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := Client[BugCheckIn, SeatLeaseBody]{
+	client := Client[BugCheckIn, BugCheckInGrant]{
 		HTTP:     server.Client(),
 		Endpoint: endpoint,
 		Keyring:  testClientKeyring(t),
@@ -348,7 +324,7 @@ func TestClientDecodesTerminalErrorEnvelope(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
 		w.WriteHeader(http.StatusForbidden)
-		_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[SeatLeaseBody]]{
+		_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[BugCheckInGrant]]{
 			RequestID: core.NewAPIRequestID("req-denied"),
 			Error: &core.APIErrorBody{
 				Code:    core.APICodeForbidden,
@@ -362,7 +338,7 @@ func TestClientDecodesTerminalErrorEnvelope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := Client[BugCheckIn, SeatLeaseBody]{
+	client := Client[BugCheckIn, BugCheckInGrant]{
 		HTTP:     server.Client(),
 		Endpoint: endpoint,
 		Keyring:  testClientKeyring(t),
@@ -395,7 +371,7 @@ func TestClientRejectsCredentialRedirectHostile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := Client[BugCheckIn, SeatLeaseBody]{
+	client := Client[BugCheckIn, BugCheckInGrant]{
 		HTTP:     server.Client(),
 		Endpoint: endpoint,
 		APIKey:   testAPICallKey(t),
@@ -408,19 +384,14 @@ func TestClientRejectsCredentialRedirectHostile(t *testing.T) {
 
 func TestRetryLoopRetriesThenAcceptsEnvelope(t *testing.T) {
 	t.Parallel()
-	keyID, publicKey, signature := signedSeatLeaseParts(t)
-	lease := &core.Signed[SeatLeaseBody]{
-		KeyID:     keyID,
-		Signature: signature,
-		Body:      testSeatLeaseBody(t),
-	}
+	grant, keyID, publicKey := signedBugGrant(t)
 	var attempts int
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		attempts++
 		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
 		if attempts < 3 {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[SeatLeaseBody]]{
+			_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[BugCheckInGrant]]{
 				RequestID: core.NewAPIRequestID("req-retry"),
 				Error: &core.APIErrorBody{
 					Code:    core.APICodeServiceUnavailable,
@@ -429,12 +400,12 @@ func TestRetryLoopRetriesThenAcceptsEnvelope(t *testing.T) {
 			})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[SeatLeaseBody]]{
+		_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[BugCheckInGrant]]{
 			RequestID: core.NewAPIRequestID("req-ok"),
-			Data: &CheckInResponse[SeatLeaseBody]{
+			Data: &CheckInResponse[BugCheckInGrant]{
 				Granted: true,
 				Refusal: RefusalNone,
-				Lease:   lease,
+				Grant:   grant,
 			},
 		})
 	}))
@@ -443,7 +414,7 @@ func TestRetryLoopRetriesThenAcceptsEnvelope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := Client[BugCheckIn, SeatLeaseBody]{
+	client := Client[BugCheckIn, BugCheckInGrant]{
 		HTTP:     server.Client(),
 		Endpoint: endpoint,
 		Jitter:   func() float64 { return 1 },
@@ -461,19 +432,14 @@ func TestRetryLoopRetriesThenAcceptsEnvelope(t *testing.T) {
 
 func TestWitnessClientRetryThenAcceptsSubscriptionEnvelope(t *testing.T) {
 	t.Parallel()
-	keyID, publicKey, signature := signedSubscriptionLeaseParts(t)
-	lease := &core.Signed[SubscriptionLeaseBody]{
-		KeyID:     keyID,
-		Signature: signature,
-		Body:      testSubscriptionLeaseBody(),
-	}
+	grant, keyID, publicKey := signedWitnessGrant(t)
 	attempts := 0
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		attempts++
 		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
 		if attempts == 1 {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[SubscriptionLeaseBody]]{
+			_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[WitnessCheckInGrant]]{
 				RequestID: core.NewAPIRequestID("req-witness-retry"),
 				Error: &core.APIErrorBody{
 					Code:    core.APICodeServiceUnavailable,
@@ -482,12 +448,12 @@ func TestWitnessClientRetryThenAcceptsSubscriptionEnvelope(t *testing.T) {
 			})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[SubscriptionLeaseBody]]{
+		_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[WitnessCheckInGrant]]{
 			RequestID: core.NewAPIRequestID("req-witness-ok"),
-			Data: &CheckInResponse[SubscriptionLeaseBody]{
+			Data: &CheckInResponse[WitnessCheckInGrant]{
 				Granted: true,
 				Refusal: RefusalNone,
-				Lease:   lease,
+				Grant:   grant,
 			},
 		})
 	}))
@@ -496,7 +462,7 @@ func TestWitnessClientRetryThenAcceptsSubscriptionEnvelope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := Client[WitnessCheckIn, SubscriptionLeaseBody]{
+	client := Client[WitnessCheckIn, WitnessCheckInGrant]{
 		HTTP:     server.Client(),
 		Endpoint: endpoint,
 		Jitter:   func() float64 { return 1 },
@@ -518,7 +484,7 @@ func TestRetryExhaustionCarriesServerRetryAfter(t *testing.T) {
 		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
 		w.Header().Set(core.HTTPHeaderRetryAfter, "600")
 		w.WriteHeader(http.StatusTooManyRequests)
-		_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[SeatLeaseBody]]{
+		_ = json.NewEncoder(w).Encode(core.APIEnvelope[CheckInResponse[BugCheckInGrant]]{
 			RequestID: core.NewAPIRequestID("req-later"),
 			Error: &core.APIErrorBody{
 				Code:    core.APICodeServiceUnavailable,
@@ -531,7 +497,7 @@ func TestRetryExhaustionCarriesServerRetryAfter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := Client[BugCheckIn, SeatLeaseBody]{
+	client := Client[BugCheckIn, BugCheckInGrant]{
 		HTTP:     server.Client(),
 		Endpoint: endpoint,
 		Jitter:   func() float64 { return 1 },
@@ -562,7 +528,7 @@ func TestRetryExhaustedTransportErrorCarriesLicenseIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := Client[BugCheckIn, SeatLeaseBody]{
+	client := Client[BugCheckIn, BugCheckInGrant]{
 		HTTP:     &http.Client{Transport: failingRoundTripper{}},
 		Endpoint: endpoint,
 		Jitter:   func() float64 { return 1 },
@@ -583,21 +549,21 @@ func TestRetryExhaustedTransportErrorCarriesLicenseIdentity(t *testing.T) {
 func TestClientValidateChecksAPIKeyAndBackoffTable(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		mutate  func(*Client[BugCheckIn, SeatLeaseBody])
+		mutate  func(*Client[BugCheckIn, BugCheckInGrant])
 		name    string
 		wantErr bool
 	}{
-		{name: "valid api key and backoff", mutate: func(*Client[BugCheckIn, SeatLeaseBody]) {}},
-		{name: "invalid backoff with valid api key", wantErr: true, mutate: func(c *Client[BugCheckIn, SeatLeaseBody]) {
+		{name: "valid api key and backoff", mutate: func(*Client[BugCheckIn, BugCheckInGrant]) {}},
+		{name: "invalid backoff with valid api key", wantErr: true, mutate: func(c *Client[BugCheckIn, BugCheckInGrant]) {
 			c.Backoff.MaxAttempts = 0
 		}},
-		{name: "missing keyring rejected", wantErr: true, mutate: func(c *Client[BugCheckIn, SeatLeaseBody]) {
+		{name: "missing keyring rejected", wantErr: true, mutate: func(c *Client[BugCheckIn, BugCheckInGrant]) {
 			c.Keyring = core.SigningKeyring{}
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			client := Client[BugCheckIn, SeatLeaseBody]{
+			client := Client[BugCheckIn, BugCheckInGrant]{
 				HTTP:     &http.Client{},
 				Endpoint: BugCheckInEndpoint(),
 				APIKey:   testAPICallKey(t),
@@ -621,7 +587,7 @@ func TestClientValidateChecksAPIKeyAndBackoffTable(t *testing.T) {
 
 func TestJitterFractionZeroFailsToMaxDelay(t *testing.T) {
 	t.Parallel()
-	client := Client[BugCheckIn, SeatLeaseBody]{Jitter: func() float64 { return 0 }}
+	client := Client[BugCheckIn, BugCheckInGrant]{Jitter: func() float64 { return 0 }}
 	if got := client.jitterFraction(); got != 1 {
 		t.Fatalf("jitterFraction zero = %v, want 1", got)
 	}
@@ -643,44 +609,40 @@ func TestJitterFractionZeroFailsToMaxDelay(t *testing.T) {
 
 func TestCheckInResponseHostileCombinations(t *testing.T) {
 	t.Parallel()
-	lease := &core.Signed[SeatLeaseBody]{
-		KeyID:     mustSigningKeyID(t),
-		Signature: testSignatureHex(t),
-		Body:      testSeatLeaseBody(t),
-	}
+	grant := testBugGrantContract(t)
 	for _, tc := range []struct {
 		name     string
-		response CheckInResponse[SeatLeaseBody]
+		response CheckInResponse[BugCheckInGrant]
 	}{
-		{name: "granted missing lease", response: CheckInResponse[SeatLeaseBody]{Granted: true, Refusal: RefusalNone}},
-		{name: "granted with refusal", response: CheckInResponse[SeatLeaseBody]{
+		{name: "granted missing grant", response: CheckInResponse[BugCheckInGrant]{Granted: true, Refusal: RefusalNone}},
+		{name: "granted with refusal", response: CheckInResponse[BugCheckInGrant]{
 			Granted: true,
 			Refusal: RefusalPaymentRequired,
-			Lease:   lease,
+			Grant:   grant,
 		}},
-		{name: "granted with remediation", response: CheckInResponse[SeatLeaseBody]{
+		{name: "granted with remediation", response: CheckInResponse[BugCheckInGrant]{
 			Granted:     true,
 			Refusal:     RefusalNone,
 			Remediation: RemediationUpdatePayment,
-			Lease:       lease,
+			Grant:       grant,
 		}},
-		{name: "refused with lease", response: CheckInResponse[SeatLeaseBody]{
+		{name: "refused with grant", response: CheckInResponse[BugCheckInGrant]{
 			Refusal:     RefusalPaymentRequired,
 			Remediation: RemediationUpdatePayment,
-			Lease:       lease,
+			Grant:       grant,
 		}},
-		{name: "refused none refusal", response: CheckInResponse[SeatLeaseBody]{
+		{name: "refused none refusal", response: CheckInResponse[BugCheckInGrant]{
 			Refusal:     RefusalNone,
 			Remediation: RemediationUpdatePayment,
 		}},
-		{name: "refused missing remediation", response: CheckInResponse[SeatLeaseBody]{
+		{name: "refused missing remediation", response: CheckInResponse[BugCheckInGrant]{
 			Refusal: RefusalPaymentRequired,
 		}},
-		{name: "refused mismatched remediation", response: CheckInResponse[SeatLeaseBody]{
+		{name: "refused mismatched remediation", response: CheckInResponse[BugCheckInGrant]{
 			Refusal:     RefusalPaymentRequired,
 			Remediation: RemediationDeactivateMachine,
 		}},
-		{name: "refused unknown remediation ordinal", response: CheckInResponse[SeatLeaseBody]{
+		{name: "refused unknown remediation ordinal", response: CheckInResponse[BugCheckInGrant]{
 			Refusal:     RefusalPaymentRequired,
 			Remediation: Remediation(RemediationRetryUpload + 1),
 		}},
@@ -696,19 +658,15 @@ func TestCheckInResponseHostileCombinations(t *testing.T) {
 
 func TestCheckInTransportContractLayerTriad(t *testing.T) {
 	t.Parallel()
-	lease := &core.Signed[SeatLeaseBody]{
-		KeyID:     mustSigningKeyID(t),
-		Signature: testSignatureHex(t),
-		Body:      testSeatLeaseBody(t),
-	}
+	grant := testBugGrantContract(t)
 	tests := []struct {
 		body    TransportResponseBody
 		name    string
 		wantErr bool
 	}{
-		{name: "positive granted response", body: CheckInResponse[SeatLeaseBody]{Granted: true, Refusal: RefusalNone, Lease: lease}},
-		{name: "negative zero response", body: CheckInResponse[SeatLeaseBody]{}, wantErr: true},
-		{name: "neutral refused response", body: CheckInResponse[SeatLeaseBody]{Refusal: RefusalPaymentRequired, Remediation: RemediationUpdatePayment}},
+		{name: "positive granted response", body: CheckInResponse[BugCheckInGrant]{Granted: true, Refusal: RefusalNone, Grant: grant}},
+		{name: "negative zero response", body: CheckInResponse[BugCheckInGrant]{}, wantErr: true},
+		{name: "neutral refused response", body: CheckInResponse[BugCheckInGrant]{Refusal: RefusalPaymentRequired, Remediation: RemediationUpdatePayment}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -730,7 +688,7 @@ func TestCheckInTransportContractLayerTriad(t *testing.T) {
 func TestClientRejectsNilContextWithTypedIdentity(t *testing.T) {
 	t.Parallel()
 
-	client := Client[BugCheckIn, SeatLeaseBody]{}
+	client := Client[BugCheckIn, BugCheckInGrant]{}
 	var nilContext context.Context
 	_, err := client.Do(nilContext, BugCheckIn{})
 	if !errors.Is(err, core.ErrNilContext) {
@@ -756,16 +714,14 @@ func TestCompilerOwnedDefaultsCannotBeMutatedGlobally(t *testing.T) {
 	}
 }
 
-func TestCheckInResponseMalformedLeaseCarriesLicenseIdentity(t *testing.T) {
+func TestCheckInResponseMalformedGrantCarriesLicenseIdentity(t *testing.T) {
 	t.Parallel()
-	response := CheckInResponse[SeatLeaseBody]{
+	grant := testBugGrantContract(t)
+	grant.Lease.Signature = core.Ed25519SignatureHex{}
+	response := CheckInResponse[BugCheckInGrant]{
 		Granted: true,
 		Refusal: RefusalNone,
-		Lease: &core.Signed[SeatLeaseBody]{
-			KeyID:     mustSigningKeyID(t),
-			Signature: core.Ed25519SignatureHex{},
-			Body:      testSeatLeaseBody(t),
-		},
+		Grant:   grant,
 	}
 	if err := response.Validate(); !errors.Is(err, core.ErrLicenseContract) {
 		t.Fatalf("CheckInResponse.Validate() error = %v, want ErrLicenseContract", err)
@@ -788,12 +744,12 @@ func TestClientBoundaryErrorsCarryLicenseIdentityTable(t *testing.T) {
 		}},
 		{name: "success envelope decode failure", run: func() error {
 			reply := &http.Response{Body: io.NopCloser(strings.NewReader("<html>"))}
-			_, err := readResponse[SeatLeaseBody](reply, testClientKeyring(t))
+			_, err := readResponse[BugCheckInGrant](reply, testClientKeyring(t))
 			return err
 		}},
 		{name: "failure envelope decode failure", run: func() error {
 			reply := &http.Response{Body: io.NopCloser(strings.NewReader("<html>"))}
-			err := readFailureResponse[SeatLeaseBody](reply, http.StatusBadGateway, 0)
+			err := readFailureResponse[BugCheckInGrant](reply, http.StatusBadGateway, 0)
 			var statusErr CheckInHTTPError
 			if !errors.As(err, &statusErr) || statusErr.StatusCode != http.StatusBadGateway {
 				return fmt.Errorf("status error = %v, want CheckInHTTPError 502", err)
@@ -801,7 +757,7 @@ func TestClientBoundaryErrorsCarryLicenseIdentityTable(t *testing.T) {
 			return err
 		}},
 		{name: "request build failure", run: func() error {
-			client := Client[BugCheckIn, SeatLeaseBody]{
+			client := Client[BugCheckIn, BugCheckInGrant]{
 				Endpoint: CheckInEndpoint{value: "https://%zz"},
 			}
 			_, err := client.buildRequest(context.Background(), nil)
@@ -850,61 +806,69 @@ func TestRetryAfterClampedToBackoffMax(t *testing.T) {
 	}
 }
 
-func signedSeatLeaseParts(t *testing.T) (core.SigningKeyID, core.Ed25519PublicKeyHex, core.Ed25519SignatureHex) {
+func signedBugGrant(t *testing.T) (*BugCheckInGrant, core.SigningKeyID, core.Ed25519PublicKeyHex) {
 	t.Helper()
-	public, private, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
+	keyID, publicKey, privateKey := testServerSigningKey(t)
+	leaseBody := testSeatLeaseBody(t)
+	certificateBody := BugWriterCertificateBody{
+		Schema:            core.SchemaBugWriterCertificate,
+		DeviceFingerprint: leaseBody.DeviceFingerprint,
+		Writer:            leaseBody.Writer,
+		IssuedAt:          leaseBody.IssuedAt,
+		ValidUntil:        leaseBody.WriteGraceUntil(),
 	}
-	keyID, err := core.ParseSigningKeyID("server-key-1")
-	if err != nil {
-		t.Fatal(err)
+	grant := &BugCheckInGrant{
+		Lease:             signTestBody(t, keyID, privateKey, leaseBody),
+		WriterCertificate: signTestBody(t, keyID, privateKey, certificateBody),
 	}
-	publicHex, err := core.NewEd25519PublicKeyHex(public)
-	if err != nil {
-		t.Fatal(err)
-	}
-	body := testSeatLeaseBody(t)
-	message, err := core.AppendSignedMessage(nil, keyID, body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	signature, err := core.NewEd25519SignatureHex(ed25519.Sign(private, message))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return keyID, publicHex, signature
+	return grant, keyID, publicKey
 }
 
-func signedSubscriptionLeaseParts(t *testing.T) (core.SigningKeyID, core.Ed25519PublicKeyHex, core.Ed25519SignatureHex) {
+func signedWitnessGrant(t *testing.T) (*WitnessCheckInGrant, core.SigningKeyID, core.Ed25519PublicKeyHex) {
 	t.Helper()
-	public, private, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
+	keyID, publicKey, privateKey := testServerSigningKey(t)
+	grant := &WitnessCheckInGrant{Lease: signTestBody(t, keyID, privateKey, testSubscriptionLeaseBody())}
+	return grant, keyID, publicKey
+}
+
+func testServerSigningKey(t *testing.T) (core.SigningKeyID, core.Ed25519PublicKeyHex, ed25519.PrivateKey) {
+	t.Helper()
+	seed := make([]byte, ed25519.SeedSize)
+	seed[len(seed)-1] = 42
+	privateKey := ed25519.NewKeyFromSeed(seed)
 	keyID, err := core.ParseSigningKeyID("server-key-1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	publicHex, err := core.NewEd25519PublicKeyHex(public)
+	publicKey, err := core.NewEd25519PublicKeyHex(privateKey.Public().(ed25519.PublicKey))
 	if err != nil {
 		t.Fatal(err)
 	}
-	body := testSubscriptionLeaseBody()
+	return keyID, publicKey, privateKey
+}
+
+func signTestBody[B core.CanonicalBody](t *testing.T, keyID core.SigningKeyID, privateKey ed25519.PrivateKey, body B) core.Signed[B] {
+	t.Helper()
 	message, err := core.AppendSignedMessage(nil, keyID, body)
 	if err != nil {
 		t.Fatal(err)
 	}
-	signature, err := core.NewEd25519SignatureHex(ed25519.Sign(private, message))
+	signature, err := core.NewEd25519SignatureHex(ed25519.Sign(privateKey, message))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return keyID, publicHex, signature
+	return core.Signed[B]{Body: body, KeyID: keyID, Signature: signature}
+}
+
+func testBugGrantContract(t *testing.T) *BugCheckInGrant {
+	t.Helper()
+	grant, _, _ := signedBugGrant(t)
+	return grant
 }
 
 func testClientKeyring(t *testing.T) core.SigningKeyring {
 	t.Helper()
-	keyID, publicKey, _ := signedSeatLeaseParts(t)
+	_, keyID, publicKey := signedBugGrant(t)
 	return core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
 }
 
@@ -929,15 +893,6 @@ func (failingReader) Read([]byte) (int, error) {
 	return 0, errors.New("read failed")
 }
 
-func mustSigningKeyID(t *testing.T) core.SigningKeyID {
-	t.Helper()
-	keyID, err := core.ParseSigningKeyID("server-key-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return keyID
-}
-
 func testSeatLeaseBody(t *testing.T) SeatLeaseBody {
 	t.Helper()
 	window, err := BuildLeaseWindow(testTime(1782302400000000000), mustTestSeatOffer(t, SeatPlanStandard), 0)
@@ -953,6 +908,7 @@ func testSeatLeaseBody(t *testing.T) SeatLeaseBody {
 		Schema:             core.SchemaBugSeatLease,
 		DeveloperKeyID:     testDeveloperKeyID(t),
 		DeviceFingerprint:  testDeviceFingerprint(t),
+		Writer:             testBugWriterKey(t),
 		WriteGraceDuration: window.WriteGraceDuration,
 		Plan:               SeatPlanStandard,
 		BillingPeriod:      BillingPeriodMonthly,
@@ -975,6 +931,7 @@ func testBugCheckIn(t *testing.T) BugCheckIn {
 		DeveloperKey:      testDeveloperKey(t),
 		DeviceFingerprint: testDeviceFingerprint(t),
 		DeviceLabel:       testDeviceLabel(t),
+		Writer:            testBugWriterKey(t),
 		BinaryVersion:     testProductVersion(t),
 		BinarySHA256:      testSHA256(t),
 		Platform:          core.PlatformDarwinARM64,
