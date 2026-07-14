@@ -199,6 +199,24 @@ type SigningKeyring struct {
 	Keys []SigningPublicKey
 }
 
+// NewPinnedAuthorityKeyring binds a pinned Ed25519 authority key to the
+// signing-key identity carried by Foundation signed artifacts. Consumers must
+// not reconstruct that identity convention from raw strings.
+func NewPinnedAuthorityKeyring(publicKey Ed25519PublicKeyHex) (SigningKeyring, error) {
+	if err := publicKey.Validate(); err != nil {
+		return SigningKeyring{}, fmt.Errorf(ErrFmtSigningKeyring, err)
+	}
+	keyID, err := ParseSigningKeyID(publicKey.String())
+	if err != nil {
+		return SigningKeyring{}, fmt.Errorf(ErrFmtSigningKeyring, err)
+	}
+	keyring := SigningKeyring{Keys: []SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
+	if err := keyring.Validate(); err != nil {
+		return SigningKeyring{}, err
+	}
+	return keyring, nil
+}
+
 func (r SigningKeyring) Validate() error {
 	if len(r.Keys) == 0 || len(r.Keys) > SigningKeyringMaxKeys {
 		return fmt.Errorf(ErrFmtSigningKeyring, ErrFoundationContract)

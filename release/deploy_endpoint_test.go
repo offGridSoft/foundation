@@ -44,12 +44,13 @@ func TestDeployEndpointsHostileTable(t *testing.T) {
 func TestProductDeployEndpointsUseOneSharedContract(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		build func(string) (DeployEndpoints, error)
-		name  string
-		root  string
+		build        func(string) (DeployEndpoints, error)
+		buildDefault func() (DeployEndpoints, error)
+		name         string
+		root         string
 	}{
-		{name: core.ProductTokenBug, root: OffgridBugDeployRootPath, build: BugDeployEndpointsForBaseURL},
-		{name: core.ProductTokenWitness, root: OffgridWitnessDeployRootPath, build: WitnessDeployEndpointsForBaseURL},
+		{name: core.ProductTokenBug, root: OffgridBugDeployRootPath, build: BugDeployEndpointsForBaseURL, buildDefault: BugDeployEndpoints},
+		{name: core.ProductTokenWitness, root: OffgridWitnessDeployRootPath, build: WitnessDeployEndpointsForBaseURL, buildDefault: WitnessDeployEndpoints},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -62,6 +63,13 @@ func TestProductDeployEndpointsUseOneSharedContract(t *testing.T) {
 			}
 			if got, want := endpoints.Finalize.String(), core.OffgridAPIBaseURL+tc.root+"/finalize"; got != want {
 				t.Fatalf("finalize endpoint = %q, want %q", got, want)
+			}
+			defaults, err := tc.buildDefault()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if defaults.Prepare != endpoints.Prepare || defaults.Finalize != endpoints.Finalize || defaults.StatusRoot != endpoints.StatusRoot {
+				t.Fatalf("default endpoints = %#v, want %#v", defaults, endpoints)
 			}
 		})
 	}

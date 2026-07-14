@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/json"
@@ -453,7 +454,82 @@ func TestSigningKeyringRejectsUnboundedKeySet(t *testing.T) {
 	}
 }
 
-func signingTestKey(t *testing.T, id string) (SigningKeyID, Ed25519PublicKeyHex, ed25519.PrivateKey) {
+func TestNewPinnedAuthorityKeyringHostileTable(t *testing.T) {
+	t.Parallel()
+	_, valid, _ := signingTestKey(t, "pinned-authority")
+
+	for _, tc := range []struct {
+		key    Ed25519PublicKeyHex
+		name   string
+		accept bool
+	}{
+		{name: "exact pinned authority derives its own identity", key: valid, accept: true},
+		{name: "zero authority refused"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			keyring, err := NewPinnedAuthorityKeyring(tc.key)
+			if !tc.accept {
+				if !errors.Is(err, ErrFoundationContract) {
+					t.Fatalf("NewPinnedAuthorityKeyring() error = %v, want %v", err, ErrFoundationContract)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("NewPinnedAuthorityKeyring() error = %v", err)
+			}
+			keyID, err := ParseSigningKeyID(tc.key.String())
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := keyring.Lookup(keyID)
+			if err != nil {
+				t.Fatalf("SigningKeyring.Lookup() error = %v", err)
+			}
+			want, err := tc.key.Bytes()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, want) {
+				t.Fatalf("SigningKeyring.Lookup() = %x, want %x", got, want)
+			}
+		})
+	}
+}
+
+func FuzzNewPinnedAuthorityKeyring(f *testing.F) {
+	_, valid, _ := signingTestKey(f, "fuzz-pinned-authority")
+	for _, seed := range []string{valid.String(), "", "not-hex", valid.String()[:len(valid.String())-1]} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, value string) {
+		publicKey, parseErr := ParseEd25519PublicKeyHex(value)
+		if parseErr != nil {
+			return
+		}
+		keyring, err := NewPinnedAuthorityKeyring(publicKey)
+		if err != nil {
+			t.Fatalf("NewPinnedAuthorityKeyring(valid parsed key) error = %v", err)
+		}
+		keyID, err := ParseSigningKeyID(publicKey.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := keyring.Lookup(keyID)
+		if err != nil {
+			t.Fatalf("SigningKeyring.Lookup() error = %v", err)
+		}
+		want, err := publicKey.Bytes()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Fatalf("SigningKeyring.Lookup() = %x, want %x", got, want)
+		}
+	})
+}
+
+func signingTestKey(t testing.TB, id string) (SigningKeyID, Ed25519PublicKeyHex, ed25519.PrivateKey) {
 	t.Helper()
 	seed := sha256.Sum256([]byte(id))
 	private := ed25519.NewKeyFromSeed(seed[:])
