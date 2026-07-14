@@ -600,7 +600,7 @@ func TestClientValidateChecksAPIKeyAndBackoffTable(t *testing.T) {
 			t.Parallel()
 			client := Client[BugCheckIn, BugCheckInResponse]{
 				HTTP:     &http.Client{},
-				Endpoint: BugCheckInEndpoint(),
+				Endpoint: mustDefaultCheckInEndpoint(t, core.ProductBug),
 				APIKey:   testAPICallKey(t),
 				Backoff:  core.BackoffPolicy{Base: time.Nanosecond, Max: time.Nanosecond, MaxAttempts: 1},
 				Keyring:  testClientKeyring(t),
@@ -725,7 +725,10 @@ func TestCompilerOwnedDefaultsCannotBeMutatedGlobally(t *testing.T) {
 	if err := DefaultCheckInBackoff().Validate(); err != nil {
 		t.Fatalf("DefaultCheckInBackoff() after local mutation = %v", err)
 	}
-	for _, endpoint := range []CheckInEndpoint{BugCheckInEndpoint(), WitnessCheckInEndpoint()} {
+	for _, endpoint := range []core.APIEndpoint{
+		mustDefaultCheckInEndpoint(t, core.ProductBug),
+		mustDefaultCheckInEndpoint(t, core.ProductWitness),
+	} {
 		if err := endpoint.Validate(); err != nil {
 			t.Fatalf("default endpoint validation = %v", err)
 		}
@@ -771,10 +774,10 @@ func TestClientBoundaryErrorsCarryLicenseIdentityTable(t *testing.T) {
 		}},
 		{name: "request build failure", run: func() error {
 			client := Client[BugCheckIn, BugCheckInResponse]{
-				Endpoint: CheckInEndpoint{value: "https://%zz"},
+				HTTP:     http.DefaultClient,
+				Endpoint: core.APIEndpoint{},
 			}
-			_, err := client.buildRequest(context.Background(), nil)
-			return err
+			return client.Validate()
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

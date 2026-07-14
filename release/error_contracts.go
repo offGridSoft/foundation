@@ -33,6 +33,7 @@ const (
 	ErrFmtDeployPrepareResponse  = "release.DeployPrepareResponse: %w"
 	ErrFmtDeployFinalizeRequest  = "release.DeployFinalizeRequest: %w"
 	ErrFmtDeployFinalizeResponse = "release.DeployFinalizeResponse: %w"
+	ErrFmtDeployEndpoints        = "release.DeployEndpoints: %w"
 	ErrFmtEvidenceRef            = "release.EvidenceRef: %w"
 	ErrFmtGarbleSeedRef          = "release.GarbleSeedRef: %w"
 	ErrFmtToolVersion            = "release.ToolVersion: %w"

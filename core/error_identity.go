@@ -39,6 +39,7 @@ const (
 	ErrFmtFileNameToken       = "core.FileNameToken: %w"
 	ErrFmtPathToken           = "core.PathToken: %w" // #nosec G101 -- path token error label, not a credential.
 	ErrFmtHTTPSURL            = "core.HTTPSURL: %w"
+	ErrFmtAPIEndpoint         = "core.APIEndpoint: %w"
 	ErrFmtUniqueToken         = "core.UniqueToken: %w"
 	ErrFmtArtifactSet         = "core.ArtifactSet: %w"
 	ErrFmtSHA256              = "core.SHA256Hex: %w"

@@ -9,8 +9,8 @@ import (
 )
 
 func FuzzParseCheckInEndpointNeverPanics(f *testing.F) {
-	f.Add(BugCheckInEndpoint().String())
-	f.Add(WitnessCheckInEndpoint().String())
+	f.Add(mustDefaultCheckInEndpoint(f, core.ProductBug).String())
+	f.Add(mustDefaultCheckInEndpoint(f, core.ProductWitness).String())
 	f.Fuzz(func(t *testing.T, value string) {
 		endpoint, err := ParseCheckInEndpoint(value)
 		if err != nil {
@@ -23,6 +23,20 @@ func FuzzParseCheckInEndpointNeverPanics(f *testing.F) {
 			t.Fatalf("parsed endpoint = %q, want %q", endpoint.String(), value)
 		}
 	})
+}
+
+type checkInTestHelper interface {
+	Helper()
+	Fatal(args ...any)
+}
+
+func mustDefaultCheckInEndpoint(t checkInTestHelper, product core.Product) core.APIEndpoint {
+	t.Helper()
+	endpoint, err := CheckInEndpointForBaseURL(core.OffgridAPIBaseURL, product)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return endpoint
 }
 
 func FuzzRefusalAndRemediationReceivers(f *testing.F) {

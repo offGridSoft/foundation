@@ -168,12 +168,12 @@ func TestDeveloperKeyIDRejectsControlToken(t *testing.T) {
 
 func TestCheckInEndpointWireContract(t *testing.T) {
 	t.Parallel()
-	endpoint := BugCheckInEndpoint()
+	endpoint := mustDefaultCheckInEndpoint(t, core.ProductBug)
 	data, err := endpoint.MarshalJSON()
 	if err != nil {
 		t.Fatal(err)
 	}
-	var roundTrip CheckInEndpoint
+	var roundTrip core.APIEndpoint
 	if err := roundTrip.UnmarshalJSON(data); err != nil {
 		t.Fatal(err)
 	}
@@ -205,21 +205,21 @@ func TestCheckInEndpointForBaseURLHostileTable(t *testing.T) {
 		product   core.Product
 		wantError bool
 	}{
-		{name: "production bug endpoint", baseURL: OffgridAPIBaseURL, product: core.ProductBug, want: OffgridAPIBaseURL + OffgridBugCheckInPath},
-		{name: "production witness endpoint", baseURL: OffgridAPIBaseURL, product: core.ProductWitness, want: OffgridAPIBaseURL + OffgridWitnessCheckInPath},
-		{name: "production trailing slash trimmed", baseURL: OffgridAPIBaseURL + "/", product: core.ProductBug, want: OffgridAPIBaseURL + OffgridBugCheckInPath},
+		{name: "production bug endpoint", baseURL: core.OffgridAPIBaseURL, product: core.ProductBug, want: core.OffgridAPIBaseURL + OffgridBugCheckInPath},
+		{name: "production witness endpoint", baseURL: core.OffgridAPIBaseURL, product: core.ProductWitness, want: core.OffgridAPIBaseURL + OffgridWitnessCheckInPath},
+		{name: "production trailing slash trimmed", baseURL: core.OffgridAPIBaseURL + "/", product: core.ProductBug, want: core.OffgridAPIBaseURL + OffgridBugCheckInPath},
 		{name: "dev localhost bug endpoint", baseURL: "http://localhost:40123", product: core.ProductBug, want: "http://localhost:40123" + OffgridBugCheckInPath},
 		{name: "dev loopback witness endpoint", baseURL: "http://127.0.0.1:40123", product: core.ProductWitness, want: "http://127.0.0.1:40123" + OffgridWitnessCheckInPath},
 		{name: "dev ipv6 loopback endpoint", baseURL: "http://[::1]:40123", product: core.ProductWitness, want: "http://[::1]:40123" + OffgridWitnessCheckInPath},
 		{name: "empty base rejected", baseURL: "", product: core.ProductBug, wantError: true},
 		{name: "http production rejected", baseURL: "http://api.offgridsoftware.ca", product: core.ProductBug, wantError: true},
 		{name: "http localhost lookalike rejected", baseURL: "http://localhost.evil.example:40123", product: core.ProductBug, wantError: true},
-		{name: "base path rejected", baseURL: OffgridAPIBaseURL + "/api", product: core.ProductBug, wantError: true},
-		{name: "query rejected", baseURL: OffgridAPIBaseURL + "?x=1", product: core.ProductBug, wantError: true},
-		{name: "fragment rejected", baseURL: OffgridAPIBaseURL + "#x", product: core.ProductBug, wantError: true},
+		{name: "base path rejected", baseURL: core.OffgridAPIBaseURL + "/api", product: core.ProductBug, wantError: true},
+		{name: "query rejected", baseURL: core.OffgridAPIBaseURL + "?x=1", product: core.ProductBug, wantError: true},
+		{name: "fragment rejected", baseURL: core.OffgridAPIBaseURL + "#x", product: core.ProductBug, wantError: true},
 		{name: "userinfo rejected", baseURL: "https://user@api.offgridsoftware.ca", product: core.ProductBug, wantError: true},
 		{name: "oversized base rejected", baseURL: "https://" + strings.Repeat("a", core.HTTPSURLDefaultMaxRunes), product: core.ProductBug, wantError: true},
-		{name: "unknown product rejected", baseURL: OffgridAPIBaseURL, product: core.ProductUnknown, wantError: true},
+		{name: "unknown product rejected", baseURL: core.OffgridAPIBaseURL, product: core.ProductUnknown, wantError: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

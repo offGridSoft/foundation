@@ -89,7 +89,7 @@ type CheckInPayload interface {
 type Client[P CheckInPayload, R CheckInResponseBody] struct {
 	HTTP     *http.Client
 	Jitter   func() float64
-	Endpoint CheckInEndpoint
+	Endpoint core.APIEndpoint
 	APIKey   APICallKey
 	Keyring  core.SigningKeyring
 	Backoff  core.BackoffPolicy
@@ -100,7 +100,7 @@ func (c Client[P, R]) Validate() error {
 		return fmt.Errorf(ErrFmtCheckInClient, core.ErrLicenseContract)
 	}
 	if err := c.Endpoint.Validate(); err != nil {
-		return err
+		return fmt.Errorf(ErrFmtCheckInClient, errors.Join(core.ErrLicenseContract, err))
 	}
 	if !c.APIKey.IsZero() {
 		if err := c.APIKey.Validate(); err != nil {
