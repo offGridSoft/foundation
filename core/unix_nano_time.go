@@ -1,6 +1,9 @@
 package core
 
-import "time"
+import (
+	"math"
+	"time"
+)
 
 type UnixNanoTime struct {
 	nanos int64
@@ -52,6 +55,22 @@ func (t UnixNanoTime) Add(d time.Duration) UnixNanoTime {
 		return UnixNanoTime{}
 	}
 	return NewUnixNanoTime(t.Time().Add(d))
+}
+
+func AddUnixNanoDuration(base UnixNanoTime, duration time.Duration) (UnixNanoTime, error) {
+	if err := base.Validate(); err != nil {
+		return UnixNanoTime{}, err
+	}
+	delta := int64(duration)
+	if delta > 0 && base.nanos > math.MaxInt64-delta {
+		return UnixNanoTime{}, wrapFoundationContract(ErrFmtUnixNanoTime)
+	}
+	if delta < 0 {
+		if delta == math.MinInt64 || base.nanos < -delta {
+			return UnixNanoTime{}, wrapFoundationContract(ErrFmtUnixNanoTime)
+		}
+	}
+	return UnixNanoTimeFromInt64(base.nanos + delta), nil
 }
 
 func (t UnixNanoTime) Sub(other UnixNanoTime) time.Duration {

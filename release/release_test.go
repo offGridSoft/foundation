@@ -16,7 +16,7 @@ import (
 
 const (
 	testVersionToken = core.FoundationVersion2026
-	testReleaseToken = "2026-07-08-2026.0.0"
+	testReleaseToken = "witness-2026-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	testDateToken    = "2026-07-08"
 	testBucketToken  = "offgrid-release"
 )
@@ -128,6 +128,7 @@ func TestManifestHostileTable(t *testing.T) {
 	}{
 		{name: "control valid", mutate: func(*Manifest) {}},
 		{name: "schema mismatch", mutate: func(m *Manifest) { m.Schema = core.SchemaReleaseDownloadIndex }},
+		{name: "release id does not bind commit", mutate: func(m *Manifest) { m.ReleaseID = mustOtherReleaseID(t) }},
 		{name: "artifact count mismatch", mutate: func(m *Manifest) { m.ArtifactCount++ }},
 		{name: "total bytes mismatch", mutate: func(m *Manifest) { m.TotalBytes = core.NewByteCount(99) }},
 		{name: "duplicate artifact", mutate: func(m *Manifest) {
@@ -368,7 +369,7 @@ func TestManifestCanonicalWireForm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"schema":"offgrid-release-manifest-v2026","version":"2026.0.0","release_id":"2026-07-08-2026.0.0","date":"2026-07-08","commit":"` +
+	want := `{"schema":"offgrid-release-manifest-v2026","version":"2026.0.0","release_id":"witness-2026-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","date":"2026-07-08","commit":"` +
 		strings.Repeat("a", 40) +
 		`","artifacts":[{"name":"tools.tar.gz","sha256":"` +
 		strings.Repeat("b", 64) +
@@ -518,7 +519,7 @@ func TestReleaseRootLayoutCanonicalRoundTripTable(t *testing.T) {
 		{
 			name:  "witness release root",
 			input: validReleaseRootInput(t),
-			want:  `{"` + core.JSONFieldSchema + `":"` + core.SchemaTokenReleaseRootLayout + `","product":"witness","version":"2026.0.0","date":"2026-07-08","release_id":"2026-07-08-2026.0.0","root":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0","private":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/private","public":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/public","platforms":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/platforms","receipts":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/receipts","manifests":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/manifests","dogfood":"dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/dogfood"}`,
+			want:  `{"` + core.JSONFieldSchema + `":"` + core.SchemaTokenReleaseRootLayout + `","product":"witness","version":"2026.0.0","date":"2026-07-08","release_id":"witness-2026-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","root":"dist/releases/witness/2026/07/08/witness-2026-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","private":"dist/releases/witness/2026/07/08/witness-2026-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/private","public":"dist/releases/witness/2026/07/08/witness-2026-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/public","platforms":"dist/releases/witness/2026/07/08/witness-2026-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/platforms","receipts":"dist/releases/witness/2026/07/08/witness-2026-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/receipts","manifests":"dist/releases/witness/2026/07/08/witness-2026-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/manifests","dogfood":"dist/releases/witness/2026/07/08/witness-2026-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/dogfood"}`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1297,6 +1298,7 @@ func TestGarbleBuildArgsHostileTable(t *testing.T) {
 			GarbleArgTiny,
 			GoArgBuild,
 			GoArgTrimPath,
+			GoArgBuildModeExecutable,
 			GoBuildLDFlagsPrefix + "-s -w",
 			GoBuildOutputFlag,
 			"dist/linux-amd64/bug",
@@ -1308,6 +1310,7 @@ func TestGarbleBuildArgsHostileTable(t *testing.T) {
 			GarbleArgTiny,
 			GoArgBuild,
 			GoArgTrimPath,
+			GoArgBuildModeExecutable,
 			GoArgBuildVCS,
 			GoBuildTagsPrefix + "osusergo,netgo,witness_production",
 			GoBuildLDFlagsPrefix + "-s -w -buildid= -X github.com/offGridSoft/witness/internal/release.BuildCommit=" + strings.Repeat("a", 40),
@@ -1396,7 +1399,7 @@ func TestProductReleaseSpecBuildRequestsHostileTable(t *testing.T) {
 			if len(got) != tc.wantCount {
 				t.Fatalf("GarbleBuildRequests() len = %d, want %d", len(got), tc.wantCount)
 			}
-			wantSuffix := "dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/platforms/windows-amd64/witness-sign.exe"
+			wantSuffix := "dist/releases/witness/2026/07/08/witness-2026-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/platforms/windows-amd64/witness-sign.exe"
 			if got[len(got)-1].Output.String() != wantSuffix && spec.Product == core.ProductWitness {
 				t.Fatalf("last witness output = %q, want windows executable suffix", got[len(got)-1].Output.String())
 			}
@@ -1521,7 +1524,7 @@ func TestReleasePlanGarbleBuildRequestsUseReleaseRootHostileTable(t *testing.T) 
 			name:       "release root produces windows executable output",
 			mutate:     func(*ReleasePlan) {},
 			wantCount:  len(BuildPlatforms()) * 2,
-			wantOutput: "dist/releases/witness/2026/07/08/2026-07-08-2026.0.0/platforms/windows-amd64/witness-sign.exe",
+			wantOutput: "dist/releases/witness/2026/07/08/witness-2026-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/platforms/windows-amd64/witness-sign.exe",
 		},
 		{name: "tampered platforms dir rejected", mutate: func(p *ReleasePlan) { p.Layout.Platforms = mustBuildOutputPath(t, "dist/platforms") }},
 		{name: "unsupported platform rejected", mutate: func(p *ReleasePlan) { p.Spec.Platforms[0] = core.PlatformDarwinAMD64 }},
@@ -1652,7 +1655,7 @@ func TestCommandRunCanonicalRoundTripTable(t *testing.T) {
 		{
 			name: "release command run",
 			run:  validCommandRun(t),
-			want: `{"` + core.JSONFieldSchema + `":"` + core.SchemaTokenReleaseCommandRun + `","kind":"release","status":"succeeded","tree_state":"clean","product":"witness","version":"2026.0.0","release_id":"2026-07-08-2026.0.0","git_commit":"` +
+			want: `{"` + core.JSONFieldSchema + `":"` + core.SchemaTokenReleaseCommandRun + `","kind":"release","status":"succeeded","tree_state":"clean","product":"witness","version":"2026.0.0","release_id":"witness-2026-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","git_commit":"` +
 				strings.Repeat("a", 40) +
 				`","machine":{"platform":"darwin-arm64","hostname_sha256":"` +
 				strings.Repeat("c", 64) +
@@ -1660,7 +1663,7 @@ func TestCommandRunCanonicalRoundTripTable(t *testing.T) {
 				strings.Repeat("d", 64) +
 				`"},"operator_sha256":"` +
 				strings.Repeat("e", 64) +
-				`","started_at":1782302400000000000,"finished_at":1782302400000000100,"evidence_ref":"witness/2026-07-08/2026-07-08-2026.0.0/private/release_run.json"}`,
+				`","started_at":1782302400000000000,"finished_at":1782302400000000100,"evidence_ref":"witness/2026-07-08/witness-2026-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/private/release_run.json"}`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1876,7 +1879,7 @@ func validWitnessBuildPolicy(t *testing.T) ReleaseBuildPolicy {
 
 func validCommandRun(t *testing.T) CommandRun {
 	t.Helper()
-	ref, err := ParseObjectKey("witness/2026-07-08/2026-07-08-2026.0.0/private/release_run.json")
+	ref, err := ParseObjectKey("witness/2026-07-08/witness-2026-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/private/release_run.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1908,6 +1911,7 @@ func validReleaseRootInput(t *testing.T) ReleaseRootInput {
 		Version:   mustVersion(t),
 		Date:      mustReleaseDate(t),
 		ReleaseID: mustReleaseID(t),
+		Commit:    mustCommit(t),
 	}
 }
 
@@ -1924,6 +1928,7 @@ func validBugReleaseRootLayout(t *testing.T) ReleaseRootLayout {
 	t.Helper()
 	input := validReleaseRootInput(t)
 	input.Product = core.ProductBug
+	input.ReleaseID = mustBugReleaseID(t)
 	layout, err := BuildReleaseRootLayout(input)
 	if err != nil {
 		t.Fatal(err)
@@ -2076,11 +2081,13 @@ func validUploadReceipt(t *testing.T) UploadReceipt {
 		t.Fatal(err)
 	}
 	return UploadReceipt{
-		Schema:     core.SchemaReleaseUploadReceipt,
-		Product:    core.ProductWitness,
-		Version:    mustVersion(t),
-		ReleaseID:  mustReleaseID(t),
-		UploadedAt: core.UnixNanoTimeFromInt64(1782302400000000000),
+		Schema:         core.SchemaReleaseUploadReceipt,
+		Product:        core.ProductWitness,
+		Version:        mustVersion(t),
+		ReleaseID:      mustReleaseID(t),
+		Commit:         mustCommit(t),
+		ManifestSHA256: mustSHA256(t, "f"),
+		UploadedAt:     core.UnixNanoTimeFromInt64(1782302400000000000),
 		Objects: []UploadedArtifact{{
 			Artifact: mustArtifactName(t, ToolsArchiveName),
 			Object:   object,
@@ -2101,6 +2108,7 @@ func validDownloadIndex(t *testing.T) DownloadIndex {
 		Product:     core.ProductWitness,
 		Version:     mustVersion(t),
 		ReleaseID:   mustReleaseID(t),
+		Commit:      mustCommit(t),
 		GeneratedAt: core.UnixNanoTimeFromInt64(1782302400000000000),
 		Downloads: []Download{{
 			Platform: core.PlatformLinuxAMD64,
@@ -2115,7 +2123,7 @@ func validDownloadIndex(t *testing.T) DownloadIndex {
 
 func validDownloadURL(t *testing.T) DownloadURL {
 	t.Helper()
-	u, err := ParseDownloadURL("https://downloads.offgridsoftware.com/witness/2026-07-08/2026-07-08-2026.0.0/public/tools.tar.gz")
+	u, err := ParseDownloadURL("https://downloads.offgridsoftware.com/witness/2026-07-08/witness-2026-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/public/tools.tar.gz")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2151,7 +2159,16 @@ func mustReleaseID(t *testing.T) ReleaseID {
 
 func mustOtherReleaseID(t *testing.T) ReleaseID {
 	t.Helper()
-	id, err := ParseReleaseID("2026-07-09-2026.0.0")
+	id, err := BuildReleaseID(core.ProductWitness, mustVersion(t), mustOtherCommit(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func mustBugReleaseID(t *testing.T) ReleaseID {
+	t.Helper()
+	id, err := BuildReleaseID(core.ProductBug, mustVersion(t), mustCommit(t))
 	if err != nil {
 		t.Fatal(err)
 	}

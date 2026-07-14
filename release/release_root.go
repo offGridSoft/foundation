@@ -21,6 +21,7 @@ type ReleaseRootInput struct {
 	Version   core.ProductVersion
 	Date      ReleaseDate
 	ReleaseID ReleaseID
+	Commit    core.BuildCommit
 	Product   core.Product
 }
 
@@ -37,13 +38,17 @@ func (i ReleaseRootInput) Validate() error {
 	if err := i.ReleaseID.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtReleaseRoot, err)
 	}
-	return nil
+	if err := i.Commit.Validate(); err != nil {
+		return wrapReleaseContract(ErrFmtReleaseRoot, err)
+	}
+	return ValidateReleaseIDIdentity(i.ReleaseID, i.Product, i.Version, i.Commit)
 }
 
 type ReleaseRootLayout struct {
 	Version   core.ProductVersion `json:"version"`
 	Date      ReleaseDate         `json:"date"`
 	ReleaseID ReleaseID           `json:"release_id"`
+	Commit    core.BuildCommit    `json:"commit"`
 	Root      BuildOutputPath     `json:"root"`
 	Private   BuildOutputPath     `json:"private"`
 	Public    BuildOutputPath     `json:"public"`
@@ -75,6 +80,7 @@ func (l ReleaseRootLayout) Validate() error {
 		Version:   l.Version,
 		Date:      l.Date,
 		ReleaseID: l.ReleaseID,
+		Commit:    l.Commit,
 	}
 	if err := input.Validate(); err != nil {
 		return err
@@ -112,6 +118,7 @@ func appendReleaseRootLayoutJSON(dst []byte, l ReleaseRootLayout) ([]byte, error
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldVersion, l.Version)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDate, l.Date)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldReleaseID, l.ReleaseID)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCommit, l.Commit)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldRoot, l.Root)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldPrivate, l.Private)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldPublic, l.Public)
@@ -139,6 +146,7 @@ func releaseRootLayoutFromInput(input ReleaseRootInput) (ReleaseRootLayout, erro
 	layout.Version = input.Version
 	layout.Date = input.Date
 	layout.ReleaseID = input.ReleaseID
+	layout.Commit = input.Commit
 	return layout, nil
 }
 

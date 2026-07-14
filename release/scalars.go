@@ -51,6 +51,56 @@ func (id ReleaseID) Validate() error {
 	return err
 }
 
+func BuildReleaseID(product core.Product, version core.ProductVersion, commit core.BuildCommit) (ReleaseID, error) {
+	if err := product.Validate(); err != nil {
+		return ReleaseID{}, fmt.Errorf(ErrFmtReleaseID, err)
+	}
+	if err := version.Validate(); err != nil || !strings.HasPrefix(version.String(), core.ContractYear+".") {
+		return ReleaseID{}, fmt.Errorf(ErrFmtReleaseID, core.ErrReleaseContract)
+	}
+	if err := commit.Validate(); err != nil {
+		return ReleaseID{}, fmt.Errorf(ErrFmtReleaseID, err)
+	}
+	return ParseReleaseID(product.String() + "-" + core.ContractYear + "-" + commit.String())
+}
+
+func ValidateReleaseIDIdentity(id ReleaseID, product core.Product, version core.ProductVersion, commit core.BuildCommit) error {
+	if err := validateReleaseIdentityScalars(id, product, version, commit); err != nil {
+		return err
+	}
+	if !releaseIDMatchesIdentity(id, product, commit) {
+		return fmt.Errorf(ErrFmtReleaseID, core.ErrReleaseContract)
+	}
+	return nil
+}
+
+func validateReleaseIdentityScalars(id ReleaseID, product core.Product, version core.ProductVersion, commit core.BuildCommit) error {
+	if err := id.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtReleaseID, err)
+	}
+	if err := product.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtReleaseID, err)
+	}
+	if err := version.Validate(); err != nil || !strings.HasPrefix(version.String(), core.ContractYear+".") {
+		return fmt.Errorf(ErrFmtReleaseID, core.ErrReleaseContract)
+	}
+	if err := commit.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtReleaseID, err)
+	}
+	return nil
+}
+
+func releaseIDMatchesIdentity(id ReleaseID, product core.Product, commit core.BuildCommit) bool {
+	productToken := product.String()
+	value := id.String()
+	productEnd := len(productToken)
+	yearStart := productEnd + 1
+	commitStart := yearStart + len(core.ContractYear) + 1
+	return len(value) == commitStart+len(commit.String()) && value[:productEnd] == productToken &&
+		value[productEnd] == '-' && value[yearStart:commitStart-1] == core.ContractYear &&
+		value[commitStart-1] == '-' && value[commitStart:] == commit.String()
+}
+
 func (id ReleaseID) MarshalJSON() ([]byte, error) {
 	if err := id.Validate(); err != nil {
 		return nil, err

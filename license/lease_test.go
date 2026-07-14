@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -238,6 +239,10 @@ func TestSeatLeaseBodyWindowHostileTable(t *testing.T) {
 		{name: "check-in by after expiry", mutate: func(b *SeatLeaseBody) { b.CheckInByAt = b.TokenExpiresAt.Add(time.Nanosecond) }},
 		{name: "negative write grace", mutate: func(b *SeatLeaseBody) {
 			b.WriteGraceDuration = core.NanosecondsDurationFromInt64(-1)
+		}},
+		{name: "write grace overflows unix nanos", mutate: func(b *SeatLeaseBody) {
+			b.TokenExpiresAt = core.UnixNanoTimeFromInt64(math.MaxInt64)
+			b.CheckInByAt = b.TokenExpiresAt
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

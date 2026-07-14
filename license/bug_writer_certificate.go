@@ -7,6 +7,8 @@ import (
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
+var _ core.CanonicalBody = BugWriterCertificateBody{}
+
 // BugWriterCertificateBody is the public, repository-safe identity that the
 // license server certifies for one Bug writer. It contains no developer key,
 // account, plan, billing, repository, source, path, or bug metadata.

@@ -30,15 +30,6 @@ func TestGateHostileTable(t *testing.T) {
 			wantInputErr: true,
 		},
 		{
-			name: "explicit disarmed allows without trusting lease",
-			input: GateInput[SeatLeaseBody]{
-				Now:      now,
-				Disarmed: true,
-			},
-			wantOutcome: GateAllow,
-			wantReason:  GateReasonDisarmed,
-		},
-		{
 			name: "clock rollback refuses before lease",
 			input: GateInput[SeatLeaseBody]{
 				Now:            now,

@@ -128,7 +128,7 @@ func TestUnsignedRefusalCannotCrossVerificationBoundary(t *testing.T) {
 	}
 }
 
-func TestRetainedWriterRevocationsVerifyAndEnforceCutoff(t *testing.T) {
+func TestRetainedWriterRevocationsVerifyEveryPresentAuthoritySignature(t *testing.T) {
 	t.Parallel()
 
 	keyID, publicKey, _ := testServerSigningKey(t)
@@ -138,12 +138,11 @@ func TestRetainedWriterRevocationsVerifyAndEnforceCutoff(t *testing.T) {
 	if err := set.Verify(keyring); err != nil {
 		t.Fatalf("BugWriterRevocationSet.Verify() error = %v", err)
 	}
-	before := revocation.Body.RevokedAt.Add(-time.Nanosecond)
-	if err := set.VerifyWriterAllowed(revocation.Body.WriterKeyID, before); err != nil {
-		t.Fatalf("BugWriterRevocationSet.VerifyWriterAllowed(before cutoff) error = %v", err)
-	}
-	if err := set.VerifyWriterAllowed(revocation.Body.WriterKeyID, revocation.Body.RevokedAt); !errors.Is(err, core.ErrLicenseContract) {
-		t.Fatalf("BugWriterRevocationSet.VerifyWriterAllowed(at cutoff) error = %v, want %v", err, core.ErrLicenseContract)
+	tampered := set
+	tampered.Values = append([]core.Signed[BugWriterRevocationBody](nil), set.Values...)
+	tampered.Values[0].Body.RevokedAt = tampered.Values[0].Body.RevokedAt.Add(-time.Nanosecond)
+	if err := tampered.Verify(keyring); !errors.Is(err, core.ErrLicenseContract) {
+		t.Fatalf("BugWriterRevocationSet.Verify(tampered) error = %v, want %v", err, core.ErrLicenseContract)
 	}
 }
 

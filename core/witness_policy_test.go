@@ -31,6 +31,47 @@ func TestWitnessPolicyConstants(t *testing.T) {
 	}
 }
 
+func TestMachineLimitStrictJSONBoundaryTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		raw     string
+		name    string
+		want    MachineLimit
+		wantErr bool
+	}{
+		{name: "valid", raw: `5`, want: 5},
+		{name: "zero", raw: `0`, wantErr: true},
+		{name: "negative", raw: `-1`, wantErr: true},
+		{name: "plus prefix", raw: `+5`, wantErr: true},
+		{name: "leading zero", raw: `05`, wantErr: true},
+		{name: "fraction", raw: `5.0`, wantErr: true},
+		{name: "string", raw: `"5"`, wantErr: true},
+		{name: "overflow", raw: `65536`, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var got MachineLimit
+			err := got.UnmarshalJSON([]byte(tc.raw))
+			if tc.wantErr {
+				if !errors.Is(err, ErrWitnessPolicyContract) {
+					t.Fatalf("MachineLimit.UnmarshalJSON() error = %v, want ErrWitnessPolicyContract", err)
+				}
+				return
+			}
+			if err != nil || got != tc.want {
+				t.Fatalf("MachineLimit.UnmarshalJSON() = (%d, %v), want (%d, nil)", got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestIsLowerHexRejectsEmptyToken(t *testing.T) {
+	t.Parallel()
+	if IsLowerHex("") {
+		t.Fatal("IsLowerHex(empty) = true")
+	}
+}
+
 func TestWitnessRetentionPolicyHostileTable(t *testing.T) {
 	t.Parallel()
 

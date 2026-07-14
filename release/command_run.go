@@ -317,6 +317,16 @@ func appendCommandRunJSON(dst []byte, r CommandRun) ([]byte, error) {
 }
 
 func validateCommandRunIdentity(r CommandRun) error {
+	if err := validateCommandRunState(r); err != nil {
+		return err
+	}
+	if err := validateCommandRunReleaseIdentity(r); err != nil {
+		return err
+	}
+	return validateCommandRunActorIdentity(r)
+}
+
+func validateCommandRunState(r CommandRun) error {
 	if err := r.Kind.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtCommandRun, err)
 	}
@@ -326,6 +336,10 @@ func validateCommandRunIdentity(r CommandRun) error {
 	if err := r.TreeState.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtCommandRun, err)
 	}
+	return nil
+}
+
+func validateCommandRunReleaseIdentity(r CommandRun) error {
 	if err := r.Product.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtCommandRun, err)
 	}
@@ -338,6 +352,13 @@ func validateCommandRunIdentity(r CommandRun) error {
 	if err := r.GitCommit.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtCommandRun, err)
 	}
+	if err := ValidateReleaseIDIdentity(r.ReleaseID, r.Product, r.Version, r.GitCommit); err != nil {
+		return wrapReleaseContract(ErrFmtCommandRun, err)
+	}
+	return nil
+}
+
+func validateCommandRunActorIdentity(r CommandRun) error {
 	if err := r.Machine.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtCommandRun, err)
 	}

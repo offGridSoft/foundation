@@ -1,11 +1,60 @@
 package custody
 
 import (
+	"bytes"
+	"crypto/ed25519"
 	"encoding/json"
 	"testing"
 
 	"github.com/offGridSoft/foundation/v2026/core"
 )
+
+func FuzzSignedReceiptDecodeVerifyBoundary(f *testing.F) {
+	keyID, err := core.ParseSigningKeyID("custody-receipt-key-2026")
+	if err != nil {
+		f.Fatal(err)
+	}
+	privateKey := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{1}, ed25519.SeedSize))
+	publicKey, err := core.NewEd25519PublicKeyHex(privateKey.Public().(ed25519.PublicKey))
+	if err != nil {
+		f.Fatal(err)
+	}
+	body := validReceipt(f)
+	message, err := core.AppendSignedMessage(nil, keyID, body)
+	if err != nil {
+		f.Fatal(err)
+	}
+	signature, err := core.NewEd25519SignatureHex(ed25519.Sign(privateKey, message))
+	if err != nil {
+		f.Fatal(err)
+	}
+	signed := core.Signed[ReceiptBody]{Body: body, KeyID: keyID, Signature: signature}
+	seed, err := json.Marshal(signed)
+	if err != nil {
+		f.Fatal(err)
+	}
+	keyring := core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
+	f.Add(seed)
+	f.Add([]byte(nil))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		decoded, decodeErr := core.DecodeStrictJSON[core.Signed[ReceiptBody]](data)
+		if decodeErr != nil || decoded.Verify(keyring) != nil {
+			return
+		}
+		canonical, canonicalErr := decoded.Body.Canonical(nil)
+		if canonicalErr != nil {
+			t.Fatalf("verified receipt canonicalization error = %v", canonicalErr)
+		}
+		roundTrip, roundTripErr := core.DecodeStrictJSON[ReceiptBody](canonical)
+		if roundTripErr != nil {
+			t.Fatalf("canonical receipt decode error = %v", roundTripErr)
+		}
+		again, againErr := roundTrip.Canonical(nil)
+		if againErr != nil || !bytes.Equal(canonical, again) {
+			t.Fatalf("canonical receipt instability: error = %v", againErr)
+		}
+	})
+}
 
 func FuzzSessionOpenRequestBoundary(f *testing.F) {
 	seed, err := json.Marshal(validOpenRequest(f))
@@ -26,6 +75,7 @@ func FuzzSessionOpenRequestBoundary(f *testing.F) {
 }
 
 func FuzzSessionOpenResponseBoundary(f *testing.F) {
+	verifiedReceipt, keyring := verifiedSignedReceipt(f)
 	uploadSeed, err := json.Marshal(SessionOpenResponse{
 		Schema:     core.SchemaCustodySessionOpenResponse,
 		Customer:   mustCustomerID(f),
@@ -41,7 +91,7 @@ func FuzzSessionOpenResponseBoundary(f *testing.F) {
 	if err != nil {
 		f.Fatal(err)
 	}
-	signed := mustSignedReceipt(f)
+	signed := verifiedReceipt
 	reuseSeed, err := json.Marshal(SessionOpenResponse{
 		Schema:          core.SchemaCustodySessionOpenResponse,
 		Customer:        signed.Body.Customer,
@@ -62,6 +112,11 @@ func FuzzSessionOpenResponseBoundary(f *testing.F) {
 		}
 		if err := decoded.Validate(); err != nil {
 			t.Fatalf("accepted SessionOpenResponse validation = %v, want nil", err)
+		}
+		if decoded.Disposition == SessionOpenDispositionReceiptReused {
+			if err := decoded.Verify(keyring); err != nil {
+				return
+			}
 		}
 	})
 }

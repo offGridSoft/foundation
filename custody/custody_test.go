@@ -1,6 +1,8 @@
 package custody
 
 import (
+	"bytes"
+	"crypto/ed25519"
 	"errors"
 	"math"
 	"strings"
@@ -198,6 +200,53 @@ func TestSessionOpenResponseReusesSignedReceipt(t *testing.T) {
 	}
 }
 
+func TestSessionOpenResponseVerifyRejectsForgedReusedReceipt(t *testing.T) {
+	t.Parallel()
+	signed, keyring := verifiedSignedReceipt(t)
+	body := signed.Body
+	response := SessionOpenResponse{
+		Schema: core.SchemaCustodySessionOpenResponse, Customer: body.Customer, BundleRoot: body.BundleRoot,
+		ExistingReceipt: &signed, Disposition: SessionOpenDispositionReceiptReused,
+	}
+	if err := response.Verify(keyring); err != nil {
+		t.Fatalf("SessionOpenResponse.Verify() error = %v", err)
+	}
+	response.ExistingReceipt.Body.LedgerSeq++
+	if err := response.Verify(keyring); !errors.Is(err, core.ErrFoundationContract) {
+		t.Fatalf("SessionOpenResponse.Verify(tampered) error = %v, want ErrFoundationContract", err)
+	}
+}
+
+func verifiedSignedReceipt(t testFatalHelper) (core.Signed[ReceiptBody], core.SigningKeyring) {
+	t.Helper()
+	keyID, publicKey, privateKey := receiptSigningKey(t)
+	body := validReceipt(t)
+	message, err := core.AppendSignedMessage(nil, keyID, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signature, err := core.NewEd25519SignatureHex(ed25519.Sign(privateKey, message))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return core.Signed[ReceiptBody]{Body: body, KeyID: keyID, Signature: signature},
+		core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
+}
+
+func receiptSigningKey(t testFatalHelper) (core.SigningKeyID, core.Ed25519PublicKeyHex, ed25519.PrivateKey) {
+	t.Helper()
+	privateKey := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{2}, ed25519.SeedSize))
+	publicKey, err := core.NewEd25519PublicKeyHex(privateKey.Public().(ed25519.PublicKey))
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyID, err := core.ParseSigningKeyID("custody-receipt-key-2026")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return keyID, publicKey, privateKey
+}
+
 func TestSignedUploadURLWireContract(t *testing.T) {
 	t.Parallel()
 	signedURL := mustSignedUploadURL(t)
@@ -377,6 +426,9 @@ func TestReceiptRejectsCustodyIdentityDrift(t *testing.T) {
 			b.Retention.RetainUntil = b.Retention.MaximumRetainUntil.Add(time.Nanosecond)
 		}},
 		{name: "issued before accepted", mutate: func(_ *testing.T, b *ReceiptBody) { b.IssuedAt = b.AcceptedAt.Add(-time.Nanosecond) }},
+		{name: "retention ends before issuance", mutate: func(_ *testing.T, b *ReceiptBody) {
+			b.Retention.RetainUntil = b.IssuedAt.Add(-time.Nanosecond)
+		}},
 		{name: "bundle root differs from object key", mutate: func(t *testing.T, b *ReceiptBody) { b.BundleRoot = mustBLAKE3(t, "a") }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

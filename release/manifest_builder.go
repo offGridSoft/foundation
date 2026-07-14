@@ -39,6 +39,9 @@ func validateManifestInput(i ManifestInput) (core.ArtifactSet[Artifact], error) 
 	if err := i.Commit.Validate(); err != nil {
 		return core.ArtifactSet[Artifact]{}, wrapReleaseContract(ErrFmtManifest, err)
 	}
+	if err := ValidateReleaseIDIdentity(i.ReleaseID, i.Product, i.Version, i.Commit); err != nil {
+		return core.ArtifactSet[Artifact]{}, wrapReleaseContract(ErrFmtManifest, err)
+	}
 	if err := core.ValidateRequiredUnixNanoTime(i.CreatedAt); err != nil {
 		return core.ArtifactSet[Artifact]{}, fmt.Errorf(ErrFmtManifest, core.ErrReleaseContract)
 	}

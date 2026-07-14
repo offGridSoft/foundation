@@ -163,7 +163,6 @@ type GateInput[B Body] struct {
 	ClockHighWater core.UnixNanoTime
 	WarnWindow     time.Duration
 	Trust          LeaseTrust
-	Disarmed       bool
 	TeachingShown  bool
 }
 
@@ -195,8 +194,6 @@ func (in GateInput[B]) Validate() error {
 
 func gateInputViolation[B Body](in GateInput[B]) GateReason {
 	switch {
-	case in.Disarmed:
-		return gateReasonInvalid
 	case in.Now.IsZero():
 		return GateReasonInvalidClock
 	case in.ClockHighWater.After(in.Now):
@@ -226,7 +223,7 @@ func (d GateDecision) Validate() error {
 		return validateGateDecisionState(d, LeaseGrace, true)
 	case GateReasonLeaseExpired:
 		return validateGateDecisionState(d, LeaseExpired, false)
-	case GateReasonDisarmed, GateReasonInvalidClock, GateReasonClockRollback, GateReasonInvalidTrust,
+	case GateReasonInvalidClock, GateReasonClockRollback, GateReasonInvalidTrust,
 		GateReasonTeaching, GateReasonMissingTrustedLease, GateReasonInvalidWindow, GateReasonInvalidLease:
 		if d.State != leaseStateInvalid || d.Remaining != 0 {
 			return fmt.Errorf(ErrFmtGateDecision, core.ErrLicenseContract)
@@ -256,9 +253,6 @@ func Gate[B Body](in GateInput[B]) GateDecision {
 			return validatedGateDecision(GateDecision{Reason: inputErr.Reason})
 		}
 		return validatedGateDecision(GateDecision{Reason: GateReasonInvalidTrust})
-	}
-	if in.Disarmed {
-		return validatedGateDecision(GateDecision{Reason: GateReasonDisarmed})
 	}
 	var decision GateDecision
 	if !in.Trust.Trusted() {
@@ -313,7 +307,6 @@ type GateReason uint8
 
 const (
 	gateReasonInvalid GateReason = iota
-	GateReasonDisarmed
 	GateReasonInvalidClock
 	GateReasonClockRollback
 	GateReasonInvalidTrust
@@ -328,7 +321,6 @@ const (
 )
 
 const (
-	GateReasonTokenDisarmed            = "disarmed"
 	GateReasonTokenInvalidClock        = "invalid_clock"
 	GateReasonTokenClockRollback       = "clock_rollback"
 	GateReasonTokenInvalidTrust        = "invalid_trust_resolution"
@@ -344,7 +336,6 @@ const (
 
 func gateReasonNames() [GateReasonInvalidLease + 1]string {
 	return [...]string{
-		GateReasonDisarmed:            GateReasonTokenDisarmed,
 		GateReasonInvalidClock:        GateReasonTokenInvalidClock,
 		GateReasonClockRollback:       GateReasonTokenClockRollback,
 		GateReasonInvalidTrust:        GateReasonTokenInvalidTrust,
@@ -379,7 +370,7 @@ func (r GateReason) Validate() error {
 
 func (r GateReason) Outcome() GateOutcome {
 	switch r {
-	case GateReasonDisarmed, GateReasonLeaseValid:
+	case GateReasonLeaseValid:
 		return GateAllow
 	case GateReasonLeaseWarning, GateReasonLeaseGrace:
 		return GateWarn
@@ -400,7 +391,7 @@ func (r GateReason) MarshalJSON() ([]byte, error) {
 }
 
 func ParseGateReason(token string) (GateReason, error) {
-	for reason := GateReasonDisarmed; int(reason) < len(gateReasonNames()); reason++ {
+	for reason := GateReasonInvalidClock; int(reason) < len(gateReasonNames()); reason++ {
 		if gateReasonNames()[reason] == token {
 			return reason, nil
 		}

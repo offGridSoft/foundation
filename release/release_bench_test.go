@@ -150,11 +150,17 @@ func benchmarkTools(b *testing.B, count int) []ToolProvenance {
 
 func benchmarkLayout(b *testing.B) ReleaseRootLayout {
 	b.Helper()
+	commit := benchmarkCommit(b, "a")
+	id, err := BuildReleaseID(core.ProductWitness, benchmarkVersion(b), commit)
+	if err != nil {
+		b.Fatal(err)
+	}
 	layout, err := BuildReleaseRootLayout(ReleaseRootInput{
 		Product:   core.ProductWitness,
 		Version:   benchmarkVersion(b),
 		Date:      benchmarkDate(b),
-		ReleaseID: benchmarkReleaseID(b),
+		ReleaseID: id,
+		Commit:    commit,
 	})
 	if err != nil {
 		b.Fatal(err)
@@ -182,7 +188,7 @@ func benchmarkVersion(b *testing.B) core.ProductVersion {
 
 func benchmarkReleaseID(b *testing.B) ReleaseID {
 	b.Helper()
-	id, err := ParseReleaseID("2026-07-08-2026.0.0")
+	id, err := BuildReleaseID(core.ProductWitness, benchmarkVersion(b), benchmarkCommit(b, "a"))
 	if err != nil {
 		b.Fatal(err)
 	}

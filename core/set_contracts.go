@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"sort"
 )
 
 type ArtifactSetItem interface {
@@ -18,6 +19,9 @@ type ArtifactSet[T ArtifactSetItem] struct {
 
 func BuildArtifactSet[T ArtifactSetItem](items []T) (ArtifactSet[T], error) {
 	copied := append([]T(nil), items...)
+	sort.Slice(copied, func(left, right int) bool {
+		return copied[left].ArtifactSetName() < copied[right].ArtifactSetName()
+	})
 	sum, err := sumArtifactSet(copied)
 	if err != nil {
 		return ArtifactSet[T]{}, err
@@ -78,10 +82,8 @@ func sumArtifactSet[T ArtifactSetItem](items []T) (uint64, error) {
 		if err := item.Validate(); err != nil {
 			return 0, fmt.Errorf(ErrFmtArtifactSet, err)
 		}
-		for _, prior := range items[:index] {
-			if prior.ArtifactSetName() == item.ArtifactSetName() {
-				return 0, fmt.Errorf(ErrFmtUniqueToken, ErrFoundationContract)
-			}
+		if index > 0 && items[index-1].ArtifactSetName() >= item.ArtifactSetName() {
+			return 0, fmt.Errorf(ErrFmtUniqueToken, ErrFoundationContract)
 		}
 		size := item.ArtifactSetSize().Uint64()
 		if size > ArtifactMaximumBytes || size > ArtifactSetMaximumBytes-sum {

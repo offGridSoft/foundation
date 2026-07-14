@@ -1,6 +1,7 @@
 package release
 
 import (
+	"crypto/sha256"
 	"fmt"
 
 	"github.com/offGridSoft/foundation/v2026/core"
@@ -173,6 +174,9 @@ func validateManifestIdentity(m Manifest) error {
 	if err := m.Commit.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtManifest, err)
 	}
+	if err := ValidateReleaseIDIdentity(m.ReleaseID, m.Product, m.Version, m.Commit); err != nil {
+		return wrapReleaseContract(ErrFmtManifest, err)
+	}
 	if err := core.ValidateRequiredUnixNanoTime(m.CreatedAt); err != nil {
 		return fmt.Errorf(ErrFmtManifest, core.ErrReleaseContract)
 	}
@@ -279,14 +283,16 @@ func (a UploadedArtifact) ArtifactSetSize() core.ByteCount {
 }
 
 type UploadReceipt struct {
-	Version     core.ProductVersion `json:"version"`
-	ReleaseID   ReleaseID           `json:"release_id"`
-	Objects     []UploadedArtifact  `json:"objects"`
-	UploadedAt  core.UnixNanoTime   `json:"uploaded_at"`
-	TotalBytes  core.ByteCount      `json:"total_bytes"`
-	ObjectCount uint32              `json:"object_count"`
-	Schema      core.SchemaID       `json:"schema"`
-	Product     core.Product        `json:"product"`
+	Version        core.ProductVersion `json:"version"`
+	ReleaseID      ReleaseID           `json:"release_id"`
+	Commit         core.BuildCommit    `json:"commit"`
+	ManifestSHA256 core.SHA256Hex      `json:"manifest_sha256"`
+	Objects        []UploadedArtifact  `json:"objects"`
+	UploadedAt     core.UnixNanoTime   `json:"uploaded_at"`
+	TotalBytes     core.ByteCount      `json:"total_bytes"`
+	ObjectCount    uint32              `json:"object_count"`
+	Schema         core.SchemaID       `json:"schema"`
+	Product        core.Product        `json:"product"`
 }
 
 func (r UploadReceipt) Validate() error {
@@ -310,6 +316,21 @@ func (r UploadReceipt) SigningSchema() core.SchemaID {
 	return r.Schema
 }
 
+func (r UploadReceipt) VerifyManifest(manifest Manifest) error {
+	if err := r.Validate(); err != nil {
+		return err
+	}
+	canonical, err := manifest.Canonical(nil)
+	if err != nil {
+		return wrapReleaseContract(ErrFmtUploadReceipt, err)
+	}
+	if r.Product != manifest.Product || r.Version != manifest.Version || r.ReleaseID != manifest.ReleaseID ||
+		r.Commit != manifest.Commit || r.ManifestSHA256 != core.NewSHA256Hex(sha256.Sum256(canonical)) {
+		return fmt.Errorf(ErrFmtUploadReceipt, core.ErrReleaseContract)
+	}
+	return validateUploadedArtifactsMatchManifest(manifest, r.Objects)
+}
+
 func (r UploadReceipt) MarshalJSON() ([]byte, error) {
 	if err := r.Validate(); err != nil {
 		return nil, err
@@ -323,6 +344,8 @@ func appendUploadReceiptJSON(dst []byte, r UploadReceipt) ([]byte, error) {
 	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, r.Schema)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldVersion, r.Version)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldReleaseID, r.ReleaseID)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCommit, r.Commit)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldManifestSHA256, r.ManifestSHA256)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldObjects, r.Objects)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldUploadedAt, r.UploadedAt)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldTotalBytes, r.TotalBytes)
@@ -344,6 +367,15 @@ func validateReceiptIdentity(r UploadReceipt) error {
 	if err := r.ReleaseID.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtUploadReceipt, err)
 	}
+	if err := r.Commit.Validate(); err != nil {
+		return wrapReleaseContract(ErrFmtUploadReceipt, err)
+	}
+	if err := r.ManifestSHA256.Validate(); err != nil {
+		return wrapReleaseContract(ErrFmtUploadReceipt, err)
+	}
+	if err := ValidateReleaseIDIdentity(r.ReleaseID, r.Product, r.Version, r.Commit); err != nil {
+		return wrapReleaseContract(ErrFmtUploadReceipt, err)
+	}
 	if err := core.ValidateRequiredUnixNanoTime(r.UploadedAt); err != nil {
 		return fmt.Errorf(ErrFmtUploadReceipt, core.ErrReleaseContract)
 	}
@@ -359,8 +391,8 @@ type Download struct {
 }
 
 func (d Download) Validate() error {
-	if err := d.Platform.Validate(); err != nil {
-		return wrapReleaseContract(ErrFmtDownloadIndex, err)
+	if err := validateReleasePlatform(d.Platform, ErrFmtDownloadIndex); err != nil {
+		return err
 	}
 	if err := d.Artifact.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtDownloadIndex, err)
@@ -380,6 +412,7 @@ func (d Download) Validate() error {
 type DownloadIndex struct {
 	Version       core.ProductVersion `json:"version"`
 	ReleaseID     ReleaseID           `json:"release_id"`
+	Commit        core.BuildCommit    `json:"commit"`
 	Downloads     []Download          `json:"downloads"`
 	GeneratedAt   core.UnixNanoTime   `json:"generated_at"`
 	DownloadCount uint32              `json:"download_count"`
@@ -408,6 +441,19 @@ func (i DownloadIndex) SigningSchema() core.SchemaID {
 	return i.Schema
 }
 
+func (i DownloadIndex) VerifyManifest(manifest Manifest) error {
+	if err := i.Validate(); err != nil {
+		return err
+	}
+	if err := manifest.Validate(); err != nil {
+		return wrapReleaseContract(ErrFmtDownloadIndex, err)
+	}
+	if i.Product != manifest.Product || i.Version != manifest.Version || i.ReleaseID != manifest.ReleaseID || i.Commit != manifest.Commit {
+		return fmt.Errorf(ErrFmtDownloadIndex, core.ErrReleaseContract)
+	}
+	return validateManifestDownloads(manifest, i.Downloads)
+}
+
 func (i DownloadIndex) MarshalJSON() ([]byte, error) {
 	if err := i.Validate(); err != nil {
 		return nil, err
@@ -421,6 +467,7 @@ func appendDownloadIndexJSON(dst []byte, i DownloadIndex) ([]byte, error) {
 	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, i.Schema)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldVersion, i.Version)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldReleaseID, i.ReleaseID)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCommit, i.Commit)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDownloads, i.Downloads)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldGeneratedAt, i.GeneratedAt)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDownloadCount, i.DownloadCount)
@@ -439,6 +486,12 @@ func validateDownloadIndexIdentity(i DownloadIndex) error {
 		return wrapReleaseContract(ErrFmtDownloadIndex, err)
 	}
 	if err := i.ReleaseID.Validate(); err != nil {
+		return wrapReleaseContract(ErrFmtDownloadIndex, err)
+	}
+	if err := i.Commit.Validate(); err != nil {
+		return wrapReleaseContract(ErrFmtDownloadIndex, err)
+	}
+	if err := ValidateReleaseIDIdentity(i.ReleaseID, i.Product, i.Version, i.Commit); err != nil {
 		return wrapReleaseContract(ErrFmtDownloadIndex, err)
 	}
 	if err := core.ValidateRequiredUnixNanoTime(i.GeneratedAt); err != nil {
@@ -479,10 +532,8 @@ func validateDownloadSet(downloads []Download, count uint32) error {
 		if err := download.Validate(); err != nil {
 			return err
 		}
-		for _, prior := range downloads[:index] {
-			if prior.Artifact == download.Artifact {
-				return fmt.Errorf(ErrFmtDownloadIndex, core.ErrReleaseContract)
-			}
+		if index > 0 && downloads[index-1].Artifact.String() >= download.Artifact.String() {
+			return fmt.Errorf(ErrFmtDownloadIndex, core.ErrReleaseContract)
 		}
 	}
 	return nil

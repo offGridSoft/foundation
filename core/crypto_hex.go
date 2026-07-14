@@ -270,6 +270,9 @@ func validateFixedHex(value string, byteLen int) error {
 }
 
 func IsLowerHex(value string) bool {
+	if value == "" {
+		return false
+	}
 	for _, r := range value {
 		switch {
 		case r >= '0' && r <= '9':

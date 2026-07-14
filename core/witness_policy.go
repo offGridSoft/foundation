@@ -73,11 +73,11 @@ func (l MachineLimit) MarshalJSON() ([]byte, error) {
 }
 
 func (l *MachineLimit) UnmarshalJSON(data []byte) error {
-	var value uint16
-	if err := json.Unmarshal(data, &value); err != nil {
+	value, err := parseStrictUint64JSON(data)
+	if err != nil || value > math.MaxUint16 {
 		return fmt.Errorf(ErrFmtMachineLimit, ErrWitnessPolicyContract)
 	}
-	parsed, err := NewMachineLimit(value)
+	parsed, err := NewMachineLimit(uint16(value))
 	if err != nil {
 		return err
 	}
@@ -222,10 +222,11 @@ func ExtendWitnessRetention(w WitnessRetentionWindow, policy WitnessRetentionPol
 }
 
 func addWitnessRetentionDuration(base UnixNanoTime, duration NanosecondsDuration) (UnixNanoTime, error) {
-	if base.UnixNano() > math.MaxInt64-duration.Nanoseconds() {
+	result, err := AddUnixNanoDuration(base, duration.Duration())
+	if err != nil {
 		return UnixNanoTime{}, fmt.Errorf(ErrFmtWitnessRetentionPolicy, ErrWitnessPolicyContract)
 	}
-	return base.Add(duration.Duration()), nil
+	return result, nil
 }
 
 type RetentionAction uint8

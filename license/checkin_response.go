@@ -7,6 +7,11 @@ import (
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
+var (
+	_ core.CanonicalBody = BugCheckInResponseBody{}
+	_ core.CanonicalBody = WitnessCheckInResponseBody{}
+)
+
 const (
 	BugWriterRevocationDeliveryMaximum    uint32 = 256
 	BugWriterRevocationPersistenceMaximum uint32 = 16 << 10
@@ -156,7 +161,10 @@ func (d BugWriterRevocationDelivery) Verify(keyring core.SigningKeyring) error {
 }
 
 // BugWriterRevocationSet is the bounded lifetime persistence shape for every
-// verified cutoff observed by one installation.
+// verified revocation observed by one installation. It deliberately exposes
+// no writer-allowance method: individual signatures authenticate presence,
+// not completeness, so absence cannot authorize a writer until a signed set
+// commitment/progression contract exists.
 type BugWriterRevocationSet struct {
 	Values []core.Signed[BugWriterRevocationBody] `json:"values"`
 }
@@ -240,27 +248,6 @@ func earliestWriterRevocation(left, right core.Signed[BugWriterRevocationBody]) 
 		return right
 	}
 	return left
-}
-
-func (s BugWriterRevocationSet) VerifyWriterAllowed(writerKeyID core.SigningKeyID, occurredAt core.UnixNanoTime) error {
-	if err := s.Validate(); err != nil {
-		return err
-	}
-	if err := writerKeyID.Validate(); err != nil {
-		return checkInResponseError(err)
-	}
-	if err := core.ValidateRequiredUnixNanoTime(occurredAt); err != nil || occurredAt.IsZero() {
-		return checkInResponseError(err)
-	}
-	for _, value := range s.Values {
-		if value.Body.WriterKeyID.String() > writerKeyID.String() {
-			return nil
-		}
-		if err := value.Body.VerifyWriterAllowed(writerKeyID, occurredAt); err != nil {
-			return checkInResponseError(err)
-		}
-	}
-	return nil
 }
 
 type WitnessCheckInResponseBody struct {

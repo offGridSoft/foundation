@@ -107,7 +107,7 @@ func releasePlanRawStringBytes(p ReleasePlan) int64 {
 }
 
 func releaseRootRawStringBytes(layout ReleaseRootLayout) int64 {
-	return int64(len(layout.Version.String()) + len(layout.Date.String()) + len(layout.ReleaseID.String()) +
+	return int64(len(layout.Version.String()) + len(layout.Date.String()) + len(layout.ReleaseID.String()) + len(layout.Commit.String()) +
 		len(layout.Root.String()) + len(layout.Private.String()) + len(layout.Public.String()) +
 		len(layout.Platforms.String()) + len(layout.Receipts.String()) + len(layout.Manifests.String()) +
 		len(layout.Dogfood.String()))
@@ -225,6 +225,9 @@ func validatePlanScalars(p ReleasePlan) error {
 	if err := p.Commit.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtReleasePlan, err)
 	}
+	if err := ValidateReleaseIDIdentity(p.ReleaseID, p.Product, p.Version, p.Commit); err != nil {
+		return wrapReleaseContract(ErrFmtReleasePlan, err)
+	}
 	return validateRequiredReleaseSeed(p.Seed, ErrFmtReleasePlan)
 }
 
@@ -236,6 +239,9 @@ func validatePlanCrossIdentity(p ReleasePlan) error {
 		return fmt.Errorf(ErrFmtReleasePlan, core.ErrReleaseContract)
 	}
 	if p.Layout.ReleaseID.String() != p.ReleaseID.String() || p.Layout.Date.String() != p.Date.String() {
+		return fmt.Errorf(ErrFmtReleasePlan, core.ErrReleaseContract)
+	}
+	if p.Layout.Commit.String() != p.Commit.String() {
 		return fmt.Errorf(ErrFmtReleasePlan, core.ErrReleaseContract)
 	}
 	if !policyCommitMatchesPlan(p.Spec.Policy.CommitStamp, p.Commit) {

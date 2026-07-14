@@ -71,6 +71,37 @@ func TestUnixNanoTimeHostileTable(t *testing.T) {
 	}
 }
 
+func TestAddUnixNanoDurationRejectsRangeEscape(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		base     UnixNanoTime
+		duration time.Duration
+		want     int64
+		wantErr  bool
+	}{
+		{name: "ordinary addition", base: UnixNanoTimeFromInt64(5), duration: 3, want: 8},
+		{name: "positive overflow", base: UnixNanoTimeFromInt64(math.MaxInt64), duration: 1, wantErr: true},
+		{name: "negative range escape", base: UnixNanoTimeFromInt64(0), duration: -1, wantErr: true},
+		{name: "minimum duration range escape", base: UnixNanoTimeFromInt64(0), duration: time.Duration(math.MinInt64), wantErr: true},
+		{name: "unset base", duration: 1, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := AddUnixNanoDuration(tc.base, tc.duration)
+			if tc.wantErr {
+				if !errors.Is(err, ErrFoundationContract) {
+					t.Fatalf("AddUnixNanoDuration() error = %v, want ErrFoundationContract", err)
+				}
+				return
+			}
+			if err != nil || got.UnixNano() != tc.want {
+				t.Fatalf("AddUnixNanoDuration() = (%d, %v), want (%d, nil)", got.UnixNano(), err, tc.want)
+			}
+		})
+	}
+}
+
 func TestNanosecondsDurationJSONIsBareNanoseconds(t *testing.T) {
 	t.Parallel()
 	got, err := json.Marshal(NewNanosecondsDuration(3 * time.Second))
@@ -663,6 +694,29 @@ func TestArtifactSetRejectsUnboundedBytes(t *testing.T) {
 				t.Fatalf("ValidateArtifactSet() error = %v, want ErrFoundationContract", err)
 			}
 		})
+	}
+}
+
+func TestArtifactSetBuilderOwnsCanonicalOrder(t *testing.T) {
+	t.Parallel()
+	input := []artifactSetHostileItem{
+		{name: "zeta", size: NewByteCount(2)},
+		{name: "alpha", size: NewByteCount(1)},
+	}
+	set, err := BuildArtifactSet(input)
+	if err != nil {
+		t.Fatalf("BuildArtifactSet() error = %v", err)
+	}
+	if set.Items[0].name != "alpha" || set.Items[1].name != "zeta" {
+		t.Fatalf("BuildArtifactSet() order = %q, %q", set.Items[0].name, set.Items[1].name)
+	}
+	input[0].name = "mutated"
+	if set.Items[1].name != "zeta" {
+		t.Fatalf("BuildArtifactSet() retained caller alias")
+	}
+	set.Items[0], set.Items[1] = set.Items[1], set.Items[0]
+	if err := ValidateArtifactSet(set); !errors.Is(err, ErrFoundationContract) {
+		t.Fatalf("ValidateArtifactSet(unsorted) error = %v, want ErrFoundationContract", err)
 	}
 }
 

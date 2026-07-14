@@ -34,6 +34,7 @@ const (
 	SchemaReleasePlan
 	SchemaReleaseRootLayout
 	SchemaReleaseCommandRun
+	SchemaReleaseSeedGrant
 )
 
 const (
@@ -58,9 +59,10 @@ const (
 	SchemaTokenReleasePlan                = "offgrid-release-plan-" + ContractVersionToken
 	SchemaTokenReleaseRootLayout          = "offgrid-release-root-layout-" + ContractVersionToken
 	SchemaTokenReleaseCommandRun          = "offgrid-release-command-run-" + ContractVersionToken
+	SchemaTokenReleaseSeedGrant           = "offgrid-release-seed-grant-" + ContractVersionToken
 )
 
-func schemaNames() [SchemaReleaseCommandRun + 1]string {
+func schemaNames() [SchemaReleaseSeedGrant + 1]string {
 	return [...]string{
 		SchemaBugUsage:                   SchemaTokenBugUsage,
 		SchemaWitnessUsage:               SchemaTokenWitnessUsage,
@@ -83,6 +85,7 @@ func schemaNames() [SchemaReleaseCommandRun + 1]string {
 		SchemaReleasePlan:                SchemaTokenReleasePlan,
 		SchemaReleaseRootLayout:          SchemaTokenReleaseRootLayout,
 		SchemaReleaseCommandRun:          SchemaTokenReleaseCommandRun,
+		SchemaReleaseSeedGrant:           SchemaTokenReleaseSeedGrant,
 	}
 }
 

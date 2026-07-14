@@ -8,6 +8,8 @@ import (
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
+var _ core.CanonicalBody = ReceiptBody{}
+
 type ArtifactDescriptor struct {
 	Name   ArtifactName   `json:"name"`
 	SHA256 core.SHA256Hex `json:"sha256"`
@@ -126,6 +128,22 @@ func (r SessionOpenResponse) Validate() error {
 	default:
 		return fmt.Errorf(ErrFmtOpenResponse, core.ErrCustodyContract)
 	}
+}
+
+func (r SessionOpenResponse) Verify(keyring core.SigningKeyring) error {
+	if err := r.Validate(); err != nil {
+		return err
+	}
+	if r.Disposition != SessionOpenDispositionReceiptReused {
+		return nil
+	}
+	if r.ExistingReceipt == nil {
+		return fmt.Errorf(ErrFmtOpenResponse, core.ErrCustodyContract)
+	}
+	if err := r.ExistingReceipt.Verify(keyring); err != nil {
+		return fmt.Errorf(ErrFmtOpenResponse, err)
+	}
+	return nil
 }
 
 func (r SessionOpenResponse) validateUploadRequired() error {
@@ -429,6 +447,9 @@ func hasMatchingUploadedObject(objects []UploadedObject, object UploadedObject) 
 func validateReceiptStorage(b ReceiptBody) error {
 	if err := b.Retention.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtReceipt, err)
+	}
+	if b.Retention.RetainUntil.Before(b.IssuedAt) || b.Retention.MaximumRetainUntil.Before(b.IssuedAt) {
+		return fmt.Errorf(ErrFmtReceipt, core.ErrCustodyContract)
 	}
 	return nil
 }

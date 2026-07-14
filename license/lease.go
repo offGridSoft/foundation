@@ -8,6 +8,11 @@ import (
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
+var (
+	_ core.CanonicalBody = SeatLeaseBody{}
+	_ core.CanonicalBody = SubscriptionLeaseBody{}
+)
+
 type Body interface {
 	core.CanonicalBody
 	ExpiresAt() core.UnixNanoTime
@@ -156,6 +161,9 @@ func validateCommonLeaseWindow[B leaseWindowBody](b B) error {
 		return fmt.Errorf(ErrFmtLeaseCheckInWindow, core.ErrLicenseContract)
 	}
 	if b.WriteGrace().Duration() < 0 {
+		return fmt.Errorf(ErrFmtLeaseWriteGrace, core.ErrLicenseContract)
+	}
+	if _, err := core.AddUnixNanoDuration(b.ExpiresAt(), b.WriteGrace().Duration()); err != nil {
 		return fmt.Errorf(ErrFmtLeaseWriteGrace, core.ErrLicenseContract)
 	}
 	return nil

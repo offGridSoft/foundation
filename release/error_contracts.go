@@ -41,4 +41,7 @@ const (
 	ErrFmtTreeState      = "release.TreeState: %w"
 	ErrFmtMachine        = "release.MachineIdentity: %w"
 	ErrFmtCommandRun     = "release.CommandRun: %w"
+	ErrFmtCustodySeed    = "release.GarbleCustodySeed: %w"
+	ErrFmtSeedRequest    = "release.SeedRequest: %w"
+	ErrFmtSeedGrant      = "release.SeedGrantBody: %w"
 )

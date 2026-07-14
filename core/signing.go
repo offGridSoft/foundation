@@ -39,6 +39,7 @@ const (
 	SigningDomainReleasePlan              = SigningDomain(SchemaReleasePlan)
 	SigningDomainReleaseRootLayout        = SigningDomain(SchemaReleaseRootLayout)
 	SigningDomainReleaseCommandRun        = SigningDomain(SchemaReleaseCommandRun)
+	SigningDomainReleaseSeedGrant         = SigningDomain(SchemaReleaseSeedGrant)
 )
 
 const (
@@ -56,10 +57,11 @@ const (
 	SigningDomainTokenReleasePlan              = "release-plan-" + ContractYear
 	SigningDomainTokenReleaseRootLayout        = "release-root-layout-" + ContractYear
 	SigningDomainTokenReleaseCommandRun        = "release-command-run-" + ContractYear
+	SigningDomainTokenReleaseSeedGrant         = "release-seed-grant-" + ContractYear
 	ErrFmtSigningDomain                        = "core.SigningDomain: %w"
 )
 
-func signingDomainNames() [SchemaReleaseCommandRun + 1]string {
+func signingDomainNames() [SchemaReleaseSeedGrant + 1]string {
 	return [...]string{
 		SigningDomainBugCheckInResponse:       SigningDomainTokenBugCheckInResponse,
 		SigningDomainBugSeatLease:             SigningDomainTokenBugSeatLease,
@@ -75,6 +77,7 @@ func signingDomainNames() [SchemaReleaseCommandRun + 1]string {
 		SigningDomainReleasePlan:              SigningDomainTokenReleasePlan,
 		SigningDomainReleaseRootLayout:        SigningDomainTokenReleaseRootLayout,
 		SigningDomainReleaseCommandRun:        SigningDomainTokenReleaseCommandRun,
+		SigningDomainReleaseSeedGrant:         SigningDomainTokenReleaseSeedGrant,
 	}
 }
 

@@ -7,6 +7,8 @@ import (
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
+var _ core.CanonicalBody = BugWriterAttestationBody{}
+
 // BugWriterAttestationBody binds one repository operation digest to the
 // server-certified device writer that produced it. The seat lease certifies
 // the public key; this body supplies immutable per-operation authorship.

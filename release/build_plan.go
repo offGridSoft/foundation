@@ -19,6 +19,7 @@ const (
 	GarbleArgTiny                           = "-tiny"
 	GoArgBuild                              = "build"
 	GoArgTrimPath                           = "-trimpath"
+	GoArgBuildModeExecutable                = "-buildmode=exe"
 	GoArgBuildVCS                           = "-buildvcs=true"
 	GoBuildOutputFlag                       = "-o"
 	GoBuildTagsPrefix                       = "-tags="
@@ -500,6 +501,7 @@ func GarbleBuildArgs(r ReleaseGarbleBuildRequest) ([]string, error) {
 		GarbleArgTiny,
 		GoArgBuild,
 		GoArgTrimPath,
+		GoArgBuildModeExecutable,
 	}
 	args = appendBuildPolicyArgs(args, r.Policy)
 	args = append(args, GoBuildOutputFlag, r.Output.String(), r.Command.ImportPath.String())

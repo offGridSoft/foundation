@@ -89,42 +89,14 @@ func TestBugWriterRevocationCanonicalLayerTriad(t *testing.T) {
 	}
 }
 
-func TestBugWriterRevocationCutoffTable(t *testing.T) {
+func TestBugWriterRevocationCarriesOnlyAuthorityOwnedCutoff(t *testing.T) {
 	t.Parallel()
-
-	revocation := testBugWriterRevocation(t)
-	base := testWriterAttestationBody(t)
-	base.WriterKeyID = revocation.WriterKeyID
-	cases := []struct {
-		name    string
-		key     core.SigningKeyID
-		at      core.UnixNanoTime
-		wantErr bool
-	}{
-		{name: "before cutoff remains historical evidence", at: revocation.RevokedAt.Add(-time.Nanosecond), key: revocation.WriterKeyID},
-		{name: "exact cutoff refused", at: revocation.RevokedAt, key: revocation.WriterKeyID, wantErr: true},
-		{name: "after cutoff refused", at: revocation.RevokedAt.Add(time.Nanosecond), key: revocation.WriterKeyID, wantErr: true},
-		{name: "other writer unaffected", at: revocation.RevokedAt.Add(time.Hour), key: base.WriterKeyID},
+	body := testBugWriterRevocation(t)
+	if err := body.Validate(); err != nil {
+		t.Fatalf("BugWriterRevocationBody.Validate() error = %v", err)
 	}
-	otherKey, err := core.ParseSigningKeyID(BugWriterKeyIDPrefix + strings.Repeat("b", 64))
-	if err != nil {
-		t.Fatalf("ParseSigningKeyID(other) error = %v", err)
-	}
-	cases[3].key = otherKey
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			attestation := base
-			attestation.WriterKeyID = tc.key
-			attestation.OccurredAt = tc.at
-			err := revocation.VerifyAttestationAllowed(attestation)
-			if tc.wantErr && !errors.Is(err, core.ErrLicenseContract) {
-				t.Fatalf("VerifyAttestationAllowed() error = %v, want %v", err, core.ErrLicenseContract)
-			}
-			if !tc.wantErr && err != nil {
-				t.Fatalf("VerifyAttestationAllowed() error = %v, want nil", err)
-			}
-		})
+	if !body.RevokedAt.Equal(core.NewUnixNanoTime(time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC))) {
+		t.Fatalf("BugWriterRevocationBody.RevokedAt = %d", body.RevokedAt.UnixNano())
 	}
 }
 

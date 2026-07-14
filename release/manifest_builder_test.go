@@ -14,7 +14,7 @@ func TestBuildManifestDerivesArtifactSetWithoutAliasingInput(t *testing.T) {
 		validArtifactWithSize(t, "bug-darwin-arm64", 18),
 	}
 	input := ManifestInput{
-		Product: core.ProductBug, Version: mustVersion(t), ReleaseID: mustReleaseID(t),
+		Product: core.ProductBug, Version: mustVersion(t), ReleaseID: mustBugReleaseID(t),
 		Date: mustReleaseDate(t), Commit: mustCommit(t), CreatedAt: core.UnixNanoTimeFromInt64(1782302400000000000),
 		Artifacts: artifacts,
 	}
@@ -29,7 +29,7 @@ func TestBuildManifestDerivesArtifactSetWithoutAliasingInput(t *testing.T) {
 		t.Fatalf("BuildManifest().TotalBytes = %d, want 30", manifest.TotalBytes.Uint64())
 	}
 	artifacts[0] = validArtifactWithSize(t, "mutated-after-build", 1)
-	if manifest.Artifacts[0].Name.String() != "bug-linux-amd64" {
+	if manifest.Artifacts[0].Name.String() != "bug-darwin-arm64" || manifest.Artifacts[1].Name.String() != "bug-linux-amd64" {
 		t.Fatalf("BuildManifest() retained caller slice alias: %q", manifest.Artifacts[0].Name)
 	}
 }
@@ -37,7 +37,7 @@ func TestBuildManifestDerivesArtifactSetWithoutAliasingInput(t *testing.T) {
 func TestManifestInputRejectsHostileArtifactSets(t *testing.T) {
 	t.Parallel()
 	valid := ManifestInput{
-		Product: core.ProductBug, Version: mustVersion(t), ReleaseID: mustReleaseID(t),
+		Product: core.ProductBug, Version: mustVersion(t), ReleaseID: mustBugReleaseID(t),
 		Date: mustReleaseDate(t), Commit: mustCommit(t), CreatedAt: core.UnixNanoTimeFromInt64(1782302400000000000),
 		Artifacts: []Artifact{validArtifactWithSize(t, "bug-linux-amd64", 12)},
 	}

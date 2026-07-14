@@ -7,9 +7,11 @@ import (
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
-// BugWriterRevocationBody is the server-signed cutoff for one certified Bug
-// writer. Attestations before RevokedAt remain historical evidence; an
-// attestation at or after RevokedAt must be refused.
+var _ core.CanonicalBody = BugWriterRevocationBody{}
+
+// BugWriterRevocationBody is the server-signed revocation of one certified
+// Bug writer. RevokedAt is an authority-owned audit fact; it is never compared
+// with a writer-controlled attestation timestamp.
 type BugWriterRevocationBody struct {
 	WriterKeyID core.SigningKeyID `json:"writer_key_id"`
 	RevokedAt   core.UnixNanoTime `json:"revoked_at"`
@@ -25,35 +27,6 @@ func (b BugWriterRevocationBody) Validate() error {
 	}
 	if err := core.ValidateRequiredUnixNanoTime(b.RevokedAt); err != nil || b.RevokedAt.IsZero() {
 		return writerRevocationError(err)
-	}
-	return nil
-}
-
-// VerifyAttestationAllowed owns the revocation cutoff rule. A revocation for
-// another writer is irrelevant; the named writer remains valid strictly
-// before RevokedAt and is refused at or after the cutoff.
-func (b BugWriterRevocationBody) VerifyAttestationAllowed(attestation BugWriterAttestationBody) error {
-	if err := b.Validate(); err != nil {
-		return err
-	}
-	if err := attestation.Validate(); err != nil {
-		return err
-	}
-	return b.VerifyWriterAllowed(attestation.WriterKeyID, attestation.OccurredAt)
-}
-
-func (b BugWriterRevocationBody) VerifyWriterAllowed(writerKeyID core.SigningKeyID, occurredAt core.UnixNanoTime) error {
-	if err := b.Validate(); err != nil {
-		return err
-	}
-	if err := writerKeyID.Validate(); err != nil {
-		return writerRevocationError(err)
-	}
-	if err := core.ValidateRequiredUnixNanoTime(occurredAt); err != nil || occurredAt.IsZero() {
-		return writerRevocationError(err)
-	}
-	if writerKeyID == b.WriterKeyID && !occurredAt.Before(b.RevokedAt) {
-		return writerRevocationError(core.ErrLicenseContract)
 	}
 	return nil
 }
