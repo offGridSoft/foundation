@@ -1561,6 +1561,8 @@ func TestDeployPlanHostileTable(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "valid deploy plan accepted", mutate: func(*DeployPlan) {}},
+		{name: "missing schema rejected", wantErr: true, mutate: func(p *DeployPlan) { p.Schema = core.SchemaUnknown }},
+		{name: "cross-contract schema rejected", wantErr: true, mutate: func(p *DeployPlan) { p.Schema = core.SchemaReleaseManifest }},
 		{name: "manifest product drift rejected", wantErr: true, mutate: func(p *DeployPlan) { p.Manifest.Product = core.ProductBug }},
 		{name: "layout release id drift rejected", wantErr: true, mutate: func(p *DeployPlan) { p.Layout.ReleaseID = mustOtherReleaseID(t) }},
 		{name: "layout date drift rejected", wantErr: true, mutate: func(p *DeployPlan) { p.Layout = mustOtherDatedLayout(t, p.Layout) }},
@@ -1819,6 +1821,7 @@ func validDeployPlan(t *testing.T) DeployPlan {
 		t.Fatalf("Manifest.Canonical() error = %v", err)
 	}
 	return DeployPlan{
+		Schema:         core.SchemaReleaseDeployPlan,
 		Product:        core.ProductWitness,
 		Version:        mustVersion(t),
 		ReleaseID:      mustReleaseID(t),

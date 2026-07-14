@@ -143,6 +143,7 @@ func deployPlanFromInput(input DeployPlanInput) (DeployPlan, error) {
 	manifest := input.Manifest
 	manifest.Artifacts = append([]Artifact(nil), input.Manifest.Artifacts...)
 	return DeployPlan{
+		Schema:         core.SchemaReleaseDeployPlan,
 		Product:        input.Manifest.Product,
 		Version:        input.Manifest.Version,
 		ReleaseID:      input.Manifest.ReleaseID,

@@ -36,6 +36,7 @@ const (
 	SigningDomainReleaseManifest          = SigningDomain(SchemaReleaseManifest)
 	SigningDomainReleaseUploadReceipt     = SigningDomain(SchemaReleaseUploadReceipt)
 	SigningDomainReleaseDownloadIndex     = SigningDomain(SchemaReleaseDownloadIndex)
+	SigningDomainReleaseDeployPlan        = SigningDomain(SchemaReleaseDeployPlan)
 	SigningDomainReleasePlan              = SigningDomain(SchemaReleasePlan)
 	SigningDomainReleaseRootLayout        = SigningDomain(SchemaReleaseRootLayout)
 	SigningDomainReleaseCommandRun        = SigningDomain(SchemaReleaseCommandRun)
@@ -54,6 +55,7 @@ const (
 	SigningDomainTokenReleaseManifest          = "release-manifest-" + ContractYear
 	SigningDomainTokenReleaseUploadReceipt     = "release-upload-receipt-" + ContractYear
 	SigningDomainTokenReleaseDownloadIndex     = "release-download-index-" + ContractYear
+	SigningDomainTokenReleaseDeployPlan        = "release-deploy-plan-" + ContractYear
 	SigningDomainTokenReleasePlan              = "release-plan-" + ContractYear
 	SigningDomainTokenReleaseRootLayout        = "release-root-layout-" + ContractYear
 	SigningDomainTokenReleaseCommandRun        = "release-command-run-" + ContractYear
@@ -74,6 +76,7 @@ func signingDomainNames() [SchemaReleaseSeedGrant + 1]string {
 		SigningDomainReleaseManifest:          SigningDomainTokenReleaseManifest,
 		SigningDomainReleaseUploadReceipt:     SigningDomainTokenReleaseUploadReceipt,
 		SigningDomainReleaseDownloadIndex:     SigningDomainTokenReleaseDownloadIndex,
+		SigningDomainReleaseDeployPlan:        SigningDomainTokenReleaseDeployPlan,
 		SigningDomainReleasePlan:              SigningDomainTokenReleasePlan,
 		SigningDomainReleaseRootLayout:        SigningDomainTokenReleaseRootLayout,
 		SigningDomainReleaseCommandRun:        SigningDomainTokenReleaseCommandRun,

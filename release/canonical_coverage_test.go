@@ -22,6 +22,7 @@ func TestSignedBodyCanonicalProjectionCoversEveryTaggedField(t *testing.T) {
 		{name: "manifest", body: validManifest(t)},
 		{name: "upload receipt", body: validUploadReceipt(t)},
 		{name: "download index", body: validDownloadIndex(t)},
+		{name: "deploy plan", body: validDeployPlan(t)},
 		{name: "release plan", body: validReleasePlan(t)},
 		{name: "release root", body: validWitnessReleaseRootLayout(t)},
 		{name: "command run", body: validCommandRun(t)},

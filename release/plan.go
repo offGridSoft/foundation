@@ -299,10 +299,14 @@ type DeployPlan struct {
 	Targets        []UploadTarget      `json:"targets"`
 	Manifest       Manifest            `json:"manifest"`
 	TargetCount    uint32              `json:"target_count"`
+	Schema         core.SchemaID       `json:"schema"`
 	Product        core.Product        `json:"product"`
 }
 
 func (p DeployPlan) Validate() error {
+	if p.Schema != core.SchemaReleaseDeployPlan {
+		return fmt.Errorf(ErrFmtDeployPlan, core.ErrReleaseContract)
+	}
 	if err := validateDeployPlanIdentity(p); err != nil {
 		return err
 	}
@@ -313,9 +317,25 @@ func (p DeployPlan) MarshalJSON() ([]byte, error) {
 	if err := p.Validate(); err != nil {
 		return nil, err
 	}
-	dst := []byte{'{'}
+	return appendDeployPlanJSON(nil, p)
+}
+
+func (p DeployPlan) Canonical(dst []byte) ([]byte, error) {
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+	return appendDeployPlanJSON(dst, p)
+}
+
+func (p DeployPlan) SigningSchema() core.SchemaID {
+	return p.Schema
+}
+
+func appendDeployPlanJSON(dst []byte, p DeployPlan) ([]byte, error) {
+	dst = append(dst, '{')
 	var err error
-	dst, err = core.AppendJSONField(dst, jsonFieldProduct, p.Product)
+	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, p.Schema)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldProduct, p.Product)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldVersion, p.Version)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldReleaseID, p.ReleaseID)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldManifestSHA256, p.ManifestSHA256)

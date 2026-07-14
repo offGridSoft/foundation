@@ -31,6 +31,7 @@ const (
 	SchemaReleaseManifest
 	SchemaReleaseUploadReceipt
 	SchemaReleaseDownloadIndex
+	SchemaReleaseDeployPlan
 	SchemaReleasePlan
 	SchemaReleaseRootLayout
 	SchemaReleaseCommandRun
@@ -56,6 +57,7 @@ const (
 	SchemaTokenReleaseManifest            = "offgrid-release-manifest-" + ContractVersionToken
 	SchemaTokenReleaseUploadReceipt       = "offgrid-release-upload-receipt-" + ContractVersionToken
 	SchemaTokenReleaseDownloadIndex       = "offgrid-release-download-index-" + ContractVersionToken
+	SchemaTokenReleaseDeployPlan          = "offgrid-release-deploy-plan-" + ContractVersionToken
 	SchemaTokenReleasePlan                = "offgrid-release-plan-" + ContractVersionToken
 	SchemaTokenReleaseRootLayout          = "offgrid-release-root-layout-" + ContractVersionToken
 	SchemaTokenReleaseCommandRun          = "offgrid-release-command-run-" + ContractVersionToken
@@ -82,6 +84,7 @@ func schemaNames() [SchemaReleaseSeedGrant + 1]string {
 		SchemaReleaseManifest:            SchemaTokenReleaseManifest,
 		SchemaReleaseUploadReceipt:       SchemaTokenReleaseUploadReceipt,
 		SchemaReleaseDownloadIndex:       SchemaTokenReleaseDownloadIndex,
+		SchemaReleaseDeployPlan:          SchemaTokenReleaseDeployPlan,
 		SchemaReleasePlan:                SchemaTokenReleasePlan,
 		SchemaReleaseRootLayout:          SchemaTokenReleaseRootLayout,
 		SchemaReleaseCommandRun:          SchemaTokenReleaseCommandRun,
