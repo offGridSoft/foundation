@@ -46,29 +46,29 @@ func BenchmarkToolProvenanceSetValidate64(b *testing.B) {
 	}
 }
 
-// witness:waiver doctrine/test_protocol/top_parallel -- testing.AllocsPerRun mutates the process-global runtime allocation counter and panics inside parallel tests.
 func TestReleasePlanAllocationBudgets(t *testing.T) {
+	t.Parallel()
 	plan := validReleasePlan(t)
-	var validationErr error
-	validateAllocs := testing.AllocsPerRun(100, func() {
-		validationErr = plan.Validate()
+	validation := testing.Benchmark(func(b *testing.B) {
+		for range b.N {
+			if err := plan.Validate(); err != nil {
+				b.Fatal(err)
+			}
+		}
 	})
-	if validationErr != nil {
-		t.Fatal(validationErr)
-	}
-	if validateAllocs > ReleasePlanValidateAllocationBudget {
-		t.Fatalf("ReleasePlan.Validate allocs = %.0f, want <= %.0f", validateAllocs, ReleasePlanValidateAllocationBudget)
+	if got := float64(validation.AllocsPerOp()); got > ReleasePlanValidateAllocationBudget {
+		t.Fatalf("ReleasePlan.Validate allocs = %.0f, want <= %.0f", got, ReleasePlanValidateAllocationBudget)
 	}
 
-	var buildErr error
-	buildAllocs := testing.AllocsPerRun(100, func() {
-		_, buildErr = plan.GarbleBuildRequests()
+	build := testing.Benchmark(func(b *testing.B) {
+		for range b.N {
+			if _, err := plan.GarbleBuildRequests(); err != nil {
+				b.Fatal(err)
+			}
+		}
 	})
-	if buildErr != nil {
-		t.Fatal(buildErr)
-	}
-	if buildAllocs > ReleasePlanBuildRequestAllocationBudget {
-		t.Fatalf("ReleasePlan.GarbleBuildRequests allocs = %.0f, want <= %.0f", buildAllocs, ReleasePlanBuildRequestAllocationBudget)
+	if got := float64(build.AllocsPerOp()); got > ReleasePlanBuildRequestAllocationBudget {
+		t.Fatalf("ReleasePlan.GarbleBuildRequests allocs = %.0f, want <= %.0f", got, ReleasePlanBuildRequestAllocationBudget)
 	}
 }
 

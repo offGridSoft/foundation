@@ -18,6 +18,8 @@ var (
 	_ core.Validatable = DeployFinalizeResponse{}
 )
 
+const DeployTransportMaximumBytes = 512 << 10
+
 type DeployRequestID struct {
 	value string
 }
@@ -486,7 +488,7 @@ func validateDeployTransportSize(encoded []byte, encodeErr error) error {
 	if encodeErr != nil {
 		return encodeErr
 	}
-	if len(encoded) == 0 || len(encoded) > core.StrictJSONMaxBytes {
+	if len(encoded) == 0 || len(encoded) > DeployTransportMaximumBytes {
 		return core.ErrReleaseContract
 	}
 	return nil
