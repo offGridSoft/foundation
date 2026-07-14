@@ -246,14 +246,14 @@ func (s Signed[B]) Validate() error {
 }
 
 func (s Signed[B]) Verify(keyring SigningKeyring) error {
-	message, err := AppendSignedMessage(nil, s.KeyID, s.Body)
-	if err != nil {
+	if err := s.Validate(); err != nil {
 		return err
 	}
-	if err := s.Signature.Validate(); err != nil {
-		return fmt.Errorf(ErrFmtSignedSignature, err)
-	}
 	if err := keyring.Validate(); err != nil {
+		return err
+	}
+	message, err := appendSignedMessageValidated(nil, s.KeyID, s.Body)
+	if err != nil {
 		return err
 	}
 	key, err := keyring.lookupValidated(s.KeyID)
@@ -274,6 +274,13 @@ func AppendSignedMessage[B CanonicalBody](dst []byte, keyID SigningKeyID, body B
 	if err := keyID.Validate(); err != nil {
 		return nil, err
 	}
+	if err := body.Validate(); err != nil {
+		return nil, err
+	}
+	return appendSignedMessageValidated(dst, keyID, body)
+}
+
+func appendSignedMessageValidated[B CanonicalBody](dst []byte, keyID SigningKeyID, body B) ([]byte, error) {
 	dst = append(dst, SignedMessageDomain...)
 	dst = append(dst, SignedMessageSep)
 	domain := body.SigningSchema().ResolveSigningDomain()

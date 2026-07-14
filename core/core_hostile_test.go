@@ -666,6 +666,46 @@ func TestArtifactSetRejectsUnboundedBytes(t *testing.T) {
 	}
 }
 
+func TestDeriveCollectionCountHostileTable(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name    string
+		length  int
+		minimum uint32
+		maximum uint32
+		want    uint32
+		wantErr bool
+	}{
+		{name: "single", length: 1, minimum: 1, maximum: 1, want: 1},
+		{name: "middle", length: 5, minimum: 1, maximum: 10, want: 5},
+		{name: "at maximum", length: 10, minimum: 1, maximum: 10, want: 10},
+		{name: "zero allowed", length: 0, minimum: 0, maximum: 1, want: 0},
+		{name: "negative length", length: -1, minimum: 0, maximum: 1, wantErr: true},
+		{name: "zero refused", length: 0, minimum: 1, maximum: 1, wantErr: true},
+		{name: "below minimum", length: 1, minimum: 2, maximum: 3, wantErr: true},
+		{name: "above maximum", length: 4, minimum: 1, maximum: 3, wantErr: true},
+		{name: "zero maximum", length: 0, minimum: 0, maximum: 0, wantErr: true},
+		{name: "inverted bounds", length: 2, minimum: 3, maximum: 2, wantErr: true},
+		{name: "default maximum", length: int(CollectionMaximumDefault), minimum: 1, maximum: CollectionMaximumDefault, want: CollectionMaximumDefault},
+		{name: "past default maximum", length: int(CollectionMaximumDefault) + 1, minimum: 1, maximum: CollectionMaximumDefault, wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := DeriveCollectionCount(tc.length, tc.minimum, tc.maximum)
+			if tc.wantErr {
+				if !errors.Is(err, ErrFoundationContract) {
+					t.Fatalf("DeriveCollectionCount() error = %v, want %v", err, ErrFoundationContract)
+				}
+				return
+			}
+			if err != nil || got != tc.want {
+				t.Fatalf("DeriveCollectionCount() = %d, %v; want %d, nil", got, err, tc.want)
+			}
+		})
+	}
+}
+
 func TestDecodeStrictJSONRejectsUnboundedObjectFields(t *testing.T) {
 	t.Parallel()
 	var body strings.Builder

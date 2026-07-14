@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	CheckInResponseByteCap = 1 << 16
+	CheckInResponseByteCap = 128 << 10
 	CheckInBudget          = 8 * time.Second
 	CheckInMinInterval     = 24 * time.Hour
 	WarnWindow             = 7 * 24 * time.Hour

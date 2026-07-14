@@ -480,7 +480,7 @@ func validateDownloadSet(downloads []Download, count uint32) error {
 			return err
 		}
 		for _, prior := range downloads[:index] {
-			if prior.Platform == download.Platform {
+			if prior.Artifact == download.Artifact {
 				return fmt.Errorf(ErrFmtDownloadIndex, core.ErrReleaseContract)
 			}
 		}

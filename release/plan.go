@@ -83,6 +83,49 @@ type ReleasePlan struct {
 }
 
 func (p ReleasePlan) Validate() error {
+	if err := validateReleasePlanStructure(p); err != nil {
+		return err
+	}
+	if releasePlanRawStringBytes(p) <= ReleasePlanFastRawByteMaximum {
+		return nil
+	}
+	_, err := appendBoundedReleasePlanJSON(make([]byte, 0, ReleasePlanMaximumBytes), p)
+	return err
+}
+
+func releasePlanRawStringBytes(p ReleasePlan) int64 {
+	total := int64(len(p.Version.String()) + len(p.ReleaseID.String()) + len(p.Date.String()) +
+		len(p.Commit.String()) + len(p.Seed.value) + len(p.SeedRef.String()))
+	total += releaseRootRawStringBytes(p.Layout)
+	total += releaseSpecRawStringBytes(p.Spec)
+	total += int64(len(p.Toolchain.GoVersion.String()) + len(p.Toolchain.GarbleVersion.String()) +
+		len(p.VulnDB.DBVersion.String()) + len(p.Evidence.FastGateRef.String()) + len(p.Evidence.FinalEvidenceRef.String()))
+	for _, tool := range p.Tools {
+		total += int64(len(tool.Module.String()) + len(tool.Version.String()) + len(tool.GoSum.String()))
+	}
+	return total
+}
+
+func releaseRootRawStringBytes(layout ReleaseRootLayout) int64 {
+	return int64(len(layout.Version.String()) + len(layout.Date.String()) + len(layout.ReleaseID.String()) +
+		len(layout.Root.String()) + len(layout.Private.String()) + len(layout.Public.String()) +
+		len(layout.Platforms.String()) + len(layout.Receipts.String()) + len(layout.Manifests.String()) +
+		len(layout.Dogfood.String()))
+}
+
+func releaseSpecRawStringBytes(spec ProductReleaseSpec) int64 {
+	total := int64(len(spec.Version.String()) + len(spec.Policy.CommitStamp.Symbol.String()) +
+		len(spec.Policy.CommitStamp.Commit.String()))
+	for _, command := range spec.Commands {
+		total += int64(len(command.Name.String()) + len(command.ImportPath.String()))
+	}
+	for _, tag := range spec.Policy.Tags {
+		total += int64(len(tag.String()))
+	}
+	return total
+}
+
+func validateReleasePlanStructure(p ReleasePlan) error {
 	if p.Schema != core.SchemaReleasePlan {
 		return fmt.Errorf(ErrFmtReleasePlan, core.ErrReleaseContract)
 	}
@@ -103,10 +146,10 @@ func (p ReleasePlan) GarbleBuildRequests() ([]ReleaseGarbleBuildRequest, error) 
 }
 
 func (p ReleasePlan) Canonical(dst []byte) ([]byte, error) {
-	if err := p.Validate(); err != nil {
+	if err := validateReleasePlanStructure(p); err != nil {
 		return nil, err
 	}
-	return appendReleasePlanJSON(dst, p)
+	return appendBoundedReleasePlanJSON(dst, p)
 }
 
 func (p ReleasePlan) SigningSchema() core.SchemaID {
@@ -114,10 +157,19 @@ func (p ReleasePlan) SigningSchema() core.SchemaID {
 }
 
 func (p ReleasePlan) MarshalJSON() ([]byte, error) {
-	if err := p.Validate(); err != nil {
+	return p.Canonical(nil)
+}
+
+func appendBoundedReleasePlanJSON(dst []byte, p ReleasePlan) ([]byte, error) {
+	start := len(dst)
+	encoded, err := appendReleasePlanJSON(dst, p)
+	if err != nil {
 		return nil, err
 	}
-	return appendReleasePlanJSON(nil, p)
+	if int64(len(encoded)-start) > ReleasePlanMaximumBytes {
+		return nil, fmt.Errorf(ErrFmtReleasePlan, core.ErrReleaseContract)
+	}
+	return encoded, nil
 }
 
 func appendReleasePlanJSON(dst []byte, p ReleasePlan) ([]byte, error) {
@@ -301,6 +353,9 @@ func validateDeployPlanCrossIdentity(p DeployPlan) error {
 		return fmt.Errorf(ErrFmtDeployPlan, core.ErrReleaseContract)
 	}
 	if p.Manifest.ReleaseID.String() != p.ReleaseID.String() || p.Layout.ReleaseID.String() != p.ReleaseID.String() {
+		return fmt.Errorf(ErrFmtDeployPlan, core.ErrReleaseContract)
+	}
+	if p.Manifest.Date.String() != p.Layout.Date.String() {
 		return fmt.Errorf(ErrFmtDeployPlan, core.ErrReleaseContract)
 	}
 	canonical, err := p.Manifest.Canonical(nil)

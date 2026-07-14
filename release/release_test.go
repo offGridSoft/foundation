@@ -1560,6 +1560,7 @@ func TestDeployPlanHostileTable(t *testing.T) {
 		{name: "valid deploy plan accepted", mutate: func(*DeployPlan) {}},
 		{name: "manifest product drift rejected", wantErr: true, mutate: func(p *DeployPlan) { p.Manifest.Product = core.ProductBug }},
 		{name: "layout release id drift rejected", wantErr: true, mutate: func(p *DeployPlan) { p.Layout.ReleaseID = mustOtherReleaseID(t) }},
+		{name: "layout date drift rejected", wantErr: true, mutate: func(p *DeployPlan) { p.Layout = mustOtherDatedLayout(t, p.Layout) }},
 		{name: "manifest sha missing rejected", wantErr: true, mutate: func(p *DeployPlan) { p.ManifestSHA256 = core.SHA256Hex{} }},
 		{name: "manifest sha does not bind embedded manifest rejected", wantErr: true, mutate: func(p *DeployPlan) { p.ManifestSHA256 = mustSHA256(t, "d") }},
 		{name: "duplicate upload target rejected", mutate: func(p *DeployPlan) {

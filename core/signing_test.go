@@ -14,6 +14,25 @@ type signedTestBody struct {
 	Schema SchemaID `json:"-"`
 }
 
+type canonicalWithoutValidationBody struct {
+	Valid bool
+}
+
+func (b canonicalWithoutValidationBody) Validate() error {
+	if !b.Valid {
+		return ErrFoundationContract
+	}
+	return nil
+}
+
+func (canonicalWithoutValidationBody) Canonical(dst []byte) ([]byte, error) {
+	return append(dst, signedTestCanonicalJSON...), nil
+}
+
+func (canonicalWithoutValidationBody) SigningSchema() SchemaID {
+	return SchemaReleaseCommandRun
+}
+
 const signedTestBodyJSONFieldValue = "value"
 
 const (
@@ -132,6 +151,26 @@ func TestSignedVerifyAcceptsValidSignature(t *testing.T) {
 	keyring := SigningKeyring{Keys: []SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
 	if err := signed.Verify(keyring); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSigningBoundariesOwnBodyValidation(t *testing.T) {
+	t.Parallel()
+
+	keyID, publicKey, privateKey := signingTestKey(t, signedTestKeyIDToken)
+	invalid := canonicalWithoutValidationBody{}
+	if _, err := AppendSignedMessage(nil, keyID, invalid); !errors.Is(err, ErrFoundationContract) {
+		t.Fatalf("AppendSignedMessage(invalid body) error = %v, want %v", err, ErrFoundationContract)
+	}
+	message, err := appendSignedMessageValidated(nil, keyID, invalid)
+	if err != nil {
+		t.Fatalf("appendSignedMessageValidated(test fixture) error = %v", err)
+	}
+	signature := signTestMessage(t, privateKey, message)
+	signed := Signed[canonicalWithoutValidationBody]{Body: invalid, KeyID: keyID, Signature: signature}
+	keyring := SigningKeyring{Keys: []SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
+	if err := signed.Verify(keyring); !errors.Is(err, ErrFoundationContract) {
+		t.Fatalf("Signed.Verify(invalid body) error = %v, want %v", err, ErrFoundationContract)
 	}
 }
 

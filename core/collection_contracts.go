@@ -21,6 +21,17 @@ type CollectionCardinality struct {
 	RequireDeclared bool
 }
 
+func DeriveCollectionCount(length int, minimum, maximum uint32) (uint32, error) {
+	if err := (CollectionCardinality{Length: length, Minimum: minimum, Maximum: maximum}).Validate(); err != nil {
+		return 0, err
+	}
+	var count uint32
+	for range length {
+		count++
+	}
+	return count, nil
+}
+
 func (c CollectionCardinality) Validate() error {
 	if c.Length < 0 || c.Maximum == 0 || c.Minimum > c.Maximum {
 		return fmt.Errorf(ErrFmtCollectionCardinality, ErrFoundationContract)

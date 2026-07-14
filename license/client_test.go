@@ -1,6 +1,7 @@
 package license
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
@@ -15,6 +16,36 @@ import (
 
 	"github.com/offGridSoft/foundation/v2026/core"
 )
+
+func TestMaximalBugCheckInResponseFitsTransportBoundary(t *testing.T) {
+	t.Parallel()
+
+	grant, keyID, publicKey := signedBugGrant(t)
+	response := signBugCheckInResponse(t, BugCheckInResponseBody{
+		Schema:       core.SchemaBugCheckInResponse,
+		RequestNonce: testCheckInNonce(t),
+		Decision:     CheckInDecision{Granted: true, Refusal: RefusalNone},
+		Grant:        grant,
+		WriterRevocations: BugWriterRevocationDelivery{Values: makeRevocationDelivery(
+			t, keyID, int(BugWriterRevocationDeliveryMaximum),
+		)},
+	})
+	body, err := json.Marshal(core.APIEnvelope[BugCheckInResponse]{
+		RequestID: core.NewAPIRequestID("req-maximal-bug-check-in"),
+		Data:      &response,
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal(maximal response) error = %v", err)
+	}
+	if len(body) > CheckInResponseByteCap {
+		t.Fatalf("maximal legal response bytes = %d, cap = %d", len(body), CheckInResponseByteCap)
+	}
+	reply := &http.Response{Body: io.NopCloser(bytes.NewReader(body))}
+	keyring := core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
+	if _, err := readResponse[BugCheckInResponse](reply, keyring); err != nil {
+		t.Fatalf("readResponse(maximal response) error = %v", err)
+	}
+}
 
 func testProductVersion(t *testing.T) core.ProductVersion {
 	t.Helper()

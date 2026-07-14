@@ -7,7 +7,10 @@ import (
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
-const BugWriterRevocationDeliveryMax = 256
+const (
+	BugWriterRevocationDeliveryMaximum    uint32 = 256
+	BugWriterRevocationPersistenceMaximum uint32 = 16 << 10
+)
 
 // CheckInResponseBody is the exact compiler-owned response contract consumed
 // by the check-in transport. Products expose concrete response structures;
@@ -44,11 +47,11 @@ func (d CheckInDecision) Validate() error {
 }
 
 type BugCheckInResponseBody struct {
-	Grant             *BugCheckInGrant       `json:"grant,omitempty"`
-	WriterRevocations BugWriterRevocationSet `json:"writer_revocations"`
-	Decision          CheckInDecision        `json:"decision"`
-	RequestNonce      CheckInNonce           `json:"request_nonce"`
-	Schema            core.SchemaID          `json:"schema"`
+	Grant             *BugCheckInGrant            `json:"grant,omitempty"`
+	WriterRevocations BugWriterRevocationDelivery `json:"writer_revocations"`
+	Decision          CheckInDecision             `json:"decision"`
+	RequestNonce      CheckInNonce                `json:"request_nonce"`
+	Schema            core.SchemaID               `json:"schema"`
 }
 
 func (b BugCheckInResponseBody) Validate() error {
@@ -127,28 +130,39 @@ func (r BugCheckInResponse) VerifyRequestNonce(nonce CheckInNonce) error {
 	return nil
 }
 
-// BugWriterRevocationSet is the bounded, deterministic delivery and
-// persistence shape for server-signed Bug writer cutoffs.
+// BugWriterRevocationDelivery is the bounded server-to-client check-in shape.
+// Retained revocation state has a separate type and a larger lifetime bound.
+type BugWriterRevocationDelivery struct {
+	Values []core.Signed[BugWriterRevocationBody] `json:"values"`
+}
+
+func (d BugWriterRevocationDelivery) Validate() error {
+	return validateWriterRevocations(d.Values, BugWriterRevocationDeliveryMaximum)
+}
+
+func (d BugWriterRevocationDelivery) Verify(keyring core.SigningKeyring) error {
+	if err := d.Validate(); err != nil {
+		return err
+	}
+	if err := keyring.Validate(); err != nil {
+		return checkInResponseError(err)
+	}
+	for _, value := range d.Values {
+		if err := value.Verify(keyring); err != nil {
+			return checkInResponseError(err)
+		}
+	}
+	return nil
+}
+
+// BugWriterRevocationSet is the bounded lifetime persistence shape for every
+// verified cutoff observed by one installation.
 type BugWriterRevocationSet struct {
 	Values []core.Signed[BugWriterRevocationBody] `json:"values"`
 }
 
 func (s BugWriterRevocationSet) Validate() error {
-	if len(s.Values) > BugWriterRevocationDeliveryMax {
-		return checkInResponseError(core.ErrLicenseContract)
-	}
-	var prior core.SigningKeyID
-	for index, value := range s.Values {
-		if err := value.Validate(); err != nil {
-			return checkInResponseError(err)
-		}
-		current := value.Body.WriterKeyID
-		if index > 0 && current.String() <= prior.String() {
-			return checkInResponseError(core.ErrLicenseContract)
-		}
-		prior = current
-	}
-	return nil
+	return validateWriterRevocations(s.Values, BugWriterRevocationPersistenceMaximum)
 }
 
 func (s BugWriterRevocationSet) Verify(keyring core.SigningKeyring) error {
@@ -166,10 +180,30 @@ func (s BugWriterRevocationSet) Verify(keyring core.SigningKeyring) error {
 	return nil
 }
 
+func validateWriterRevocations(values []core.Signed[BugWriterRevocationBody], maximum uint32) error {
+	if err := (core.CollectionCardinality{
+		Length: len(values), Maximum: maximum,
+	}).Validate(); err != nil {
+		return checkInResponseError(err)
+	}
+	var prior core.SigningKeyID
+	for index, value := range values {
+		if err := value.Validate(); err != nil {
+			return checkInResponseError(err)
+		}
+		current := value.Body.WriterKeyID
+		if index > 0 && current.String() <= prior.String() {
+			return checkInResponseError(core.ErrLicenseContract)
+		}
+		prior = current
+	}
+	return nil
+}
+
 // Merge preserves the earliest signed cutoff ever observed for each writer.
 // An earlier server cutoff broadens revocation and therefore replaces a later
 // one; a later delivery can never narrow already-revoked history.
-func (s BugWriterRevocationSet) Merge(incoming BugWriterRevocationSet) (BugWriterRevocationSet, error) {
+func (s BugWriterRevocationSet) Merge(incoming BugWriterRevocationDelivery) (BugWriterRevocationSet, error) {
 	if err := s.Validate(); err != nil {
 		return BugWriterRevocationSet{}, err
 	}
