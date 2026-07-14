@@ -56,7 +56,7 @@ func TestDeployClientPrepareHostileHTTPTable(t *testing.T) {
 				_, _ = w.Write(tc.body(t, chain))
 			}))
 			defer server.Close()
-			endpoints, err := DeployEndpointsForBaseURL(server.URL)
+			endpoints, err := BugDeployEndpointsForBaseURL(server.URL)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -111,7 +111,7 @@ func TestDeployClientFinalizeHostileHTTPTable(t *testing.T) {
 				_, _ = w.Write(tc.body(t, chain))
 			}))
 			defer server.Close()
-			endpoints, err := DeployEndpointsForBaseURL(server.URL)
+			endpoints, err := BugDeployEndpointsForBaseURL(server.URL)
 			if err != nil {
 				t.Fatal(err)
 			}

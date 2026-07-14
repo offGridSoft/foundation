@@ -24,18 +24,44 @@ func TestDeployEndpointsHostileTable(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			endpoints, err := DeployEndpointsForBaseURL(tc.baseURL)
+			endpoints, err := BugDeployEndpointsForBaseURL(tc.baseURL)
 			if tc.wantErr {
 				if !errors.Is(err, core.ErrReleaseContract) {
-					t.Fatalf("DeployEndpointsForBaseURL() error = %v, want %v", err, core.ErrReleaseContract)
+					t.Fatalf("BugDeployEndpointsForBaseURL() error = %v, want %v", err, core.ErrReleaseContract)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("DeployEndpointsForBaseURL() error = %v", err)
+				t.Fatalf("BugDeployEndpointsForBaseURL() error = %v", err)
 			}
 			if err := endpoints.Validate(); err != nil {
 				t.Fatalf("DeployEndpoints.Validate() error = %v", err)
+			}
+		})
+	}
+}
+
+func TestProductDeployEndpointsUseOneSharedContract(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		build func(string) (DeployEndpoints, error)
+		name  string
+		root  string
+	}{
+		{name: core.ProductTokenBug, root: OffgridBugDeployRootPath, build: BugDeployEndpointsForBaseURL},
+		{name: core.ProductTokenWitness, root: OffgridWitnessDeployRootPath, build: WitnessDeployEndpointsForBaseURL},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			endpoints, err := tc.build(core.OffgridAPIBaseURL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got, want := endpoints.Prepare.String(), core.OffgridAPIBaseURL+tc.root+"/prepare"; got != want {
+				t.Fatalf("prepare endpoint = %q, want %q", got, want)
+			}
+			if got, want := endpoints.Finalize.String(), core.OffgridAPIBaseURL+tc.root+"/finalize"; got != want {
+				t.Fatalf("finalize endpoint = %q, want %q", got, want)
 			}
 		})
 	}
