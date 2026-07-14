@@ -295,6 +295,7 @@ type DeployPlan struct {
 	Version        core.ProductVersion `json:"version"`
 	ReleaseID      ReleaseID           `json:"release_id"`
 	ManifestSHA256 core.SHA256Hex      `json:"manifest_sha256"`
+	AttemptID      UploadAttemptID     `json:"upload_attempt_id"`
 	Layout         ReleaseRootLayout   `json:"layout"`
 	Targets        []UploadTarget      `json:"targets"`
 	Manifest       Manifest            `json:"manifest"`
@@ -310,7 +311,7 @@ func (p DeployPlan) Validate() error {
 	if err := validateDeployPlanIdentity(p); err != nil {
 		return err
 	}
-	return validateDeployTargets(p.Targets, p.TargetCount, p.Manifest)
+	return validateDeployTargets(p)
 }
 
 func (p DeployPlan) MarshalJSON() ([]byte, error) {
@@ -339,6 +340,7 @@ func appendDeployPlanJSON(dst []byte, p DeployPlan) ([]byte, error) {
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldVersion, p.Version)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldReleaseID, p.ReleaseID)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldManifestSHA256, p.ManifestSHA256)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldUploadAttemptID, p.AttemptID)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldLayout, p.Layout)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldTargets, p.Targets)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldTargetCount, p.TargetCount)
@@ -363,6 +365,9 @@ func validateDeployPlanIdentity(p DeployPlan) error {
 		return wrapReleaseContract(ErrFmtDeployPlan, err)
 	}
 	if err := p.ManifestSHA256.Validate(); err != nil {
+		return wrapReleaseContract(ErrFmtDeployPlan, err)
+	}
+	if err := p.AttemptID.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtDeployPlan, err)
 	}
 	if err := p.Layout.Validate(); err != nil {
@@ -394,25 +399,48 @@ func validateDeployPlanCrossIdentity(p DeployPlan) error {
 	return nil
 }
 
-func validateDeployTargets(targets []UploadTarget, count uint32, manifest Manifest) error {
+func validateDeployTargets(plan DeployPlan) error {
 	if err := (core.CollectionCardinality{
-		Length:          len(targets),
-		DeclaredCount:   count,
+		Length:          len(plan.Targets),
+		DeclaredCount:   plan.TargetCount,
 		Minimum:         1,
 		Maximum:         core.CollectionMaximumDefault,
 		RequireDeclared: true,
 	}).Validate(); err != nil {
 		return fmt.Errorf(ErrFmtDeployPlan, core.ErrReleaseContract)
 	}
-	for index, target := range targets {
+	for index, target := range plan.Targets {
 		if err := target.Validate(); err != nil {
 			return wrapReleaseContract(ErrFmtDeployPlan, err)
 		}
-		if index > 0 && deployTargetKey(targets[index-1]) >= deployTargetKey(target) {
+		if target.AttemptID != plan.AttemptID {
+			return fmt.Errorf(ErrFmtDeployPlan, core.ErrReleaseContract)
+		}
+		artifact, found := manifestArtifactByName(plan.Manifest, target.Artifact)
+		if !found {
+			return fmt.Errorf(ErrFmtDeployPlan, core.ErrReleaseContract)
+		}
+		if err := validateUploadBinding(UploadBindingInput{
+			Product: plan.Product, ReleaseID: plan.ReleaseID, ManifestSHA256: plan.ManifestSHA256,
+			Artifact: artifact.Name, ArtifactSHA256: artifact.SHA256, ArtifactSize: artifact.Size,
+			Provider: target.Provider, Bucket: target.Bucket, Object: target.Object, AttemptID: target.AttemptID,
+		}, target.Binding, ErrFmtDeployPlan); err != nil {
+			return err
+		}
+		if index > 0 && deployTargetKey(plan.Targets[index-1]) >= deployTargetKey(target) {
 			return fmt.Errorf(ErrFmtDeployPlan, core.ErrReleaseContract)
 		}
 	}
-	return validateDeployTargetCoverage(targets, manifest)
+	return validateDeployTargetCoverage(plan.Targets, plan.Manifest)
+}
+
+func manifestArtifactByName(manifest Manifest, name ArtifactName) (Artifact, bool) {
+	for _, artifact := range manifest.Artifacts {
+		if artifact.Name == name {
+			return artifact, true
+		}
+	}
+	return Artifact{}, false
 }
 
 func deployTargetKey(target UploadTarget) string {

@@ -1828,6 +1828,7 @@ func validDeployPlan(t *testing.T) DeployPlan {
 		Manifest:       manifest,
 		ManifestSHA256: core.NewSHA256Hex(sha256.Sum256(canonical)),
 		Layout:         validWitnessReleaseRootLayout(t),
+		AttemptID:      validUploadAttemptID(t),
 		Targets:        []UploadTarget{validUploadTarget(t)},
 		TargetCount:    1,
 	}
@@ -2065,6 +2066,16 @@ func validArtifactWithSize(t *testing.T, name string, size uint64) Artifact {
 
 func validUploadTarget(t *testing.T) UploadTarget {
 	t.Helper()
+	return validUploadTargetFor(t, validManifest(t), core.StorageProviderGCS, validUploadAttemptID(t))
+}
+
+func validUploadTargetFor(
+	t *testing.T,
+	manifest Manifest,
+	provider core.StorageProvider,
+	attemptID UploadAttemptID,
+) UploadTarget {
+	t.Helper()
 	object, err := BuildObjectKey(validObjectKeyInput(t))
 	if err != nil {
 		t.Fatal(err)
@@ -2073,43 +2084,130 @@ func validUploadTarget(t *testing.T) UploadTarget {
 	if err != nil {
 		t.Fatal(err)
 	}
+	canonical, err := manifest.Canonical(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifact := manifest.Artifacts[0]
+	binding, err := DeriveUploadBinding(UploadBindingInput{
+		Product: manifest.Product, ReleaseID: manifest.ReleaseID,
+		ManifestSHA256: core.NewSHA256Hex(sha256.Sum256(canonical)),
+		Artifact:       artifact.Name, ArtifactSHA256: artifact.SHA256, ArtifactSize: artifact.Size,
+		Provider: provider, Bucket: mustBucket(t), Object: object, AttemptID: attemptID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	attemptHeader, err := UploadAttemptHeader(provider, attemptID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bindingHeader, err := UploadBindingHeader(provider, binding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	createOnlyHeader, err := UploadCreateOnlyHeader(provider)
+	if err != nil {
+		t.Fatal(err)
+	}
 	return UploadTarget{
-		Artifact:  mustArtifactName(t, ToolsArchiveName),
-		Object:    object,
-		Bucket:    mustBucket(t),
-		URL:       uploadURL,
-		Headers:   []core.UploadHeader{{Name: core.HTTPHeaderContentType, Value: "application/octet-stream"}},
+		Artifact: mustArtifactName(t, ToolsArchiveName),
+		Object:   object,
+		Bucket:   mustBucket(t),
+		URL:      uploadURL,
+		Headers: []core.UploadHeader{
+			{Name: core.HTTPHeaderContentType, Value: "application/octet-stream"},
+			attemptHeader,
+			bindingHeader,
+			createOnlyHeader,
+		},
+		AttemptID: attemptID,
+		Binding:   binding,
 		ExpiresAt: core.UnixNanoTimeFromInt64(1782302400000000000),
-		Provider:  core.StorageProviderGCS,
+		Provider:  provider,
 		Method:    core.UploadMethodSignedPUT,
 	}
 }
 
 func validUploadReceipt(t *testing.T) UploadReceipt {
 	t.Helper()
+	manifest := validManifest(t)
+	attemptID := validUploadAttemptID(t)
 	object, err := BuildObjectKey(validObjectKeyInput(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical, err := manifest.Canonical(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifestHash := core.NewSHA256Hex(sha256.Sum256(canonical))
+	artifact := manifest.Artifacts[0]
+	binding, err := DeriveUploadBinding(UploadBindingInput{
+		Product: manifest.Product, ReleaseID: manifest.ReleaseID, ManifestSHA256: manifestHash,
+		Artifact: artifact.Name, ArtifactSHA256: artifact.SHA256, ArtifactSize: artifact.Size,
+		Provider: core.StorageProviderGCS, Bucket: mustBucket(t), Object: object, AttemptID: attemptID,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return UploadReceipt{
 		Schema:         core.SchemaReleaseUploadReceipt,
-		Product:        core.ProductWitness,
-		Version:        mustVersion(t),
-		ReleaseID:      mustReleaseID(t),
-		Commit:         mustCommit(t),
-		ManifestSHA256: mustSHA256(t, "f"),
+		Product:        manifest.Product,
+		Version:        manifest.Version,
+		ReleaseID:      manifest.ReleaseID,
+		Commit:         manifest.Commit,
+		ManifestSHA256: manifestHash,
+		AttemptID:      attemptID,
 		UploadedAt:     core.UnixNanoTimeFromInt64(1782302400000000000),
 		Objects: []UploadedArtifact{{
-			Artifact: mustArtifactName(t, ToolsArchiveName),
-			Object:   object,
-			Provider: core.StorageProviderGCS,
-			Bucket:   mustBucket(t),
-			SHA256:   mustSHA256(t, "b"),
-			Size:     core.NewByteCount(12),
+			Artifact: artifact.Name, Object: object, Provider: core.StorageProviderGCS,
+			Bucket: mustBucket(t), SHA256: artifact.SHA256, Size: artifact.Size,
+			AttemptID: attemptID, Binding: binding,
 		}},
 		ObjectCount: 1,
 		TotalBytes:  core.NewByteCount(12),
 	}
+}
+
+func validUploadedArtifactFor(
+	t *testing.T,
+	manifest Manifest,
+	provider core.StorageProvider,
+	attemptID UploadAttemptID,
+) UploadedArtifact {
+	t.Helper()
+	target := validUploadTargetFor(t, manifest, provider, attemptID)
+	canonical, err := manifest.Canonical(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifact := manifest.Artifacts[0]
+	binding, err := DeriveUploadBinding(UploadBindingInput{
+		Product: manifest.Product, ReleaseID: manifest.ReleaseID,
+		ManifestSHA256: core.NewSHA256Hex(sha256.Sum256(canonical)),
+		Artifact:       artifact.Name, ArtifactSHA256: artifact.SHA256, ArtifactSize: artifact.Size,
+		Provider: provider, Bucket: target.Bucket, Object: target.Object, AttemptID: attemptID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return UploadedArtifact{
+		Artifact: artifact.Name, Object: target.Object, Bucket: target.Bucket,
+		SHA256: artifact.SHA256, Size: artifact.Size, AttemptID: attemptID,
+		Binding: binding, Provider: provider,
+	}
+}
+
+func validUploadAttemptID(t *testing.T) UploadAttemptID {
+	t.Helper()
+	var entropy [UploadAttemptIDEntropyBytes]byte
+	entropy[len(entropy)-1] = 1
+	id, err := NewUploadAttemptID(entropy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
 }
 
 func validDownloadIndex(t *testing.T) DownloadIndex {

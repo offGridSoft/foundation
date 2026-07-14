@@ -14,7 +14,8 @@ func TestBuildUploadReceiptBindsManifestWithoutAliasing(t *testing.T) {
 	manifest := validManifest(t)
 	objects := append([]UploadedArtifact(nil), validUploadReceipt(t).Objects...)
 	receipt, err := BuildUploadReceipt(UploadReceiptInput{
-		Manifest: manifest, Objects: objects, UploadedAt: core.UnixNanoTimeFromInt64(1782302400000000000),
+		Manifest: manifest, Objects: objects, AttemptID: validUploadAttemptID(t),
+		UploadedAt: core.UnixNanoTimeFromInt64(1782302400000000000),
 	})
 	if err != nil {
 		t.Fatalf("BuildUploadReceipt() error = %v", err)
@@ -55,9 +56,13 @@ func TestBuildUploadReceiptRejectsManifestObjectDriftTable(t *testing.T) {
 			t.Parallel()
 			input := UploadReceiptInput{
 				Manifest: validManifest(t), Objects: append([]UploadedArtifact(nil), validUploadReceipt(t).Objects...),
+				AttemptID:  validUploadAttemptID(t),
 				UploadedAt: core.UnixNanoTimeFromInt64(1782302400000000000),
 			}
 			tc.mutate(&input)
+			if err := input.Validate(); !errors.Is(err, core.ErrReleaseContract) {
+				t.Fatalf("UploadReceiptInput.Validate() error = %v, want %v", err, core.ErrReleaseContract)
+			}
 			if _, err := BuildUploadReceipt(input); !errors.Is(err, core.ErrReleaseContract) {
 				t.Fatalf("BuildUploadReceipt() error = %v, want %v", err, core.ErrReleaseContract)
 			}
@@ -68,11 +73,12 @@ func TestBuildUploadReceiptRejectsManifestObjectDriftTable(t *testing.T) {
 func TestReleaseHandoffSupportsCompleteGCSAndS3Mirrors(t *testing.T) {
 	t.Parallel()
 	manifest := validManifest(t)
-	gcsObject := validUploadReceipt(t).Objects[0]
-	s3Object := gcsObject
-	s3Object.Provider = core.StorageProviderS3
+	attemptID := validUploadAttemptID(t)
+	gcsObject := validUploadedArtifactFor(t, manifest, core.StorageProviderGCS, attemptID)
+	s3Object := validUploadedArtifactFor(t, manifest, core.StorageProviderS3, attemptID)
 	receipt, err := BuildUploadReceipt(UploadReceiptInput{
 		Manifest: manifest, Objects: []UploadedArtifact{s3Object, gcsObject},
+		AttemptID:  attemptID,
 		UploadedAt: core.UnixNanoTimeFromInt64(1782302400000000000),
 	})
 	if err != nil {
@@ -96,11 +102,11 @@ func TestReleaseHandoffSupportsCompleteGCSAndS3Mirrors(t *testing.T) {
 		t.Fatalf("BuildDownloadIndex(two providers) = %+v", index.Downloads)
 	}
 
-	gcsTarget := validUploadTarget(t)
-	s3Target := gcsTarget
-	s3Target.Provider = core.StorageProviderS3
+	gcsTarget := validUploadTargetFor(t, manifest, core.StorageProviderGCS, attemptID)
+	s3Target := validUploadTargetFor(t, manifest, core.StorageProviderS3, attemptID)
 	plan, err := BuildDeployPlan(DeployPlanInput{
 		Manifest: manifest, Layout: validWitnessReleaseRootLayout(t), Targets: []UploadTarget{s3Target, gcsTarget},
+		AttemptID: attemptID,
 	})
 	if err != nil {
 		t.Fatalf("BuildDeployPlan(two providers) error = %v", err)
@@ -129,6 +135,7 @@ func TestDeployPlanRejectsIncompleteOrUnauthorisedTargetsTable(t *testing.T) {
 			t.Parallel()
 			input := DeployPlanInput{
 				Manifest: validManifest(t), Layout: validWitnessReleaseRootLayout(t), Targets: []UploadTarget{validUploadTarget(t)},
+				AttemptID: validUploadAttemptID(t),
 			}
 			tc.mutate(&input)
 			if _, err := BuildDeployPlan(input); !errors.Is(err, core.ErrReleaseContract) {
@@ -142,7 +149,10 @@ func TestBuildDeployPlanDerivesBoundIdentityWithoutAliasing(t *testing.T) {
 	t.Parallel()
 	manifest := validManifest(t)
 	targets := []UploadTarget{validUploadTarget(t)}
-	input := DeployPlanInput{Manifest: manifest, Layout: validWitnessReleaseRootLayout(t), Targets: targets}
+	input := DeployPlanInput{
+		Manifest: manifest, Layout: validWitnessReleaseRootLayout(t), Targets: targets,
+		AttemptID: validUploadAttemptID(t),
+	}
 	if err := input.Validate(); err != nil {
 		t.Fatalf("DeployPlanInput.Validate() error = %v", err)
 	}

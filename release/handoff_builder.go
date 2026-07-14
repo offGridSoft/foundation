@@ -15,22 +15,26 @@ var (
 )
 
 type UploadReceiptInput struct {
+	AttemptID  UploadAttemptID
 	Objects    []UploadedArtifact
 	Manifest   Manifest
 	UploadedAt core.UnixNanoTime
 }
 
 func (i UploadReceiptInput) Validate() error {
-	_, err := uploadReceiptFromInput(i)
-	return err
+	receipt, err := uploadReceiptFromInput(i)
+	if err != nil {
+		return err
+	}
+	return receipt.VerifyManifest(i.Manifest)
 }
 
 func BuildUploadReceipt(input UploadReceiptInput) (UploadReceipt, error) {
-	receipt, err := uploadReceiptFromInput(input)
-	if err != nil {
+	if err := input.Validate(); err != nil {
 		return UploadReceipt{}, err
 	}
-	if err := receipt.VerifyManifest(input.Manifest); err != nil {
+	receipt, err := uploadReceiptFromInput(input)
+	if err != nil {
 		return UploadReceipt{}, err
 	}
 	return receipt, nil
@@ -54,6 +58,7 @@ func uploadReceiptFromInput(input UploadReceiptInput) (UploadReceipt, error) {
 		Commit:         input.Manifest.Commit,
 		ManifestSHA256: core.NewSHA256Hex(sha256.Sum256(canonical)),
 		Objects:        set.Items,
+		AttemptID:      input.AttemptID,
 		UploadedAt:     input.UploadedAt,
 		TotalBytes:     set.TotalBytes,
 		ObjectCount:    set.Count,
@@ -107,9 +112,10 @@ func hasProviderUploadedArtifact(objects []UploadedArtifact, provider core.Stora
 }
 
 type DeployPlanInput struct {
-	Layout   ReleaseRootLayout
-	Targets  []UploadTarget
-	Manifest Manifest
+	AttemptID UploadAttemptID
+	Layout    ReleaseRootLayout
+	Targets   []UploadTarget
+	Manifest  Manifest
 }
 
 func (i DeployPlanInput) Validate() error {
@@ -151,6 +157,7 @@ func deployPlanFromInput(input DeployPlanInput) (DeployPlan, error) {
 		Layout:         input.Layout,
 		Targets:        cloneAndSortUploadTargets(input.Targets),
 		Manifest:       manifest,
+		AttemptID:      input.AttemptID,
 		TargetCount:    count,
 	}, nil
 }

@@ -225,6 +225,8 @@ type UploadTarget struct {
 	Object    ObjectKey            `json:"object"`
 	Bucket    Bucket               `json:"bucket"`
 	URL       core.SignedUploadURL `json:"url"`
+	AttemptID UploadAttemptID      `json:"upload_attempt_id"`
+	Binding   UploadBinding        `json:"upload_binding"`
 	Headers   []core.UploadHeader  `json:"headers"`
 	ExpiresAt core.UnixNanoTime    `json:"expires_at"`
 	Provider  core.StorageProvider `json:"provider"`
@@ -232,6 +234,19 @@ type UploadTarget struct {
 }
 
 func (t UploadTarget) Validate() error {
+	if err := validateUploadTargetLocation(t); err != nil {
+		return err
+	}
+	if err := validateUploadTargetAuthorization(t); err != nil {
+		return err
+	}
+	if err := core.ValidateRequiredUnixNanoTime(t.ExpiresAt); err != nil {
+		return wrapReleaseContract(ErrFmtUploadTarget, err)
+	}
+	return nil
+}
+
+func validateUploadTargetLocation(t UploadTarget) error {
 	if err := t.Artifact.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtUploadTarget, err)
 	}
@@ -244,28 +259,37 @@ func (t UploadTarget) Validate() error {
 	if err := t.Bucket.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtUploadTarget, err)
 	}
+	return nil
+}
+
+func validateUploadTargetAuthorization(t UploadTarget) error {
 	if err := t.URL.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtUploadTarget, err)
 	}
 	if err := t.Method.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtUploadTarget, err)
 	}
-	if err := core.ValidateUploadHeaders(t.Headers); err != nil {
+	if err := t.AttemptID.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtUploadTarget, err)
 	}
-	if err := core.ValidateRequiredUnixNanoTime(t.ExpiresAt); err != nil {
+	if err := t.Binding.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtUploadTarget, err)
+	}
+	if err := validateUploadBindingHeaders(t); err != nil {
+		return err
 	}
 	return nil
 }
 
 type UploadedArtifact struct {
-	Artifact ArtifactName         `json:"artifact"`
-	Object   ObjectKey            `json:"object"`
-	Bucket   Bucket               `json:"bucket"`
-	SHA256   core.SHA256Hex       `json:"sha256"`
-	Size     core.ByteCount       `json:"size_bytes"`
-	Provider core.StorageProvider `json:"provider"`
+	Artifact  ArtifactName         `json:"artifact"`
+	Object    ObjectKey            `json:"object"`
+	Bucket    Bucket               `json:"bucket"`
+	SHA256    core.SHA256Hex       `json:"sha256"`
+	AttemptID UploadAttemptID      `json:"upload_attempt_id"`
+	Binding   UploadBinding        `json:"upload_binding"`
+	Size      core.ByteCount       `json:"size_bytes"`
+	Provider  core.StorageProvider `json:"provider"`
 }
 
 func (a UploadedArtifact) Validate() error {
@@ -287,6 +311,12 @@ func (a UploadedArtifact) Validate() error {
 	if err := a.Size.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtUploadReceipt, err)
 	}
+	if err := a.AttemptID.Validate(); err != nil {
+		return wrapReleaseContract(ErrFmtUploadReceipt, err)
+	}
+	if err := a.Binding.Validate(); err != nil {
+		return wrapReleaseContract(ErrFmtUploadReceipt, err)
+	}
 	return nil
 }
 
@@ -303,6 +333,7 @@ type UploadReceipt struct {
 	ReleaseID      ReleaseID           `json:"release_id"`
 	Commit         core.BuildCommit    `json:"commit"`
 	ManifestSHA256 core.SHA256Hex      `json:"manifest_sha256"`
+	AttemptID      UploadAttemptID     `json:"upload_attempt_id"`
 	Objects        []UploadedArtifact  `json:"objects"`
 	UploadedAt     core.UnixNanoTime   `json:"uploaded_at"`
 	TotalBytes     core.ByteCount      `json:"total_bytes"`
@@ -318,7 +349,7 @@ func (r UploadReceipt) Validate() error {
 	if err := validateReceiptIdentity(r); err != nil {
 		return err
 	}
-	return validateUploadedSet(r.Objects, r.ObjectCount, r.TotalBytes)
+	return validateUploadedSet(r)
 }
 
 func (r UploadReceipt) Canonical(dst []byte) ([]byte, error) {
@@ -363,6 +394,7 @@ func appendUploadReceiptJSON(dst []byte, r UploadReceipt) ([]byte, error) {
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCommit, r.Commit)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldManifestSHA256, r.ManifestSHA256)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldObjects, r.Objects)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldUploadAttemptID, r.AttemptID)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldUploadedAt, r.UploadedAt)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldTotalBytes, r.TotalBytes)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldObjectCount, r.ObjectCount)
@@ -387,6 +419,9 @@ func validateReceiptIdentity(r UploadReceipt) error {
 		return wrapReleaseContract(ErrFmtUploadReceipt, err)
 	}
 	if err := r.ManifestSHA256.Validate(); err != nil {
+		return wrapReleaseContract(ErrFmtUploadReceipt, err)
+	}
+	if err := r.AttemptID.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtUploadReceipt, err)
 	}
 	if err := ValidateReleaseIDIdentity(r.ReleaseID, r.Product, r.Version, r.Commit); err != nil {
@@ -520,16 +555,26 @@ func validateDownloadIndexIdentity(i DownloadIndex) error {
 	return nil
 }
 
-func validateUploadedSet(objects []UploadedArtifact, count uint32, total core.ByteCount) error {
+func validateUploadedSet(receipt UploadReceipt) error {
 	if err := validateCoreArtifactSet(core.ArtifactSet[UploadedArtifact]{
-		Items:      objects,
-		Count:      count,
-		TotalBytes: total,
+		Items:      receipt.Objects,
+		Count:      receipt.ObjectCount,
+		TotalBytes: receipt.TotalBytes,
 	}, ErrFmtUploadReceipt); err != nil {
 		return err
 	}
-	for index, object := range objects {
-		for _, prior := range objects[:index] {
+	for index, object := range receipt.Objects {
+		if object.AttemptID != receipt.AttemptID {
+			return fmt.Errorf(ErrFmtUploadReceipt, core.ErrReleaseContract)
+		}
+		if err := validateUploadBinding(UploadBindingInput{
+			Product: receipt.Product, ReleaseID: receipt.ReleaseID, ManifestSHA256: receipt.ManifestSHA256,
+			Artifact: object.Artifact, ArtifactSHA256: object.SHA256, ArtifactSize: object.Size,
+			Provider: object.Provider, Bucket: object.Bucket, Object: object.Object, AttemptID: object.AttemptID,
+		}, object.Binding, ErrFmtUploadReceipt); err != nil {
+			return err
+		}
+		for _, prior := range receipt.Objects[:index] {
 			if prior.Provider == object.Provider && prior.Object == object.Object {
 				return fmt.Errorf(ErrFmtUploadReceipt, core.ErrReleaseContract)
 			}

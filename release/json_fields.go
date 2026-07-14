@@ -2,8 +2,12 @@ package release
 
 const (
 	jsonFieldArtifactCount    = "artifact_count"
+	jsonFieldArtifact         = "artifact"
+	jsonFieldArtifactSHA256   = "artifact_sha256"
+	jsonFieldArtifactSize     = "artifact_size_bytes"
 	jsonFieldArtifacts        = "artifacts"
 	jsonFieldBuildVCS         = "build_vcs"
+	jsonFieldBucket           = "bucket"
 	jsonFieldClearBuildID     = "clear_build_id"
 	jsonFieldCommand          = "command"
 	jsonFieldCommandCount     = "command_count"
@@ -40,7 +44,9 @@ const (
 	jsonFieldOperatorSHA256   = "operator_sha256"
 	jsonFieldOutput           = "output"
 	jsonFieldObjectCount      = "object_count"
+	jsonFieldObject           = "object"
 	jsonFieldPlatform         = "platform"
+	jsonFieldProvider         = "provider"
 	jsonFieldPlatformCount    = "platform_count"
 	jsonFieldPlatforms        = "platforms"
 	jsonFieldPolicy           = "policy"
@@ -71,5 +77,7 @@ const (
 	jsonFieldUserSHA256       = "user_sha256"
 	jsonFieldVersion          = "version"
 	jsonFieldUploadedAt       = "uploaded_at"
+	jsonFieldUploadAttemptID  = "upload_attempt_id"
+	jsonFieldUploadBinding    = "upload_binding"
 	jsonFieldVulnDB           = "vuln_db"
 )

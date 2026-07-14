@@ -15,6 +15,7 @@ var _ core.CanonicalBody = BugWriterAttestationBody{}
 type BugWriterAttestationBody struct {
 	DeviceFingerprint core.DeviceFingerprint `json:"device_fingerprint"`
 	WriterKeyID       core.SigningKeyID      `json:"writer_key_id"`
+	RepositoryID      core.BugRepositoryID   `json:"repository_id"`
 	OperationDigest   core.SHA256Hex         `json:"operation_sha256"`
 	OccurredAt        core.UnixNanoTime      `json:"occurred_at"`
 	Schema            core.SchemaID          `json:"schema"`
@@ -28,6 +29,9 @@ func (b BugWriterAttestationBody) Validate() error {
 		return writerAttestationError(err)
 	}
 	if err := b.WriterKeyID.Validate(); err != nil {
+		return writerAttestationError(err)
+	}
+	if err := b.RepositoryID.Validate(); err != nil {
 		return writerAttestationError(err)
 	}
 	if err := b.OperationDigest.Validate(); err != nil {
@@ -55,6 +59,7 @@ func (b BugWriterAttestationBody) Canonical(dst []byte) ([]byte, error) {
 	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, b.Schema)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDeviceFingerprint, b.DeviceFingerprint)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldWriterKeyID, b.WriterKeyID)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldRepositoryID, b.RepositoryID)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldOperationSHA256, b.OperationDigest)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldOccurredAt, b.OccurredAt)
 	if err != nil {

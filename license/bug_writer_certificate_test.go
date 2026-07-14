@@ -88,6 +88,7 @@ func TestBugWriterAttestationBodyRejectsHostileSubstitutionTable(t *testing.T) {
 		{name: "certificate schema rejected", mutate: func(b *BugWriterAttestationBody) { b.Schema = core.SchemaBugWriterCertificate }},
 		{name: "missing device rejected", mutate: func(b *BugWriterAttestationBody) { b.DeviceFingerprint = core.DeviceFingerprint{} }},
 		{name: "missing writer rejected", mutate: func(b *BugWriterAttestationBody) { b.WriterKeyID = core.SigningKeyID{} }},
+		{name: "missing repository rejected", mutate: func(b *BugWriterAttestationBody) { b.RepositoryID = core.BugRepositoryID{} }},
 		{name: "missing operation digest rejected", mutate: func(b *BugWriterAttestationBody) { b.OperationDigest = core.SHA256Hex{} }},
 		{name: "missing occurrence time rejected", mutate: func(b *BugWriterAttestationBody) { b.OccurredAt = core.UnixNanoTime{} }},
 		{name: "zero body rejected", mutate: func(b *BugWriterAttestationBody) { *b = BugWriterAttestationBody{} }},
@@ -145,9 +146,21 @@ func testWriterAttestationBody(t *testing.T) BugWriterAttestationBody {
 		Schema:            core.SchemaBugWriterAttestation,
 		DeviceFingerprint: grant.WriterCertificate.Body.DeviceFingerprint,
 		WriterKeyID:       grant.WriterCertificate.Body.Writer.KeyID,
+		RepositoryID:      testBugRepositoryID(t),
 		OperationDigest:   digest,
 		OccurredAt:        grant.WriterCertificate.Body.IssuedAt,
 	}
+}
+
+func testBugRepositoryID(t *testing.T) core.BugRepositoryID {
+	t.Helper()
+	var entropy [core.BugRepositoryIDEntropyBytes]byte
+	entropy[len(entropy)-1] = 1
+	id, err := core.NewBugRepositoryID(entropy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
 }
 
 func differentBugWriterKey(t *testing.T) BugWriterKey {
