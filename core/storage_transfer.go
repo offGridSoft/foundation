@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 type StorageProvider uint8
@@ -136,5 +137,85 @@ func (m *UploadMethod) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*m = parsed
+	return nil
+}
+
+type SignedUploadURL struct {
+	value string
+}
+
+func ParseSignedUploadURL(value string) (SignedUploadURL, error) {
+	if err := ValidateHTTPSURL(value, HTTPSURLPolicy{
+		MaxRunes:    HTTPSURLDefaultMaxRunes,
+		RequirePath: true,
+		AllowQuery:  true,
+	}); err != nil {
+		return SignedUploadURL{}, fmt.Errorf(ErrFmtSignedUploadURL, ErrFoundationContract)
+	}
+	return SignedUploadURL{value: value}, nil
+}
+
+func (u SignedUploadURL) String() string {
+	return u.value
+}
+
+func (u SignedUploadURL) Validate() error {
+	_, err := ParseSignedUploadURL(u.value)
+	return err
+}
+
+func (u SignedUploadURL) MarshalJSON() ([]byte, error) {
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(u.value)
+}
+
+func (u *SignedUploadURL) UnmarshalJSON(data []byte) error {
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return fmt.Errorf(ErrFmtSignedUploadURL, ErrFoundationContract)
+	}
+	parsed, err := ParseSignedUploadURL(value)
+	if err != nil {
+		return err
+	}
+	*u = parsed
+	return u.Validate()
+}
+
+type UploadHeader struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+func (h UploadHeader) Validate() error {
+	if err := ValidateHTTPHeaderName(h.Name); err != nil {
+		return fmt.Errorf(ErrFmtUploadHeader, ErrFoundationContract)
+	}
+	if err := ValidateHTTPHeaderValue(h.Value); err != nil {
+		return fmt.Errorf(ErrFmtUploadHeader, ErrFoundationContract)
+	}
+	return nil
+}
+
+func ValidateUploadHeaders(headers []UploadHeader) error {
+	if err := (CollectionCardinality{
+		Length:  len(headers),
+		Minimum: 0,
+		Maximum: HTTPHeaderMaximumDefault,
+	}).Validate(); err != nil {
+		return fmt.Errorf(ErrFmtUploadHeader, ErrFoundationContract)
+	}
+	for index, header := range headers {
+		if err := header.Validate(); err != nil {
+			return err
+		}
+		for _, prior := range headers[:index] {
+			if strings.EqualFold(prior.Name, header.Name) {
+				return fmt.Errorf(ErrFmtUploadHeader, ErrFoundationContract)
+			}
+		}
+	}
 	return nil
 }

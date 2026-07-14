@@ -306,7 +306,7 @@ func (p DeployPlan) Validate() error {
 	if err := validateDeployPlanIdentity(p); err != nil {
 		return err
 	}
-	return validateDeployTargets(p.Targets, p.TargetCount)
+	return validateDeployTargets(p.Targets, p.TargetCount, p.Manifest)
 }
 
 func (p DeployPlan) MarshalJSON() ([]byte, error) {
@@ -374,7 +374,7 @@ func validateDeployPlanCrossIdentity(p DeployPlan) error {
 	return nil
 }
 
-func validateDeployTargets(targets []UploadTarget, count uint32) error {
+func validateDeployTargets(targets []UploadTarget, count uint32, manifest Manifest) error {
 	if err := (core.CollectionCardinality{
 		Length:          len(targets),
 		DeclaredCount:   count,
@@ -388,15 +388,54 @@ func validateDeployTargets(targets []UploadTarget, count uint32) error {
 		if err := target.Validate(); err != nil {
 			return wrapReleaseContract(ErrFmtDeployPlan, err)
 		}
-		for _, prior := range targets[:index] {
-			if deployTargetKey(prior) == deployTargetKey(target) {
-				return fmt.Errorf(ErrFmtDeployPlan, core.ErrReleaseContract)
-			}
+		if index > 0 && deployTargetKey(targets[index-1]) >= deployTargetKey(target) {
+			return fmt.Errorf(ErrFmtDeployPlan, core.ErrReleaseContract)
+		}
+	}
+	return validateDeployTargetCoverage(targets, manifest)
+}
+
+func deployTargetKey(target UploadTarget) string {
+	return target.Provider.String() + "/" + target.Artifact.String()
+}
+
+func validateDeployTargetCoverage(targets []UploadTarget, manifest Manifest) error {
+	for _, target := range targets {
+		if !manifestHasUploadTarget(manifest, target) {
+			return fmt.Errorf(ErrFmtDeployPlan, core.ErrReleaseContract)
+		}
+	}
+	for _, target := range targets {
+		if !providerTargetsEveryManifestArtifact(targets, target.Provider, manifest) {
+			return fmt.Errorf(ErrFmtDeployPlan, core.ErrReleaseContract)
 		}
 	}
 	return nil
 }
 
-func deployTargetKey(target UploadTarget) string {
-	return target.Provider.String() + "/" + target.Bucket.String() + "/" + target.Prefix.String()
+func manifestHasUploadTarget(manifest Manifest, target UploadTarget) bool {
+	for _, artifact := range manifest.Artifacts {
+		if artifact.Name == target.Artifact {
+			return true
+		}
+	}
+	return false
+}
+
+func providerTargetsEveryManifestArtifact(targets []UploadTarget, provider core.StorageProvider, manifest Manifest) bool {
+	for _, artifact := range manifest.Artifacts {
+		if !hasProviderUploadTarget(targets, provider, artifact.Name) {
+			return false
+		}
+	}
+	return true
+}
+
+func hasProviderUploadTarget(targets []UploadTarget, provider core.StorageProvider, artifact ArtifactName) bool {
+	for _, target := range targets {
+		if target.Provider == provider && target.Artifact == artifact {
+			return true
+		}
+	}
+	return false
 }

@@ -221,23 +221,39 @@ func appendManifestJSON(dst []byte, m Manifest) ([]byte, error) {
 }
 
 type UploadTarget struct {
-	Bucket   Bucket               `json:"bucket"`
-	Prefix   ObjectKey            `json:"prefix"`
-	Provider core.StorageProvider `json:"provider"`
-	Method   core.UploadMethod    `json:"method"`
+	Artifact  ArtifactName         `json:"artifact"`
+	Object    ObjectKey            `json:"object"`
+	Bucket    Bucket               `json:"bucket"`
+	URL       core.SignedUploadURL `json:"url"`
+	Headers   []core.UploadHeader  `json:"headers"`
+	ExpiresAt core.UnixNanoTime    `json:"expires_at"`
+	Provider  core.StorageProvider `json:"provider"`
+	Method    core.UploadMethod    `json:"method"`
 }
 
 func (t UploadTarget) Validate() error {
+	if err := t.Artifact.Validate(); err != nil {
+		return wrapReleaseContract(ErrFmtUploadTarget, err)
+	}
+	if err := t.Object.Validate(); err != nil {
+		return wrapReleaseContract(ErrFmtUploadTarget, err)
+	}
 	if err := t.Provider.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtUploadTarget, err)
 	}
 	if err := t.Bucket.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtUploadTarget, err)
 	}
-	if err := t.Prefix.Validate(); err != nil {
+	if err := t.URL.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtUploadTarget, err)
 	}
 	if err := t.Method.Validate(); err != nil {
+		return wrapReleaseContract(ErrFmtUploadTarget, err)
+	}
+	if err := core.ValidateUploadHeaders(t.Headers); err != nil {
+		return wrapReleaseContract(ErrFmtUploadTarget, err)
+	}
+	if err := core.ValidateRequiredUnixNanoTime(t.ExpiresAt); err != nil {
 		return wrapReleaseContract(ErrFmtUploadTarget, err)
 	}
 	return nil
@@ -275,7 +291,7 @@ func (a UploadedArtifact) Validate() error {
 }
 
 func (a UploadedArtifact) ArtifactSetName() string {
-	return a.Artifact.String()
+	return a.Provider.String() + "/" + a.Artifact.String()
 }
 
 func (a UploadedArtifact) ArtifactSetSize() core.ByteCount {
@@ -383,14 +399,18 @@ func validateReceiptIdentity(r UploadReceipt) error {
 }
 
 type Download struct {
-	Artifact ArtifactName   `json:"artifact"`
-	URL      DownloadURL    `json:"url"`
-	SHA256   core.SHA256Hex `json:"sha256"`
-	Size     core.ByteCount `json:"size_bytes"`
-	Platform core.Platform  `json:"platform"`
+	Artifact ArtifactName         `json:"artifact"`
+	URL      DownloadURL          `json:"url"`
+	SHA256   core.SHA256Hex       `json:"sha256"`
+	Size     core.ByteCount       `json:"size_bytes"`
+	Platform core.Platform        `json:"platform"`
+	Provider core.StorageProvider `json:"provider"`
 }
 
 func (d Download) Validate() error {
+	if err := d.Provider.Validate(); err != nil {
+		return wrapReleaseContract(ErrFmtDownloadIndex, err)
+	}
 	if err := validateReleasePlatform(d.Platform, ErrFmtDownloadIndex); err != nil {
 		return err
 	}
@@ -510,7 +530,7 @@ func validateUploadedSet(objects []UploadedArtifact, count uint32, total core.By
 	}
 	for index, object := range objects {
 		for _, prior := range objects[:index] {
-			if prior.Object == object.Object {
+			if prior.Provider == object.Provider && prior.Object == object.Object {
 				return fmt.Errorf(ErrFmtUploadReceipt, core.ErrReleaseContract)
 			}
 		}
@@ -532,11 +552,15 @@ func validateDownloadSet(downloads []Download, count uint32) error {
 		if err := download.Validate(); err != nil {
 			return err
 		}
-		if index > 0 && downloads[index-1].Artifact.String() >= download.Artifact.String() {
+		if index > 0 && downloadSetKey(downloads[index-1]) >= downloadSetKey(download) {
 			return fmt.Errorf(ErrFmtDownloadIndex, core.ErrReleaseContract)
 		}
 	}
 	return nil
+}
+
+func downloadSetKey(download Download) string {
+	return download.Provider.String() + "/" + download.Artifact.String()
 }
 
 func validateReleasePlatform(platform core.Platform, errFmt string) error {

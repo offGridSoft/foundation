@@ -180,9 +180,9 @@ func TestUploadAndDownloadHostileTable(t *testing.T) {
 			target.Provider = core.StorageProviderUnknown
 			return target.Validate()
 		}, wantErr: true},
-		{name: "bad prefix", run: func() error {
+		{name: "bad object", run: func() error {
 			target := validUploadTarget(t)
-			target.Prefix = ObjectKey{}
+			target.Object = ObjectKey{}
 			return target.Validate()
 		}, wantErr: true},
 		{name: "valid upload receipt", run: func() error { return validUploadReceipt(t).Validate() }},
@@ -2062,15 +2062,23 @@ func validArtifactWithSize(t *testing.T, name string, size uint64) Artifact {
 
 func validUploadTarget(t *testing.T) UploadTarget {
 	t.Helper()
-	prefix, err := ParseObjectKey(strings.Join([]string{core.ProductTokenWitness, testDateToken, testReleaseToken}, "/"))
+	object, err := BuildObjectKey(validObjectKeyInput(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	uploadURL, err := core.ParseSignedUploadURL("https://storage.googleapis.com/offgrid-release/tools.tar.gz?signature=abc")
 	if err != nil {
 		t.Fatal(err)
 	}
 	return UploadTarget{
-		Provider: core.StorageProviderGCS,
-		Bucket:   mustBucket(t),
-		Prefix:   prefix,
-		Method:   core.UploadMethodSignedPUT,
+		Artifact:  mustArtifactName(t, ToolsArchiveName),
+		Object:    object,
+		Bucket:    mustBucket(t),
+		URL:       uploadURL,
+		Headers:   []core.UploadHeader{{Name: core.HTTPHeaderContentType, Value: "application/octet-stream"}},
+		ExpiresAt: core.UnixNanoTimeFromInt64(1782302400000000000),
+		Provider:  core.StorageProviderGCS,
+		Method:    core.UploadMethodSignedPUT,
 	}
 }
 
@@ -2116,6 +2124,7 @@ func validDownloadIndex(t *testing.T) DownloadIndex {
 			URL:      validDownloadURL(t),
 			SHA256:   mustSHA256(t, "b"),
 			Size:     core.NewByteCount(12),
+			Provider: core.StorageProviderGCS,
 		}},
 		DownloadCount: 1,
 	}

@@ -77,16 +77,6 @@ func TestStorageScalarsRejectHostileInputs(t *testing.T) {
 		}},
 		{name: "artifact name dot rejected", run: func() error { _, err := ParseArtifactName("."); return err }},
 		{name: "artifact name dot dot rejected", run: func() error { _, err := ParseArtifactName(".."); return err }},
-		{name: "signed url http", run: func() error { _, err := ParseSignedUploadURL("http://storage.example/upload"); return err }},
-		{name: "signed url missing path", run: func() error { _, err := ParseSignedUploadURL("https://storage.example"); return err }},
-		{name: "signed url userinfo", run: func() error {
-			_, err := ParseSignedUploadURL("https://trusted.example@evil.example/upload")
-			return err
-		}},
-		{name: "signed url control rune", run: func() error {
-			_, err := ParseSignedUploadURL("https://storage.example/upload\nx")
-			return err
-		}},
 		{name: "customer id lowercase", run: func() error { _, err := ParseCustomerID(strings.Repeat("a", ULIDTextLen)); return err }},
 		{name: "customer id illegal rune", run: func() error { _, err := ParseCustomerID("01HZZZZZZZZZZZZZZZZZZZZZZI"); return err }},
 		{name: "customer id non-canonical first rune", run: func() error { _, err := ParseCustomerID("81HZZZZZZZZZZZZZZZZZZZZZZZ"); return err }},
@@ -165,7 +155,7 @@ func TestSessionOpenResponseAndUploadTargetContracts(t *testing.T) {
 		t.Fatalf("UploadTarget control header value error = %v, want ErrCustodyContract", err)
 	}
 	target = validUploadTarget(t)
-	target.Headers = make([]UploadHeader, core.HTTPHeaderMaximumDefault+1)
+	target.Headers = make([]core.UploadHeader, core.HTTPHeaderMaximumDefault+1)
 	if err := target.Validate(); !errors.Is(err, core.ErrCustodyContract) {
 		t.Fatalf("UploadTarget oversized headers error = %v, want ErrCustodyContract", err)
 	}
@@ -251,7 +241,7 @@ func TestSignedUploadURLWireContract(t *testing.T) {
 	t.Parallel()
 	signedURL := mustSignedUploadURL(t)
 	if signedURL.String() == "" {
-		t.Fatalf("SignedUploadURL.String empty")
+		t.Fatalf("core.SignedUploadURL.String empty")
 	}
 	if err := signedURL.Validate(); err != nil {
 		t.Fatal(err)
@@ -260,12 +250,12 @@ func TestSignedUploadURLWireContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var roundTrip SignedUploadURL
+	var roundTrip core.SignedUploadURL
 	if err := roundTrip.UnmarshalJSON(data); err != nil {
 		t.Fatal(err)
 	}
 	if roundTrip != signedURL {
-		t.Fatalf("SignedUploadURL roundTrip = %s, want %s", roundTrip, signedURL)
+		t.Fatalf("core.SignedUploadURL roundTrip = %s, want %s", roundTrip, signedURL)
 	}
 }
 
@@ -334,13 +324,13 @@ func TestUploadTargetRejectsDuplicateHeadersHostileTable(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name    string
-		headers []UploadHeader
+		headers []core.UploadHeader
 	}{
-		{name: "duplicate exact header name", headers: []UploadHeader{
+		{name: "duplicate exact header name", headers: []core.UploadHeader{
 			{Name: core.HTTPHeaderContentType, Value: core.HTTPContentTypeJSON},
 			{Name: core.HTTPHeaderContentType, Value: "application/octet-stream"},
 		}},
-		{name: "duplicate case-folded header name", headers: []UploadHeader{
+		{name: "duplicate case-folded header name", headers: []core.UploadHeader{
 			{Name: "Content-Type", Value: core.HTTPContentTypeJSON},
 			{Name: "content-type", Value: "application/octet-stream"},
 		}},
@@ -559,7 +549,7 @@ func validUploadTarget(t testFatalHelper) UploadTarget {
 		Artifact: mustArtifactNameValue(t, "bundle.tar"),
 		Object:   mustObjectPath(t),
 		URL:      mustSignedUploadURL(t),
-		Headers: []UploadHeader{{
+		Headers: []core.UploadHeader{{
 			Name:  core.HTTPHeaderContentType,
 			Value: core.HTTPContentTypeJSON,
 		}},
@@ -585,9 +575,9 @@ func mustObjectPath(t testFatalHelper) ObjectPath {
 	return object
 }
 
-func mustSignedUploadURL(t testFatalHelper) SignedUploadURL {
+func mustSignedUploadURL(t testFatalHelper) core.SignedUploadURL {
 	t.Helper()
-	signedURL, err := ParseSignedUploadURL("https://storage.googleapis.com/offgrid-custody/bundle.tar?signature=abc")
+	signedURL, err := core.ParseSignedUploadURL("https://storage.googleapis.com/offgrid-custody/bundle.tar?signature=abc")
 	if err != nil {
 		t.Fatal(err)
 	}

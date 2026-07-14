@@ -919,6 +919,20 @@ func TestCryptoHexNonStringJSONWrapsFoundationContract(t *testing.T) {
 	}
 }
 
+func TestSignedUploadURLRejectsHostileInputTable(t *testing.T) {
+	t.Parallel()
+	for _, raw := range []string{
+		"http://storage.example/upload",
+		"https://storage.example",
+		"https://trusted.example@evil.example/upload",
+		"https://storage.example/upload\nx",
+	} {
+		if _, err := ParseSignedUploadURL(raw); !errors.Is(err, ErrFoundationContract) {
+			t.Fatalf("ParseSignedUploadURL(%q) error = %v, want ErrFoundationContract", raw, err)
+		}
+	}
+}
+
 func TestByteCountRejectsZero(t *testing.T) {
 	t.Parallel()
 	var count ByteCount

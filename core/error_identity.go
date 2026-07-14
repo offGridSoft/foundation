@@ -50,6 +50,8 @@ const (
 	ErrFmtHTTPHeaderValue     = "core.HTTPHeaderValue: %w"
 	ErrFmtStorageProvider     = "core.StorageProvider: %w"
 	ErrFmtUploadMethod        = "core.UploadMethod: %w"
+	ErrFmtSignedUploadURL     = "core.SignedUploadURL: %w"
+	ErrFmtUploadHeader        = "core.UploadHeader: %w"
 	ErrFmtBackoffAttempts     = "core.BackoffPolicy.MaxAttempts: %w"
 	ErrFmtBackoffWindow       = "core.BackoffPolicy.Window: %w"
 	ErrFmtUnixNanoTime        = "core.UnixNanoTime: %w"

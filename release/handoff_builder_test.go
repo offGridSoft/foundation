@@ -65,6 +65,79 @@ func TestBuildUploadReceiptRejectsManifestObjectDriftTable(t *testing.T) {
 	}
 }
 
+func TestReleaseHandoffSupportsCompleteGCSAndS3Mirrors(t *testing.T) {
+	t.Parallel()
+	manifest := validManifest(t)
+	gcsObject := validUploadReceipt(t).Objects[0]
+	s3Object := gcsObject
+	s3Object.Provider = core.StorageProviderS3
+	receipt, err := BuildUploadReceipt(UploadReceiptInput{
+		Manifest: manifest, Objects: []UploadedArtifact{s3Object, gcsObject},
+		UploadedAt: core.UnixNanoTimeFromInt64(1782302400000000000),
+	})
+	if err != nil {
+		t.Fatalf("BuildUploadReceipt(two providers) error = %v", err)
+	}
+	if receipt.ObjectCount != 2 || receipt.Objects[0].Provider != core.StorageProviderGCS || receipt.Objects[1].Provider != core.StorageProviderS3 {
+		t.Fatalf("BuildUploadReceipt(two providers) = %+v", receipt.Objects)
+	}
+
+	gcsDownload := validDownloadIndex(t).Downloads[0]
+	s3Download := gcsDownload
+	s3Download.Provider = core.StorageProviderS3
+	index, err := BuildDownloadIndex(DownloadIndexInput{
+		Manifest: manifest, Downloads: []Download{s3Download, gcsDownload},
+		GeneratedAt: core.UnixNanoTimeFromInt64(1782302400000000000),
+	})
+	if err != nil {
+		t.Fatalf("BuildDownloadIndex(two providers) error = %v", err)
+	}
+	if index.DownloadCount != 2 || index.Downloads[0].Provider != core.StorageProviderGCS || index.Downloads[1].Provider != core.StorageProviderS3 {
+		t.Fatalf("BuildDownloadIndex(two providers) = %+v", index.Downloads)
+	}
+
+	gcsTarget := validUploadTarget(t)
+	s3Target := gcsTarget
+	s3Target.Provider = core.StorageProviderS3
+	plan, err := BuildDeployPlan(DeployPlanInput{
+		Manifest: manifest, Layout: validWitnessReleaseRootLayout(t), Targets: []UploadTarget{s3Target, gcsTarget},
+	})
+	if err != nil {
+		t.Fatalf("BuildDeployPlan(two providers) error = %v", err)
+	}
+	if plan.TargetCount != 2 || plan.Targets[0].Provider != core.StorageProviderGCS || plan.Targets[1].Provider != core.StorageProviderS3 {
+		t.Fatalf("BuildDeployPlan(two providers) = %+v", plan.Targets)
+	}
+}
+
+func TestDeployPlanRejectsIncompleteOrUnauthorisedTargetsTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		mutate func(*DeployPlanInput)
+		name   string
+	}{
+		{name: "missing signed upload url", mutate: func(i *DeployPlanInput) { i.Targets[0].URL = core.SignedUploadURL{} }},
+		{name: "missing expiry", mutate: func(i *DeployPlanInput) { i.Targets[0].ExpiresAt = core.UnixNanoTime{} }},
+		{name: "duplicate header", mutate: func(i *DeployPlanInput) {
+			i.Targets[0].Headers = append(i.Targets[0].Headers, i.Targets[0].Headers[0])
+		}},
+		{name: "artifact absent from manifest", mutate: func(i *DeployPlanInput) {
+			i.Targets[0].Artifact = mustArtifactName(t, "other")
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			input := DeployPlanInput{
+				Manifest: validManifest(t), Layout: validWitnessReleaseRootLayout(t), Targets: []UploadTarget{validUploadTarget(t)},
+			}
+			tc.mutate(&input)
+			if _, err := BuildDeployPlan(input); !errors.Is(err, core.ErrReleaseContract) {
+				t.Fatalf("BuildDeployPlan() error = %v, want ErrReleaseContract", err)
+			}
+		})
+	}
+}
+
 func TestBuildDeployPlanDerivesBoundIdentityWithoutAliasing(t *testing.T) {
 	t.Parallel()
 	manifest := validManifest(t)
@@ -79,6 +152,10 @@ func TestBuildDeployPlanDerivesBoundIdentityWithoutAliasing(t *testing.T) {
 	}
 	if plan.TargetCount != 1 || plan.Product != manifest.Product || plan.ReleaseID != manifest.ReleaseID {
 		t.Fatalf("BuildDeployPlan() identity = %+v, manifest = %+v", plan, manifest)
+	}
+	targets[0].Headers[0] = core.UploadHeader{}
+	if err := plan.Targets[0].Headers[0].Validate(); err != nil {
+		t.Fatalf("BuildDeployPlan() retained caller header alias: %v", err)
 	}
 	targets[0] = UploadTarget{}
 	if err := plan.Targets[0].Validate(); err != nil {
@@ -116,6 +193,7 @@ func TestBuildDownloadIndexSupportsMultipleArtifactsOnOnePlatform(t *testing.T) 
 	}
 	secondDownload := Download{
 		Artifact: second.Name, URL: secondURL, SHA256: second.SHA256, Size: second.Size, Platform: second.Platform,
+		Provider: core.StorageProviderGCS,
 	}
 	index, err := BuildDownloadIndex(DownloadIndexInput{
 		Manifest: manifest, Downloads: []Download{secondDownload, firstDownload}, GeneratedAt: core.UnixNanoTimeFromInt64(1782302400000000000),

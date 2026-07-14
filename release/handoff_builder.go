@@ -63,16 +63,47 @@ func uploadReceiptFromInput(input UploadReceiptInput) (UploadReceipt, error) {
 }
 
 func validateUploadedArtifactsMatchManifest(manifest Manifest, objects []UploadedArtifact) error {
-	if len(objects) != len(manifest.Artifacts) {
+	if len(objects) < len(manifest.Artifacts) || len(objects)%len(manifest.Artifacts) != 0 {
 		return fmt.Errorf(ErrFmtUploadReceipt, core.ErrReleaseContract)
 	}
-	for index, object := range objects {
-		artifact := manifest.Artifacts[index]
-		if object.Artifact != artifact.Name || object.SHA256 != artifact.SHA256 || object.Size != artifact.Size {
+	for _, object := range objects {
+		if !manifestHasUploadedArtifact(manifest, object) {
+			return fmt.Errorf(ErrFmtUploadReceipt, core.ErrReleaseContract)
+		}
+	}
+	for _, object := range objects {
+		if !providerUploadedEveryManifestArtifact(objects, object.Provider, manifest) {
 			return fmt.Errorf(ErrFmtUploadReceipt, core.ErrReleaseContract)
 		}
 	}
 	return nil
+}
+
+func manifestHasUploadedArtifact(manifest Manifest, object UploadedArtifact) bool {
+	for _, artifact := range manifest.Artifacts {
+		if object.Artifact == artifact.Name && object.SHA256 == artifact.SHA256 && object.Size == artifact.Size {
+			return true
+		}
+	}
+	return false
+}
+
+func providerUploadedEveryManifestArtifact(objects []UploadedArtifact, provider core.StorageProvider, manifest Manifest) bool {
+	for _, artifact := range manifest.Artifacts {
+		if !hasProviderUploadedArtifact(objects, provider, artifact.Name) {
+			return false
+		}
+	}
+	return true
+}
+
+func hasProviderUploadedArtifact(objects []UploadedArtifact, provider core.StorageProvider, artifact ArtifactName) bool {
+	for _, object := range objects {
+		if object.Provider == provider && object.Artifact == artifact {
+			return true
+		}
+	}
+	return false
 }
 
 type DeployPlanInput struct {
@@ -117,10 +148,21 @@ func deployPlanFromInput(input DeployPlanInput) (DeployPlan, error) {
 		ReleaseID:      input.Manifest.ReleaseID,
 		ManifestSHA256: core.NewSHA256Hex(sha256.Sum256(canonical)),
 		Layout:         input.Layout,
-		Targets:        append([]UploadTarget(nil), input.Targets...),
+		Targets:        cloneAndSortUploadTargets(input.Targets),
 		Manifest:       manifest,
 		TargetCount:    count,
 	}, nil
+}
+
+func cloneAndSortUploadTargets(targets []UploadTarget) []UploadTarget {
+	copied := append([]UploadTarget(nil), targets...)
+	for index := range copied {
+		copied[index].Headers = append([]core.UploadHeader(nil), copied[index].Headers...)
+	}
+	sort.Slice(copied, func(left, right int) bool {
+		return deployTargetKey(copied[left]) < deployTargetKey(copied[right])
+	})
+	return copied
 }
 
 type DownloadIndexInput struct {
@@ -167,7 +209,7 @@ func downloadIndexFromInput(input DownloadIndexInput) (DownloadIndex, error) {
 		Product:       input.Manifest.Product,
 	}
 	sort.Slice(index.Downloads, func(left, right int) bool {
-		return index.Downloads[left].Artifact.String() < index.Downloads[right].Artifact.String()
+		return downloadSetKey(index.Downloads[left]) < downloadSetKey(index.Downloads[right])
 	})
 	if err := validateManifestDownloads(input.Manifest, index.Downloads); err != nil {
 		return DownloadIndex{}, err
@@ -182,7 +224,7 @@ func validateManifestDownloads(manifest Manifest, downloads []Download) error {
 			downloadableCount++
 		}
 	}
-	if downloadableCount != len(downloads) {
+	if downloadableCount == 0 || len(downloads) < downloadableCount || len(downloads)%downloadableCount != 0 {
 		return fmt.Errorf(ErrFmtDownloadIndex, core.ErrReleaseContract)
 	}
 	for _, download := range downloads {
@@ -190,7 +232,30 @@ func validateManifestDownloads(manifest Manifest, downloads []Download) error {
 			return fmt.Errorf(ErrFmtDownloadIndex, core.ErrReleaseContract)
 		}
 	}
+	for _, download := range downloads {
+		if !providerDownloadsEveryManifestArtifact(downloads, download.Provider, manifest) {
+			return fmt.Errorf(ErrFmtDownloadIndex, core.ErrReleaseContract)
+		}
+	}
 	return nil
+}
+
+func providerDownloadsEveryManifestArtifact(downloads []Download, provider core.StorageProvider, manifest Manifest) bool {
+	for _, artifact := range manifest.Artifacts {
+		if artifact.Kind.RequiresPlatform() && !hasProviderDownload(downloads, provider, artifact.Name) {
+			return false
+		}
+	}
+	return true
+}
+
+func hasProviderDownload(downloads []Download, provider core.StorageProvider, artifact ArtifactName) bool {
+	for _, download := range downloads {
+		if download.Provider == provider && download.Artifact == artifact {
+			return true
+		}
+	}
+	return false
 }
 
 func manifestHasDownload(manifest Manifest, download Download) bool {

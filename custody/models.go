@@ -3,7 +3,6 @@ package custody
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/offGridSoft/foundation/v2026/core"
 )
@@ -205,8 +204,8 @@ func hasMatchingUploadTarget(targets []UploadTarget, target UploadTarget) bool {
 type UploadTarget struct {
 	Artifact ArtifactName         `json:"artifact"`
 	Object   ObjectPath           `json:"object"`
-	URL      SignedUploadURL      `json:"url"`
-	Headers  []UploadHeader       `json:"headers"`
+	URL      core.SignedUploadURL `json:"url"`
+	Headers  []core.UploadHeader  `json:"headers"`
 	Provider core.StorageProvider `json:"provider"`
 	Method   core.UploadMethod    `json:"method"`
 }
@@ -227,40 +226,8 @@ func (t UploadTarget) Validate() error {
 	if err := t.Method.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtStorage, err)
 	}
-	return validateUploadHeaders(t.Headers)
-}
-
-func validateUploadHeaders(headers []UploadHeader) error {
-	if err := (core.CollectionCardinality{
-		Length:  len(headers),
-		Maximum: core.HTTPHeaderMaximumDefault,
-	}).Validate(); err != nil {
-		return fmt.Errorf(ErrFmtStorage, core.ErrCustodyContract)
-	}
-	for index, header := range headers {
-		if err := header.Validate(); err != nil {
-			return fmt.Errorf(ErrFmtStorage, err)
-		}
-		for _, prior := range headers[:index] {
-			if strings.EqualFold(prior.Name, header.Name) {
-				return fmt.Errorf(ErrFmtStorage, core.ErrCustodyContract)
-			}
-		}
-	}
-	return nil
-}
-
-type UploadHeader struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
-}
-
-func (h UploadHeader) Validate() error {
-	if err := core.ValidateHTTPHeaderName(h.Name); err != nil {
-		return fmt.Errorf(ErrFmtUploadHeader, core.ErrCustodyContract)
-	}
-	if err := core.ValidateHTTPHeaderValue(h.Value); err != nil {
-		return fmt.Errorf(ErrFmtUploadHeader, core.ErrCustodyContract)
+	if err := core.ValidateUploadHeaders(t.Headers); err != nil {
+		return fmt.Errorf(ErrFmtStorage, errors.Join(core.ErrCustodyContract, err))
 	}
 	return nil
 }

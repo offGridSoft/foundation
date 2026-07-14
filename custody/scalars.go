@@ -329,50 +329,6 @@ func (p *ObjectPath) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-type SignedUploadURL struct {
-	value string
-}
-
-func ParseSignedUploadURL(value string) (SignedUploadURL, error) {
-	if err := core.ValidateHTTPSURL(value, core.HTTPSURLPolicy{
-		MaxRunes:    core.HTTPSURLDefaultMaxRunes,
-		RequirePath: true,
-		AllowQuery:  true,
-	}); err != nil {
-		return SignedUploadURL{}, fmt.Errorf(ErrFmtSignedURL, errors.Join(core.ErrCustodyContract, err))
-	}
-	return SignedUploadURL{value: value}, nil
-}
-
-func (u SignedUploadURL) String() string {
-	return u.value
-}
-
-func (u SignedUploadURL) Validate() error {
-	_, err := ParseSignedUploadURL(u.value)
-	return err
-}
-
-func (u SignedUploadURL) MarshalJSON() ([]byte, error) {
-	if err := u.Validate(); err != nil {
-		return nil, err
-	}
-	return json.Marshal(u.value)
-}
-
-func (u *SignedUploadURL) UnmarshalJSON(data []byte) error {
-	var value string
-	if err := json.Unmarshal(data, &value); err != nil {
-		return fmt.Errorf(ErrFmtSignedURL, core.ErrCustodyContract)
-	}
-	parsed, err := ParseSignedUploadURL(value)
-	if err != nil {
-		return err
-	}
-	*u = parsed
-	return nil
-}
-
 // Field order is signature-load-bearing when nested inside ReceiptBody.
 type ReleaseIdentity struct {
 	Version     core.ProductVersion `json:"version"`
