@@ -11,35 +11,42 @@ import (
 )
 
 const (
-	UploadAttemptIDEntropyBytes = 32
-	UploadBindingSchema         = "foundation-release-upload-binding-" + core.ContractVersionToken
-	GCSUploadAttemptHeaderName  = "x-goog-meta-upload-attempt-id"
-	GCSUploadBindingHeaderName  = "x-goog-meta-upload-binding"
-	GCSUploadCreateOnlyName     = "x-goog-if-generation-match"
-	GCSUploadCreateOnlyValue    = "0"
-	S3UploadAttemptHeaderName   = "x-amz-meta-upload-attempt-id"
-	S3UploadBindingHeaderName   = "x-amz-meta-upload-binding"
-	S3UploadCreateOnlyName      = "If-None-Match"
-	S3UploadCreateOnlyValue     = "*"
+	UploadBindingSchema        = "foundation-release-upload-binding-" + core.ContractVersionToken
+	GCSUploadAttemptHeaderName = "x-goog-meta-upload-attempt-id"
+	GCSUploadBindingHeaderName = "x-goog-meta-upload-binding"
+	GCSUploadCreateOnlyName    = "x-goog-if-generation-match"
+	GCSUploadCreateOnlyValue   = "0"
+	S3UploadAttemptHeaderName  = "x-amz-meta-upload-attempt-id"
+	S3UploadBindingHeaderName  = "x-amz-meta-upload-binding"
+	S3UploadCreateOnlyName     = "If-None-Match"
+	S3UploadCreateOnlyValue    = "*"
 )
 
 type UploadAttemptID struct {
 	value string
 }
 
-func NewUploadAttemptID(entropy [UploadAttemptIDEntropyBytes]byte) (UploadAttemptID, error) {
-	if entropy == [UploadAttemptIDEntropyBytes]byte{} {
+func NewUploadAttemptID(entropy [core.RandomIdentityEntropyBytes]byte) (UploadAttemptID, error) {
+	if entropy == [core.RandomIdentityEntropyBytes]byte{} {
 		return UploadAttemptID{}, fmt.Errorf(ErrFmtUploadAttemptID, core.ErrReleaseContract)
 	}
 	return ParseUploadAttemptID(hex.EncodeToString(entropy[:]))
 }
 
 func ParseUploadAttemptID(value string) (UploadAttemptID, error) {
+	parsed, err := parseReleaseRandomHex(value)
+	if err != nil {
+		return UploadAttemptID{}, fmt.Errorf(ErrFmtUploadAttemptID, err)
+	}
+	return UploadAttemptID{value: parsed}, nil
+}
+
+func parseReleaseRandomHex(value string) (string, error) {
 	digest, err := core.ParseSHA256Hex(value)
 	if err != nil || strings.Trim(digest.String(), "0") == "" {
-		return UploadAttemptID{}, fmt.Errorf(ErrFmtUploadAttemptID, core.ErrReleaseContract)
+		return "", core.ErrReleaseContract
 	}
-	return UploadAttemptID{value: digest.String()}, nil
+	return digest.String(), nil
 }
 
 func (id UploadAttemptID) String() string { return id.value }

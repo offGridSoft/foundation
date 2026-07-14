@@ -106,7 +106,7 @@ func TestReleaseHandoffSupportsCompleteGCSAndS3Mirrors(t *testing.T) {
 	s3Target := validUploadTargetFor(t, manifest, core.StorageProviderS3, attemptID)
 	plan, err := BuildDeployPlan(DeployPlanInput{
 		Manifest: manifest, Layout: validWitnessReleaseRootLayout(t), Targets: []UploadTarget{s3Target, gcsTarget},
-		AttemptID: attemptID,
+		AttemptID: attemptID, RequestID: validDeployRequestID(t),
 	})
 	if err != nil {
 		t.Fatalf("BuildDeployPlan(two providers) error = %v", err)
@@ -135,7 +135,7 @@ func TestDeployPlanRejectsIncompleteOrUnauthorisedTargetsTable(t *testing.T) {
 			t.Parallel()
 			input := DeployPlanInput{
 				Manifest: validManifest(t), Layout: validWitnessReleaseRootLayout(t), Targets: []UploadTarget{validUploadTarget(t)},
-				AttemptID: validUploadAttemptID(t),
+				AttemptID: validUploadAttemptID(t), RequestID: validDeployRequestID(t),
 			}
 			tc.mutate(&input)
 			if _, err := BuildDeployPlan(input); !errors.Is(err, core.ErrReleaseContract) {
@@ -151,7 +151,7 @@ func TestBuildDeployPlanDerivesBoundIdentityWithoutAliasing(t *testing.T) {
 	targets := []UploadTarget{validUploadTarget(t)}
 	input := DeployPlanInput{
 		Manifest: manifest, Layout: validWitnessReleaseRootLayout(t), Targets: targets,
-		AttemptID: validUploadAttemptID(t),
+		AttemptID: validUploadAttemptID(t), RequestID: validDeployRequestID(t),
 	}
 	if err := input.Validate(); err != nil {
 		t.Fatalf("DeployPlanInput.Validate() error = %v", err)

@@ -1825,6 +1825,7 @@ func validDeployPlan(t *testing.T) DeployPlan {
 		Product:        core.ProductWitness,
 		Version:        mustVersion(t),
 		ReleaseID:      mustReleaseID(t),
+		RequestID:      validDeployRequestID(t),
 		Manifest:       manifest,
 		ManifestSHA256: core.NewSHA256Hex(sha256.Sum256(canonical)),
 		Layout:         validWitnessReleaseRootLayout(t),
@@ -2201,9 +2202,20 @@ func validUploadedArtifactFor(
 
 func validUploadAttemptID(t *testing.T) UploadAttemptID {
 	t.Helper()
-	var entropy [UploadAttemptIDEntropyBytes]byte
+	var entropy [core.RandomIdentityEntropyBytes]byte
 	entropy[len(entropy)-1] = 1
 	id, err := NewUploadAttemptID(entropy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func validDeployRequestID(t *testing.T) DeployRequestID {
+	t.Helper()
+	var entropy [core.RandomIdentityEntropyBytes]byte
+	entropy[len(entropy)-1] = 4
+	id, err := NewDeployRequestID(entropy)
 	if err != nil {
 		t.Fatal(err)
 	}

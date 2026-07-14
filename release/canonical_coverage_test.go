@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -31,6 +32,36 @@ func TestSignedBodyCanonicalProjectionCoversEveryTaggedField(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			requireCanonicalJSONFieldCoverage(t, tc.body)
+		})
+	}
+}
+
+func TestDeployTransportJSONProjectionCoversEveryTaggedField(t *testing.T) {
+	t.Parallel()
+	chain := validDeployTransportChain(t)
+	for _, tc := range []struct {
+		value any
+		name  string
+	}{
+		{name: "prepare request", value: chain.prepareRequest},
+		{name: "prepare response", value: chain.prepareResponse},
+		{name: "finalize request", value: chain.finalizeRequest},
+		{name: "finalize response", value: chain.finalizeResponse},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			encoded, err := json.Marshal(tc.value)
+			if err != nil {
+				t.Fatalf("MarshalJSON() error = %v", err)
+			}
+			want := taggedJSONFieldNames(reflect.TypeOf(tc.value))
+			got, err := topLevelJSONFieldNames(encoded)
+			if err != nil {
+				t.Fatalf("JSON field scan error = %v", err)
+			}
+			if !slices.Equal(got, want) {
+				t.Fatalf("JSON fields = %v, want %v", got, want)
+			}
 		})
 	}
 }

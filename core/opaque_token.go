@@ -6,7 +6,10 @@ import (
 	"unicode/utf8"
 )
 
-const OpaqueTokenDefaultMaxRunes = 128
+const (
+	OpaqueTokenDefaultMaxRunes = 128
+	RandomIdentityEntropyBytes = 32
+)
 
 func ValidateOpaqueToken(value string, maxRunes int) error {
 	if maxRunes < 1 {

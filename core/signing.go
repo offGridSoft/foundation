@@ -63,8 +63,8 @@ const (
 	ErrFmtSigningDomain                        = "core.SigningDomain: %w"
 )
 
-func signingDomainNames() [SchemaReleaseSeedGrant + 1]string {
-	return [...]string{
+func signingDomainNames() [SchemaReleaseDeployFinalizeResponse + 1]string {
+	return [SchemaReleaseDeployFinalizeResponse + 1]string{
 		SigningDomainBugCheckInResponse:       SigningDomainTokenBugCheckInResponse,
 		SigningDomainBugSeatLease:             SigningDomainTokenBugSeatLease,
 		SigningDomainBugWriterAttestation:     SigningDomainTokenBugWriterAttestation,

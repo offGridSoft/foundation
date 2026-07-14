@@ -294,6 +294,7 @@ func policyCommitMatchesPlan(stamp BuildCommitStamp, commit core.BuildCommit) bo
 type DeployPlan struct {
 	Version        core.ProductVersion `json:"version"`
 	ReleaseID      ReleaseID           `json:"release_id"`
+	RequestID      DeployRequestID     `json:"request_id"`
 	ManifestSHA256 core.SHA256Hex      `json:"manifest_sha256"`
 	AttemptID      UploadAttemptID     `json:"upload_attempt_id"`
 	Layout         ReleaseRootLayout   `json:"layout"`
@@ -339,6 +340,7 @@ func appendDeployPlanJSON(dst []byte, p DeployPlan) ([]byte, error) {
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldProduct, p.Product)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldVersion, p.Version)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldReleaseID, p.ReleaseID)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldRequestID, p.RequestID)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldManifestSHA256, p.ManifestSHA256)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldUploadAttemptID, p.AttemptID)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldLayout, p.Layout)
@@ -359,6 +361,9 @@ func validateDeployPlanIdentity(p DeployPlan) error {
 		return wrapReleaseContract(ErrFmtDeployPlan, err)
 	}
 	if err := p.ReleaseID.Validate(); err != nil {
+		return wrapReleaseContract(ErrFmtDeployPlan, err)
+	}
+	if err := p.RequestID.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtDeployPlan, err)
 	}
 	if err := p.Manifest.Validate(); err != nil {

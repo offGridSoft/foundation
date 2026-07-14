@@ -113,6 +113,7 @@ func hasProviderUploadedArtifact(objects []UploadedArtifact, provider core.Stora
 
 type DeployPlanInput struct {
 	AttemptID UploadAttemptID
+	RequestID DeployRequestID
 	Layout    ReleaseRootLayout
 	Targets   []UploadTarget
 	Manifest  Manifest
@@ -153,6 +154,7 @@ func deployPlanFromInput(input DeployPlanInput) (DeployPlan, error) {
 		Product:        input.Manifest.Product,
 		Version:        input.Manifest.Version,
 		ReleaseID:      input.Manifest.ReleaseID,
+		RequestID:      input.RequestID,
 		ManifestSHA256: core.NewSHA256Hex(sha256.Sum256(canonical)),
 		Layout:         input.Layout,
 		Targets:        cloneAndSortUploadTargets(input.Targets),

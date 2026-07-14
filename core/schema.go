@@ -36,59 +36,71 @@ const (
 	SchemaReleaseRootLayout
 	SchemaReleaseCommandRun
 	SchemaReleaseSeedGrant
+	SchemaReleaseDeployPrepareRequest
+	SchemaReleaseDeployPrepareResponse
+	SchemaReleaseDeployFinalizeRequest
+	SchemaReleaseDeployFinalizeResponse
 )
 
 const (
-	SchemaTokenBugUsage                   = ProductTokenBug + "-usage-" + ContractVersionToken
-	SchemaTokenWitnessUsage               = ProductTokenWitness + "-usage-" + ContractVersionToken
-	SchemaTokenBugCheckIn                 = ProductTokenBug + "-license-check-in-" + ContractVersionToken
-	SchemaTokenBugCheckInResponse         = ProductTokenBug + "-license-check-in-response-" + ContractVersionToken
-	SchemaTokenBugSeatLease               = ProductTokenBug + "-license-lease-" + ContractVersionToken
-	SchemaTokenBugWriterAttestation       = ProductTokenBug + "-writer-attestation-" + ContractVersionToken
-	SchemaTokenBugWriterCertificate       = ProductTokenBug + "-writer-certificate-" + ContractVersionToken
-	SchemaTokenBugWriterRevocation        = ProductTokenBug + "-writer-revocation-" + ContractVersionToken
-	SchemaTokenWitnessCheckIn             = ProductTokenWitness + "-subscription-check-in-" + ContractVersionToken
-	SchemaTokenWitnessCheckInResponse     = ProductTokenWitness + "-subscription-check-in-response-" + ContractVersionToken
-	SchemaTokenWitnessSubscription        = ProductTokenWitness + "-subscription-lease-" + ContractVersionToken
-	SchemaTokenCustodySessionOpenRequest  = ProductTokenWitness + "-custody-session-open-" + ContractVersionToken
-	SchemaTokenCustodySessionOpenResponse = ProductTokenWitness + "-custody-session-targets-" + ContractVersionToken
-	SchemaTokenCustodyFinalizeRequest     = ProductTokenWitness + "-custody-finalize-" + ContractVersionToken
-	SchemaTokenCustodyReceipt             = ProductTokenWitness + "-custody-receipt-" + ContractVersionToken
-	SchemaTokenReleaseManifest            = "offgrid-release-manifest-" + ContractVersionToken
-	SchemaTokenReleaseUploadReceipt       = "offgrid-release-upload-receipt-" + ContractVersionToken
-	SchemaTokenReleaseDownloadIndex       = "offgrid-release-download-index-" + ContractVersionToken
-	SchemaTokenReleaseDeployPlan          = "offgrid-release-deploy-plan-" + ContractVersionToken
-	SchemaTokenReleasePlan                = "offgrid-release-plan-" + ContractVersionToken
-	SchemaTokenReleaseRootLayout          = "offgrid-release-root-layout-" + ContractVersionToken
-	SchemaTokenReleaseCommandRun          = "offgrid-release-command-run-" + ContractVersionToken
-	SchemaTokenReleaseSeedGrant           = "offgrid-release-seed-grant-" + ContractVersionToken
+	SchemaTokenBugUsage                      = ProductTokenBug + "-usage-" + ContractVersionToken
+	SchemaTokenWitnessUsage                  = ProductTokenWitness + "-usage-" + ContractVersionToken
+	SchemaTokenBugCheckIn                    = ProductTokenBug + "-license-check-in-" + ContractVersionToken
+	SchemaTokenBugCheckInResponse            = ProductTokenBug + "-license-check-in-response-" + ContractVersionToken
+	SchemaTokenBugSeatLease                  = ProductTokenBug + "-license-lease-" + ContractVersionToken
+	SchemaTokenBugWriterAttestation          = ProductTokenBug + "-writer-attestation-" + ContractVersionToken
+	SchemaTokenBugWriterCertificate          = ProductTokenBug + "-writer-certificate-" + ContractVersionToken
+	SchemaTokenBugWriterRevocation           = ProductTokenBug + "-writer-revocation-" + ContractVersionToken
+	SchemaTokenWitnessCheckIn                = ProductTokenWitness + "-subscription-check-in-" + ContractVersionToken
+	SchemaTokenWitnessCheckInResponse        = ProductTokenWitness + "-subscription-check-in-response-" + ContractVersionToken
+	SchemaTokenWitnessSubscription           = ProductTokenWitness + "-subscription-lease-" + ContractVersionToken
+	SchemaTokenCustodySessionOpenRequest     = ProductTokenWitness + "-custody-session-open-" + ContractVersionToken
+	SchemaTokenCustodySessionOpenResponse    = ProductTokenWitness + "-custody-session-targets-" + ContractVersionToken
+	SchemaTokenCustodyFinalizeRequest        = ProductTokenWitness + "-custody-finalize-" + ContractVersionToken
+	SchemaTokenCustodyReceipt                = ProductTokenWitness + "-custody-receipt-" + ContractVersionToken
+	SchemaTokenReleaseManifest               = "offgrid-release-manifest-" + ContractVersionToken
+	SchemaTokenReleaseUploadReceipt          = "offgrid-release-upload-receipt-" + ContractVersionToken
+	SchemaTokenReleaseDownloadIndex          = "offgrid-release-download-index-" + ContractVersionToken
+	SchemaTokenReleaseDeployPlan             = "offgrid-release-deploy-plan-" + ContractVersionToken
+	SchemaTokenReleasePlan                   = "offgrid-release-plan-" + ContractVersionToken
+	SchemaTokenReleaseRootLayout             = "offgrid-release-root-layout-" + ContractVersionToken
+	SchemaTokenReleaseCommandRun             = "offgrid-release-command-run-" + ContractVersionToken
+	SchemaTokenReleaseSeedGrant              = "offgrid-release-seed-grant-" + ContractVersionToken
+	SchemaTokenReleaseDeployPrepareRequest   = "offgrid-release-deploy-prepare-request-" + ContractVersionToken
+	SchemaTokenReleaseDeployPrepareResponse  = "offgrid-release-deploy-prepare-response-" + ContractVersionToken
+	SchemaTokenReleaseDeployFinalizeRequest  = "offgrid-release-deploy-finalize-request-" + ContractVersionToken
+	SchemaTokenReleaseDeployFinalizeResponse = "offgrid-release-deploy-finalize-response-" + ContractVersionToken
 )
 
-func schemaNames() [SchemaReleaseSeedGrant + 1]string {
+func schemaNames() [SchemaReleaseDeployFinalizeResponse + 1]string {
 	return [...]string{
-		SchemaBugUsage:                   SchemaTokenBugUsage,
-		SchemaWitnessUsage:               SchemaTokenWitnessUsage,
-		SchemaBugCheckIn:                 SchemaTokenBugCheckIn,
-		SchemaBugCheckInResponse:         SchemaTokenBugCheckInResponse,
-		SchemaBugSeatLease:               SchemaTokenBugSeatLease,
-		SchemaBugWriterAttestation:       SchemaTokenBugWriterAttestation,
-		SchemaBugWriterCertificate:       SchemaTokenBugWriterCertificate,
-		SchemaBugWriterRevocation:        SchemaTokenBugWriterRevocation,
-		SchemaWitnessCheckIn:             SchemaTokenWitnessCheckIn,
-		SchemaWitnessCheckInResponse:     SchemaTokenWitnessCheckInResponse,
-		SchemaWitnessSubscription:        SchemaTokenWitnessSubscription,
-		SchemaCustodySessionOpenRequest:  SchemaTokenCustodySessionOpenRequest,
-		SchemaCustodySessionOpenResponse: SchemaTokenCustodySessionOpenResponse,
-		SchemaCustodyFinalizeRequest:     SchemaTokenCustodyFinalizeRequest,
-		SchemaCustodyReceipt:             SchemaTokenCustodyReceipt,
-		SchemaReleaseManifest:            SchemaTokenReleaseManifest,
-		SchemaReleaseUploadReceipt:       SchemaTokenReleaseUploadReceipt,
-		SchemaReleaseDownloadIndex:       SchemaTokenReleaseDownloadIndex,
-		SchemaReleaseDeployPlan:          SchemaTokenReleaseDeployPlan,
-		SchemaReleasePlan:                SchemaTokenReleasePlan,
-		SchemaReleaseRootLayout:          SchemaTokenReleaseRootLayout,
-		SchemaReleaseCommandRun:          SchemaTokenReleaseCommandRun,
-		SchemaReleaseSeedGrant:           SchemaTokenReleaseSeedGrant,
+		SchemaBugUsage:                      SchemaTokenBugUsage,
+		SchemaWitnessUsage:                  SchemaTokenWitnessUsage,
+		SchemaBugCheckIn:                    SchemaTokenBugCheckIn,
+		SchemaBugCheckInResponse:            SchemaTokenBugCheckInResponse,
+		SchemaBugSeatLease:                  SchemaTokenBugSeatLease,
+		SchemaBugWriterAttestation:          SchemaTokenBugWriterAttestation,
+		SchemaBugWriterCertificate:          SchemaTokenBugWriterCertificate,
+		SchemaBugWriterRevocation:           SchemaTokenBugWriterRevocation,
+		SchemaWitnessCheckIn:                SchemaTokenWitnessCheckIn,
+		SchemaWitnessCheckInResponse:        SchemaTokenWitnessCheckInResponse,
+		SchemaWitnessSubscription:           SchemaTokenWitnessSubscription,
+		SchemaCustodySessionOpenRequest:     SchemaTokenCustodySessionOpenRequest,
+		SchemaCustodySessionOpenResponse:    SchemaTokenCustodySessionOpenResponse,
+		SchemaCustodyFinalizeRequest:        SchemaTokenCustodyFinalizeRequest,
+		SchemaCustodyReceipt:                SchemaTokenCustodyReceipt,
+		SchemaReleaseManifest:               SchemaTokenReleaseManifest,
+		SchemaReleaseUploadReceipt:          SchemaTokenReleaseUploadReceipt,
+		SchemaReleaseDownloadIndex:          SchemaTokenReleaseDownloadIndex,
+		SchemaReleaseDeployPlan:             SchemaTokenReleaseDeployPlan,
+		SchemaReleasePlan:                   SchemaTokenReleasePlan,
+		SchemaReleaseRootLayout:             SchemaTokenReleaseRootLayout,
+		SchemaReleaseCommandRun:             SchemaTokenReleaseCommandRun,
+		SchemaReleaseSeedGrant:              SchemaTokenReleaseSeedGrant,
+		SchemaReleaseDeployPrepareRequest:   SchemaTokenReleaseDeployPrepareRequest,
+		SchemaReleaseDeployPrepareResponse:  SchemaTokenReleaseDeployPrepareResponse,
+		SchemaReleaseDeployFinalizeRequest:  SchemaTokenReleaseDeployFinalizeRequest,
+		SchemaReleaseDeployFinalizeResponse: SchemaTokenReleaseDeployFinalizeResponse,
 	}
 }
 
