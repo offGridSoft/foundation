@@ -18,6 +18,7 @@ const (
 	ObjectSegmentPrivate    = "private"
 	ToolsArchiveName        = "tools.tar.gz"
 	ManifestFileName        = "manifest.json"
+	SignedManifestFileName  = "signed_manifest.json"
 	UploadReceiptFileName   = "upload_receipt.json"
 	DownloadIndexFileName   = "download_index.json"
 	GarbleSeedFileName      = "garble.seed"
