@@ -129,6 +129,46 @@ func TestDeployFinalizeVerificationRejectsHostileChainTable(t *testing.T) {
 	}
 }
 
+func TestDeployPublicationVerificationRejectsHostileChainTable(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		mutate func(*testing.T, *deployTransportChain, *Manifest)
+		name   string
+		accept bool
+	}{
+		{name: "exact persisted publication accepted", accept: true},
+		{name: "foreign receipt signature", mutate: func(t *testing.T, chain *deployTransportChain, _ *Manifest) {
+			chain.finalizeResponse.Receipt = signDeployBody(t, chain.foreignSigner, chain.finalizeResponse.Receipt.Body)
+		}},
+		{name: "foreign index signature", mutate: func(t *testing.T, chain *deployTransportChain, _ *Manifest) {
+			chain.finalizeResponse.Index = signDeployBody(t, chain.foreignSigner, chain.finalizeResponse.Index.Body)
+		}},
+		{name: "caller manifest changed after publication", mutate: func(_ *testing.T, _ *deployTransportChain, manifest *Manifest) {
+			manifest.CreatedAt = core.UnixNanoTimeFromInt64(manifest.CreatedAt.UnixNano() + 1)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			chain := validDeployTransportChain(t)
+			manifest := chain.finalizeRequest.Plan.Body.Manifest
+			if tc.mutate != nil {
+				tc.mutate(t, &chain, &manifest)
+			}
+			err := chain.finalizeResponse.VerifyPublication(manifest, chain.serverSigner.keyring)
+			if tc.accept {
+				if err != nil {
+					t.Fatalf("DeployFinalizeResponse.VerifyPublication() error = %v", err)
+				}
+				return
+			}
+			if !errors.Is(err, core.ErrReleaseContract) && !errors.Is(err, core.ErrFoundationContract) {
+				t.Fatalf("DeployFinalizeResponse.VerifyPublication() error = %v, want release/foundation contract", err)
+			}
+		})
+	}
+}
+
 func TestDeployTransportStrictJSONIngressHostileTable(t *testing.T) {
 	t.Parallel()
 

@@ -98,6 +98,37 @@ func (c DeployClient) Finalize(ctx context.Context, request DeployFinalizeReques
 	return response, nil
 }
 
+// Publication returns the already-finalized publication for releaseID. A
+// not-yet-published release returns DeployAPIError with HTTPStatusNotFound.
+// Successful responses are accepted only after both server signatures bind to
+// the caller's manifest.
+func (c DeployClient) Publication(ctx context.Context, releaseID ReleaseID, manifest Manifest) (DeployFinalizeResponse, error) {
+	if err := c.Validate(); err != nil {
+		return DeployFinalizeResponse{}, err
+	}
+	if err := releaseID.Validate(); err != nil {
+		return DeployFinalizeResponse{}, fmt.Errorf(ErrFmtDeployClient, err)
+	}
+	if err := manifest.Validate(); err != nil {
+		return DeployFinalizeResponse{}, fmt.Errorf(ErrFmtDeployClient, err)
+	}
+	if releaseID != manifest.ReleaseID {
+		return DeployFinalizeResponse{}, fmt.Errorf(ErrFmtDeployClient, core.ErrReleaseContract)
+	}
+	endpoint, err := c.Endpoints.Status(releaseID)
+	if err != nil {
+		return DeployFinalizeResponse{}, err
+	}
+	response, err := deployGet[DeployFinalizeResponse](ctx, c.HTTP, endpoint)
+	if err != nil {
+		return DeployFinalizeResponse{}, err
+	}
+	if err := response.VerifyPublication(manifest, c.ServerKeys); err != nil {
+		return DeployFinalizeResponse{}, err
+	}
+	return response, nil
+}
+
 func deployPost[Request core.Validatable, Response core.Validatable](
 	ctx context.Context,
 	httpClient *http.Client,
@@ -119,6 +150,37 @@ func deployPost[Request core.Validatable, Response core.Validatable](
 		return zero, DeployHTTPError{Cause: err}
 	}
 	httpRequest.Header.Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
+	httpResponse, err := httpClient.Do(httpRequest)
+	if err != nil {
+		return zero, DeployHTTPError{Cause: err}
+	}
+	if httpResponse == nil || httpResponse.Body == nil {
+		return zero, DeployHTTPError{Cause: core.ErrReleaseContract}
+	}
+	defer func() { _ = httpResponse.Body.Close() }()
+	contentType := httpResponse.Header.Get(core.HTTPHeaderContentType)
+	responseBody, err := io.ReadAll(io.LimitReader(httpResponse.Body, core.StrictJSONMaxBytes+1))
+	if err != nil || len(responseBody) == 0 || len(responseBody) > core.StrictJSONMaxBytes {
+		return zero, DeployHTTPError{StatusCode: httpResponse.StatusCode, Cause: core.ErrReleaseContract}
+	}
+	return decodeDeployHTTPResponse[Response](httpResponse.StatusCode, contentType, responseBody)
+}
+
+func deployGet[Response core.Validatable](
+	ctx context.Context,
+	httpClient *http.Client,
+	endpoint core.APIEndpoint,
+) (Response, error) {
+	var zero Response
+	if ctx == nil {
+		return zero, fmt.Errorf(ErrFmtDeployClient, errors.Join(core.ErrReleaseContract, core.ErrNilContext))
+	}
+	requestContext, cancel := context.WithTimeout(ctx, DeployHTTPBudget)
+	defer cancel()
+	httpRequest, err := http.NewRequestWithContext(requestContext, http.MethodGet, endpoint.String(), nil)
+	if err != nil {
+		return zero, DeployHTTPError{Cause: err}
+	}
 	httpResponse, err := httpClient.Do(httpRequest)
 	if err != nil {
 		return zero, DeployHTTPError{Cause: err}

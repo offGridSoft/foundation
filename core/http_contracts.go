@@ -22,6 +22,7 @@ const (
 	HTTPHeaderValueMaxRunes             = 8192
 	BackoffMaxDuration                  = 24 * time.Hour
 	HTTPStatusOK                        = 200
+	HTTPStatusNotFound                  = 404
 	HTTPStatusTooManyRequests           = 429
 	HTTPStatusInternalServerError       = 500
 	HTTPStatusServerErrorUpperExclusive = 600

@@ -133,6 +133,69 @@ func TestDeployClientFinalizeHostileHTTPTable(t *testing.T) {
 	}
 }
 
+func TestDeployClientPublicationHostileHTTPTable(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		mutate  func(*testing.T, *deployTransportChain)
+		name    string
+		status  int
+		accept  bool
+		wantAPI bool
+	}{
+		{name: "exact persisted publication", status: core.HTTPStatusOK, accept: true},
+		{name: "foreign receipt signature", status: core.HTTPStatusOK, mutate: func(t *testing.T, chain *deployTransportChain) {
+			chain.finalizeResponse.Receipt = signDeployBody(t, chain.foreignSigner, chain.finalizeResponse.Receipt.Body)
+		}},
+		{name: "not published", status: core.HTTPStatusNotFound, wantAPI: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			chain := validDeployTransportChain(t)
+			if tc.mutate != nil {
+				tc.mutate(t, &chain)
+			}
+			manifest := chain.finalizeRequest.Plan.Body.Manifest
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+				wantPath := OffgridBugDeployRootPath + "/" + manifest.ReleaseID.String()
+				if request.Method != http.MethodGet || request.URL.Path != wantPath {
+					t.Errorf("request = %s %s, want GET %s", request.Method, request.URL.Path, wantPath)
+				}
+				w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
+				w.WriteHeader(tc.status)
+				if tc.status == core.HTTPStatusOK {
+					_, _ = w.Write(finalizeSuccessEnvelope(t, chain))
+					return
+				}
+				_, _ = w.Write(finalizeFailureEnvelope(t))
+			}))
+			defer server.Close()
+			endpoints, err := BugDeployEndpointsForBaseURL(server.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			client := DeployClient{
+				HTTP: server.Client(), Endpoints: endpoints,
+				ReleaseKeys: chain.releaseSigner.keyring, ServerKeys: chain.serverSigner.keyring,
+			}
+			_, err = client.Publication(context.Background(), manifest.ReleaseID, manifest)
+			if tc.accept {
+				if err != nil {
+					t.Fatalf("DeployClient.Publication() error = %v", err)
+				}
+				return
+			}
+			if !errors.Is(err, core.ErrReleaseContract) && !errors.Is(err, core.ErrFoundationContract) {
+				t.Fatalf("DeployClient.Publication() error = %v, want release/foundation contract", err)
+			}
+			var apiErr DeployAPIError
+			if got := errors.As(err, &apiErr); got != tc.wantAPI {
+				t.Fatalf("errors.As(DeployAPIError) = %v, want %v; error=%v", got, tc.wantAPI, err)
+			}
+		})
+	}
+}
+
 func prepareSuccessEnvelope(t *testing.T, chain deployTransportChain) []byte {
 	t.Helper()
 	envelope := core.APIEnvelope[DeployPrepareResponse]{
@@ -162,6 +225,19 @@ func finalizeSuccessEnvelope(t *testing.T, chain deployTransportChain) []byte {
 	t.Helper()
 	envelope := core.APIEnvelope[DeployFinalizeResponse]{
 		Data: &chain.finalizeResponse, RequestID: core.NewAPIRequestID("deploy-finalize-http-test"),
+	}
+	data, err := json.Marshal(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func finalizeFailureEnvelope(t *testing.T) []byte {
+	t.Helper()
+	envelope := core.APIEnvelope[DeployFinalizeResponse]{
+		Error:     &core.APIErrorBody{Code: core.APICodeNotFound, Message: "release not published"},
+		RequestID: core.NewAPIRequestID("deploy-status-not-found"),
 	}
 	data, err := json.Marshal(envelope)
 	if err != nil {

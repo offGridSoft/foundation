@@ -304,6 +304,32 @@ func (r DeployFinalizeResponse) Verify(request DeployFinalizeRequest, serverKeys
 	return nil
 }
 
+// VerifyPublication verifies a previously finalized release without requiring
+// the original finalize request. The nested server signatures bind the receipt
+// and download index to manifest, so a status/read path can return the exact
+// persisted publication rather than minting a second upload attempt.
+func (r DeployFinalizeResponse) VerifyPublication(manifest Manifest, serverKeys core.SigningKeyring) error {
+	if err := manifest.Validate(); err != nil {
+		return wrapReleaseContract(ErrFmtDeployFinalizeResponse, err)
+	}
+	if err := r.Validate(); err != nil {
+		return err
+	}
+	if err := r.Receipt.Verify(serverKeys); err != nil {
+		return wrapReleaseContract(ErrFmtDeployFinalizeResponse, err)
+	}
+	if err := r.Index.Verify(serverKeys); err != nil {
+		return wrapReleaseContract(ErrFmtDeployFinalizeResponse, err)
+	}
+	if err := r.Receipt.Body.VerifyManifest(manifest); err != nil {
+		return wrapReleaseContract(ErrFmtDeployFinalizeResponse, err)
+	}
+	if err := r.Index.Body.VerifyManifest(manifest); err != nil {
+		return wrapReleaseContract(ErrFmtDeployFinalizeResponse, err)
+	}
+	return nil
+}
+
 func (r DeployFinalizeResponse) MarshalJSON() ([]byte, error) {
 	return r.validatedJSON()
 }
