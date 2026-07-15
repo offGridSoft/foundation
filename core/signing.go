@@ -15,9 +15,13 @@ const (
 	SigningKeyringMaxKeys = 16
 )
 
-type CanonicalBody interface {
+type CanonicalValue interface {
 	Validatable
 	Canonical(dst []byte) ([]byte, error)
+}
+
+type CanonicalBody interface {
+	CanonicalValue
 	SigningSchema() SchemaID
 }
 

@@ -3,6 +3,8 @@ package custody
 import (
 	"bytes"
 	"crypto/ed25519"
+	"encoding/asn1"
+	"encoding/base64"
 	"errors"
 	"math"
 	"strings"
@@ -15,6 +17,7 @@ import (
 type testFatalHelper interface {
 	Helper()
 	Fatal(args ...any)
+	Fatalf(format string, args ...any)
 }
 
 func TestSessionOpenRequestHostileTable(t *testing.T) {
@@ -167,6 +170,11 @@ func TestSessionOpenResponseAndUploadTargetContracts(t *testing.T) {
 	if err := response.Validate(); !errors.Is(err, core.ErrCustodyContract) {
 		t.Fatalf("SessionOpenResponse oversized targets error = %v, want ErrCustodyContract", err)
 	}
+	response.Upload.Targets = validUploadTargets(t)
+	response.Upload.Targets[0].Provider = core.StorageProviderS3
+	if err := response.Validate(); !errors.Is(err, core.ErrCustodyContract) {
+		t.Fatalf("SessionOpenResponse non-GCS target error = %v, want ErrCustodyContract", err)
+	}
 }
 
 func TestSessionOpenResponseReusesSignedReceipt(t *testing.T) {
@@ -272,9 +280,9 @@ func TestReceiptCanonicalWireForm(t *testing.T) {
 		`"customer_id":"01HZZZZZZZZZZZZZZZZZZZZZZZ","bundle_root":"` + strings.Repeat("f", 64) + `",` +
 		`"session_id":"01J00000000000000000000000","chain_hash":"` + strings.Repeat("e", 64) + `",` +
 		`"objects":[{"artifact":"bundle.tar","object":"` + witnessObjectPath(t) + `",` +
-		`"generation":"1710000000000000","sha256":"` + strings.Repeat("c", 64) + `","blake3":"` + strings.Repeat("d", 64) + `","size_bytes":12,"provider":"gcs"},` +
-		`{"artifact":"bundle.tar","object":"` + witnessObjectPath(t) + `",` +
-		`"generation":"1710000000000000","sha256":"` + strings.Repeat("c", 64) + `","blake3":"` + strings.Repeat("d", 64) + `","size_bytes":12,"provider":"s3"}],` +
+		`"generation":"1710000000000000","sha256":"` + strings.Repeat("c", 64) + `","blake3":"` + strings.Repeat("d", 64) + `","size_bytes":12,"provider":"gcs"}],` +
+		`"timestamp":{"authority":"freetsa","bundle_root":"` + strings.Repeat("f", 64) + `","imprint_sha256":"` + body.Timestamp.ImprintSHA256.String() + `",` +
+		`"token":"` + body.Timestamp.Token.String() + `","response":"` + body.Timestamp.Response.String() + `","timestamped_at":1782302399500000000},` +
 		`"retention":{"retain_until":1815000000000000000,"maximum_retain_until":1878000000000000000,"class":"conditional"},` +
 		`"issued_at":1782302400000000000,"accepted_at":1782302399000000000,"ledger_seq":7}`
 	if string(got) != want {
@@ -306,6 +314,118 @@ func TestReceiptCanonicalRoundTripTable(t *testing.T) {
 			}
 			if string(got) != string(original) {
 				t.Fatalf("receipt canonical round trip\n got: %s\nwant: %s", got, original)
+			}
+		})
+	}
+}
+
+func TestTimestampProofAndGCSOnlyCustodyHostileTable(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		mutate func(*testing.T, *ReceiptBody)
+		name   string
+		accept bool
+	}{
+		{name: "exact GCS object and embedded RFC3161 token accepted", accept: true},
+		{name: "S3 object refused", mutate: func(_ *testing.T, body *ReceiptBody) {
+			body.Objects[0].Provider = core.StorageProviderS3
+		}},
+		{name: "timestamp bundle root swap refused", mutate: func(t *testing.T, body *ReceiptBody) {
+			body.Timestamp.BundleRoot = mustBLAKE3(t, "a")
+		}},
+		{name: "timestamp imprint swap refused", mutate: func(t *testing.T, body *ReceiptBody) {
+			body.Timestamp.ImprintSHA256 = mustSHA256(t, "a")
+		}},
+		{name: "token absent from response refused", mutate: func(t *testing.T, body *ReceiptBody) {
+			body.Timestamp.Token = mustAlternateTimestampToken(t)
+		}},
+		{name: "timestamp before acceptance refused", mutate: func(_ *testing.T, body *ReceiptBody) {
+			body.Timestamp.TimestampedAt = body.AcceptedAt.Add(-time.Nanosecond)
+		}},
+		{name: "timestamp after receipt issuance refused", mutate: func(_ *testing.T, body *ReceiptBody) {
+			body.Timestamp.TimestampedAt = body.IssuedAt.Add(time.Nanosecond)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			body := validReceipt(t)
+			if tc.mutate != nil {
+				tc.mutate(t, &body)
+			}
+			err := body.Validate()
+			if tc.accept {
+				if err != nil {
+					t.Fatalf("ReceiptBody.Validate() error = %v", err)
+				}
+				return
+			}
+			if !errors.Is(err, core.ErrCustodyContract) {
+				t.Fatalf("ReceiptBody.Validate() error = %v, want %v", err, core.ErrCustodyContract)
+			}
+		})
+	}
+}
+
+func TestRFC3161DERBoundaryHostileTable(t *testing.T) {
+	t.Parallel()
+
+	proof := mustTimestampProof(t)
+	validToken := proof.Token.String()
+	validResponse := proof.Response.String()
+	wrongOID, err := asn1.Marshal(asn1.ObjectIdentifier{1, 2, 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	missingSignedData, err := asn1.Marshal(asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 7, 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	oversized := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{1}, RFC3161DERMaximumBytes+1))
+	for _, tc := range []struct {
+		name  string
+		value string
+	}{
+		{name: "empty token refused", value: ""},
+		{name: "invalid base64 token refused", value: "%%%"},
+		{name: "noncanonical base64 token refused", value: "TQ"},
+		{name: "non-DER token refused", value: "YQ=="},
+		{name: "empty DER sequence token refused", value: "MAA="},
+		{name: "wrong content type token refused", value: base64.StdEncoding.EncodeToString(testDERSequence(t, append(wrongOID, []byte{0xa0, 0x02, 0x30, 0x00}...)))},
+		{name: "missing signed data token refused", value: base64.StdEncoding.EncodeToString(testDERSequence(t, missingSignedData))},
+		{name: "trailing token bytes refused", value: validToken + "AA=="},
+		{name: "oversized token refused", value: oversized},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if _, err := ParseRFC3161Token(tc.value); !errors.Is(err, core.ErrCustodyContract) {
+				t.Fatalf("ParseRFC3161Token() error = %v, want %v", err, core.ErrCustodyContract)
+			}
+		})
+	}
+
+	failedStatus, err := asn1.Marshal(struct{ Status int }{Status: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tokenBytes, err := proof.Token.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name string
+		raw  []byte
+	}{
+		{name: "empty response refused", raw: nil},
+		{name: "non-DER response refused", raw: []byte("response")},
+		{name: "failure status response refused", raw: testDERSequence(t, append(failedStatus, tokenBytes...))},
+		{name: "response without token refused", raw: testDERSequence(t, []byte{0x30, 0x03, 0x02, 0x01, 0x00})},
+		{name: "response with trailing bytes refused", raw: append(mustTimestampResponseBytes(t, validResponse), 0)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if _, err := NewRFC3161Response(tc.raw); !errors.Is(err, core.ErrCustodyContract) {
+				t.Fatalf("NewRFC3161Response() error = %v, want %v", err, core.ErrCustodyContract)
 			}
 		})
 	}
@@ -383,7 +503,7 @@ func TestFinalizeRejectsDuplicateObjects(t *testing.T) {
 	}
 }
 
-func TestFinalizeDualProviderContract(t *testing.T) {
+func TestFinalizeGCSOnlyContract(t *testing.T) {
 	t.Parallel()
 
 	req := FinalizeRequest{
@@ -397,9 +517,9 @@ func TestFinalizeDualProviderContract(t *testing.T) {
 		t.Fatalf("FinalizeRequest.Validate() error = %v, want nil", err)
 	}
 
-	req.Objects[1].SHA256 = mustSHA256(t, "a")
+	req.Objects[0].Provider = core.StorageProviderS3
 	if err := req.Validate(); !errors.Is(err, core.ErrCustodyContract) {
-		t.Fatalf("FinalizeRequest provider hash drift error = %v, want ErrCustodyContract", err)
+		t.Fatalf("FinalizeRequest provider error = %v, want ErrCustodyContract", err)
 	}
 }
 
@@ -410,8 +530,7 @@ func TestReceiptRejectsCustodyIdentityDrift(t *testing.T) {
 		mutate func(*testing.T, *ReceiptBody)
 		name   string
 	}{
-		{name: "secondary provider missing", mutate: func(_ *testing.T, b *ReceiptBody) { b.Objects = b.Objects[:1] }},
-		{name: "provider byte count drift", mutate: func(_ *testing.T, b *ReceiptBody) { b.Objects[1].Size = core.NewByteCount(13) }},
+		{name: "object byte count invalid", mutate: func(_ *testing.T, b *ReceiptBody) { b.Objects[0].Size = core.NewByteCount(0) }},
 		{name: "retention exceeds plan ceiling", mutate: func(_ *testing.T, b *ReceiptBody) {
 			b.Retention.RetainUntil = b.Retention.MaximumRetainUntil.Add(time.Nanosecond)
 		}},
@@ -465,6 +584,7 @@ func validReceipt(t testFatalHelper) ReceiptBody {
 		Session:    mustSessionID(t),
 		Release:    mustRelease(t),
 		Objects:    mustUploadedObjects(t),
+		Timestamp:  mustTimestampProof(t),
 		Retention:  mustRetention(),
 		LedgerSeq:  mustLedgerSeq(t, 7),
 		ChainHash:  mustSHA256(t, "e"),
@@ -537,10 +657,7 @@ func mustUploadedObject(t testFatalHelper) UploadedObject {
 
 func mustUploadedObjects(t testFatalHelper) []UploadedObject {
 	t.Helper()
-	gcs := mustUploadedObject(t)
-	s3 := gcs
-	s3.Provider = core.StorageProviderS3
-	return []UploadedObject{gcs, s3}
+	return []UploadedObject{mustUploadedObject(t)}
 }
 
 func validUploadTarget(t testFatalHelper) UploadTarget {
@@ -560,10 +677,71 @@ func validUploadTarget(t testFatalHelper) UploadTarget {
 
 func validUploadTargets(t testFatalHelper) []UploadTarget {
 	t.Helper()
-	gcs := validUploadTarget(t)
-	s3 := gcs
-	s3.Provider = core.StorageProviderS3
-	return []UploadTarget{gcs, s3}
+	return []UploadTarget{validUploadTarget(t)}
+}
+
+func mustTimestampProof(t testFatalHelper) TimestampProof {
+	t.Helper()
+	status, err := asn1.Marshal(struct{ Status int }{Status: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	contentType, err := asn1.Marshal(asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 7, 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tokenBytes := testDERSequence(t, append(contentType, []byte{0xa0, 0x02, 0x30, 0x00}...))
+	responseBytes := testDERSequence(t, append(status, tokenBytes...))
+	token, err := NewRFC3161Token(tokenBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := NewRFC3161Response(responseBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proof, err := BuildTimestampProof(TimestampProofInput{
+		Authority: TimestampAuthorityFreeTSA, BundleRoot: mustBundleRoot(t), Token: token, Response: response,
+		TimestampedAt: core.UnixNanoTimeFromInt64(1782302399500000000),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return proof
+}
+
+func mustAlternateTimestampToken(t testFatalHelper) RFC3161Token {
+	t.Helper()
+	contentType, err := asn1.Marshal(asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 7, 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := NewRFC3161Token(testDERSequence(t, append(contentType, []byte{0xa0, 0x03, 0x02, 0x01, 0x01}...)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return token
+}
+
+func mustTimestampResponseBytes(t testFatalHelper, value string) []byte {
+	t.Helper()
+	response, err := ParseRFC3161Response(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := response.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
+func testDERSequence(t testFatalHelper, content []byte) []byte {
+	t.Helper()
+	if len(content) >= 128 {
+		t.Fatalf("test DER content bytes = %d, want < 128", len(content))
+	}
+	return append([]byte{0x30, byte(len(content))}, content...)
 }
 
 func mustObjectPath(t testFatalHelper) ObjectPath {

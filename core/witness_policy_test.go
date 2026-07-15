@@ -84,10 +84,15 @@ func TestWitnessRetentionPolicyHostileTable(t *testing.T) {
 		{name: "missing monthly extension", mutate: func(p *WitnessRetentionPolicy) { p.PaymentExtension = NanosecondsDuration{} }},
 		{name: "missing retention cap", mutate: func(p *WitnessRetentionPolicy) { p.RetentionCap = NanosecondsDuration{} }},
 		{name: "initial retention exceeds cap", mutate: func(p *WitnessRetentionPolicy) { p.RetentionCap = NewNanosecondsDuration(time.Hour) }},
-		{name: "first warning threshold drift", mutate: func(p *WitnessRetentionPolicy) { p.FirstWarningAt++ }},
-		{name: "export warning threshold drift", mutate: func(p *WitnessRetentionPolicy) { p.ExportWarningAt++ }},
+		{name: "missing deletion risk delay", mutate: func(p *WitnessRetentionPolicy) { p.DeletionRiskNoticeAfter = NanosecondsDuration{} }},
+		{name: "missing retrieval-only delay", mutate: func(p *WitnessRetentionPolicy) { p.RetrievalOnlyAfter = NanosecondsDuration{} }},
+		{name: "missing deletion eligibility delay", mutate: func(p *WitnessRetentionPolicy) { p.DeletionEligibleAfter = NanosecondsDuration{} }},
+		{name: "deletion risk threshold drift", mutate: func(p *WitnessRetentionPolicy) { p.DeletionRiskNoticeAfter = NewNanosecondsDuration(time.Hour) }},
+		{name: "retrieval threshold drift", mutate: func(p *WitnessRetentionPolicy) { p.RetrievalOnlyAfter = NewNanosecondsDuration(time.Hour) }},
+		{name: "deletion threshold drift", mutate: func(p *WitnessRetentionPolicy) { p.DeletionEligibleAfter = NewNanosecondsDuration(time.Hour) }},
+		{name: "immediate payment notice disabled", mutate: func(p *WitnessRetentionPolicy) { p.PaymentNoticeImmediate = false }},
+		{name: "notice outbox requirement disabled", mutate: func(p *WitnessRetentionPolicy) { p.NoticeOutboxRequired = false }},
 		{name: "deletion event requirement disabled", mutate: func(p *WitnessRetentionPolicy) { p.DeletionEventRequired = false }},
-		{name: "export cure requirement disabled", mutate: func(p *WitnessRetentionPolicy) { p.ExportCureRequired = false }},
 		{name: "legal hold protection disabled", mutate: func(p *WitnessRetentionPolicy) { p.LegalHoldBlocksDeletion = false }},
 		{name: "retention expiry requirement disabled", mutate: func(p *WitnessRetentionPolicy) { p.RetentionExpiryRequired = false }},
 	} {
@@ -139,28 +144,42 @@ func TestWitnessRetentionWindowCapsExtensions(t *testing.T) {
 func TestDecideWitnessRetentionHostileTable(t *testing.T) {
 	t.Parallel()
 
-	retainUntil := NewUnixNanoTime(time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC))
-	before := retainUntil.Add(-time.Nanosecond)
-	after := retainUntil.Add(time.Nanosecond)
+	missed := NewUnixNanoTime(time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
+	paymentNotice := missed.Add(time.Hour)
+	riskNotice := missed.Add(WitnessDeletionRiskNoticeAfter)
+	retrievalNotice := missed.Add(WitnessRetrievalOnlyNoticeAfter)
+	policy := NewWitnessRetentionPolicy(WitnessSilverRetentionCap)
 	for _, tc := range []struct {
-		name  string
-		input WitnessRetentionDecisionInput
-		want  RetentionAction
+		name    string
+		input   WitnessRetentionDecisionInput
+		want    RetentionAction
+		wantErr bool
 	}{
-		{name: "paid active bundle retained", input: WitnessRetentionDecisionInput{Now: after, RetainUntil: retainUntil}, want: RetentionActionRetain},
-		{name: "first missed payment warns", input: WitnessRetentionDecisionInput{Now: before, RetainUntil: retainUntil, MissedPayments: 1}, want: RetentionActionPaymentWarning},
-		{name: "second missed payment starts export warning", input: WitnessRetentionDecisionInput{Now: before, RetainUntil: retainUntil, MissedPayments: 2}, want: RetentionActionExportWarning},
-		{name: "expiry without completed cure remains export warning", input: WitnessRetentionDecisionInput{Now: after, RetainUntil: retainUntil, MissedPayments: 2}, want: RetentionActionExportWarning},
-		{name: "completed cure before expiry remains export warning", input: WitnessRetentionDecisionInput{Now: before, RetainUntil: retainUntil, MissedPayments: 2, ExportCureComplete: true}, want: RetentionActionExportWarning},
-		{name: "exact expiry is not after expiry", input: WitnessRetentionDecisionInput{Now: retainUntil, RetainUntil: retainUntil, MissedPayments: 2, ExportCureComplete: true}, want: RetentionActionExportWarning},
-		{name: "expired second miss and completed cure permits recorded deletion", input: WitnessRetentionDecisionInput{Now: after, RetainUntil: retainUntil, MissedPayments: 2, ExportCureComplete: true}, want: RetentionActionDeleteEligible},
-		{name: "legal hold blocks otherwise eligible deletion", input: WitnessRetentionDecisionInput{Now: after, RetainUntil: retainUntil, MissedPayments: 2, ExportCureComplete: true, LegalHold: true}, want: RetentionActionLegalHold},
-		{name: "legal hold outranks first warning", input: WitnessRetentionDecisionInput{Now: before, RetainUntil: retainUntil, MissedPayments: 1, LegalHold: true}, want: RetentionActionLegalHold},
-		{name: "additional misses do not bypass cure", input: WitnessRetentionDecisionInput{Now: after, RetainUntil: retainUntil, MissedPayments: 255}, want: RetentionActionExportWarning},
+		{name: "paid active bundle retained", input: WitnessRetentionDecisionInput{Now: missed}, want: RetentionActionRetain},
+		{name: "missed payment immediately requests warning", input: WitnessRetentionDecisionInput{Now: missed, MissedPaymentAt: missed, MissedPayment: true}, want: RetentionActionPaymentWarning},
+		{name: "sent payment warning retains before sixty days", input: WitnessRetentionDecisionInput{Now: missed.Add(WitnessDeletionRiskNoticeAfter - time.Nanosecond), MissedPaymentAt: missed, MissedPayment: true, NoticeHistory: WitnessCustodyNoticeHistory{PaymentWarningAt: paymentNotice}}, want: RetentionActionRetain},
+		{name: "sixty days requests deletion risk warning", input: WitnessRetentionDecisionInput{Now: riskNotice, MissedPaymentAt: missed, MissedPayment: true, NoticeHistory: WitnessCustodyNoticeHistory{PaymentWarningAt: paymentNotice}}, want: RetentionActionDeletionRiskWarning},
+		{name: "missing first warning cannot skip to deletion risk", input: WitnessRetentionDecisionInput{Now: riskNotice, MissedPaymentAt: missed, MissedPayment: true}, want: RetentionActionPaymentWarning},
+		{name: "ninety days requests retrieval only notice", input: WitnessRetentionDecisionInput{Now: retrievalNotice, MissedPaymentAt: missed, MissedPayment: true, NoticeHistory: WitnessCustodyNoticeHistory{PaymentWarningAt: paymentNotice, DeletionRiskWarningAt: riskNotice}}, want: RetentionActionRetrievalOnly},
+		{name: "ninety days cannot skip deletion risk notice", input: WitnessRetentionDecisionInput{Now: retrievalNotice, MissedPaymentAt: missed, MissedPayment: true, NoticeHistory: WitnessCustodyNoticeHistory{PaymentWarningAt: paymentNotice}}, want: RetentionActionDeletionRiskWarning},
+		{name: "six months with missing retrieval notice requests it first", input: WitnessRetentionDecisionInput{Now: missed.Add(WitnessDeletionEligibleAfter), MissedPaymentAt: missed, MissedPayment: true, NoticeHistory: WitnessCustodyNoticeHistory{PaymentWarningAt: paymentNotice, DeletionRiskWarningAt: riskNotice}}, want: RetentionActionRetrievalOnly},
+		{name: "six months cannot skip deletion risk notice", input: WitnessRetentionDecisionInput{Now: missed.Add(WitnessDeletionEligibleAfter), MissedPaymentAt: missed, MissedPayment: true, NoticeHistory: WitnessCustodyNoticeHistory{PaymentWarningAt: paymentNotice}}, want: RetentionActionDeletionRiskWarning},
+		{name: "six months and complete notice history permits deletion", input: WitnessRetentionDecisionInput{Now: missed.Add(WitnessDeletionEligibleAfter), MissedPaymentAt: missed, MissedPayment: true, NoticeHistory: WitnessCustodyNoticeHistory{PaymentWarningAt: paymentNotice, DeletionRiskWarningAt: riskNotice, RetrievalOnlyAt: retrievalNotice}}, want: RetentionActionDeleteEligible},
+		{name: "legal hold blocks otherwise eligible deletion", input: WitnessRetentionDecisionInput{Now: missed.Add(WitnessDeletionEligibleAfter), MissedPaymentAt: missed, MissedPayment: true, LegalHold: true, NoticeHistory: WitnessCustodyNoticeHistory{PaymentWarningAt: paymentNotice, DeletionRiskWarningAt: riskNotice, RetrievalOnlyAt: retrievalNotice}}, want: RetentionActionLegalHold},
+		{name: "future missed payment refused", input: WitnessRetentionDecisionInput{Now: missed, MissedPaymentAt: missed.Add(time.Nanosecond), MissedPayment: true}, wantErr: true},
+		{name: "out of order notice history refused", input: WitnessRetentionDecisionInput{Now: retrievalNotice, MissedPaymentAt: missed, MissedPayment: true, NoticeHistory: WitnessCustodyNoticeHistory{PaymentWarningAt: retrievalNotice, DeletionRiskWarningAt: riskNotice}}, wantErr: true},
+		{name: "early deletion risk notice refused", input: WitnessRetentionDecisionInput{Now: riskNotice, MissedPaymentAt: missed, MissedPayment: true, NoticeHistory: WitnessCustodyNoticeHistory{PaymentWarningAt: paymentNotice, DeletionRiskWarningAt: riskNotice.Add(-time.Nanosecond)}}, wantErr: true},
+		{name: "early retrieval-only notice refused", input: WitnessRetentionDecisionInput{Now: retrievalNotice, MissedPaymentAt: missed, MissedPayment: true, NoticeHistory: WitnessCustodyNoticeHistory{PaymentWarningAt: paymentNotice, DeletionRiskWarningAt: riskNotice, RetrievalOnlyAt: retrievalNotice.Add(-time.Nanosecond)}}, wantErr: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := DecideWitnessRetention(tc.input)
+			got, err := DecideWitnessRetention(tc.input, policy)
+			if tc.wantErr {
+				if !errors.Is(err, ErrWitnessPolicyContract) {
+					t.Fatalf("DecideWitnessRetention() error = %v, want %v", err, ErrWitnessPolicyContract)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("DecideWitnessRetention() error = %v, want nil", err)
 			}

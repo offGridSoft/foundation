@@ -16,9 +16,10 @@ import (
 func TestSignedBodyCanonicalProjectionCoversEveryTaggedField(t *testing.T) {
 	t.Parallel()
 	requireCanonicalJSONFieldCoverage(t, validReceipt(t))
+	requireCanonicalJSONFieldCoverage(t, validReceipt(t).Timestamp)
 }
 
-func requireCanonicalJSONFieldCoverage(t *testing.T, body core.CanonicalBody) {
+func requireCanonicalJSONFieldCoverage(t *testing.T, body core.CanonicalValue) {
 	t.Helper()
 	canonical, err := body.Canonical(nil)
 	if err != nil {

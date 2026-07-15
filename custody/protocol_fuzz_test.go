@@ -167,6 +167,33 @@ func FuzzReceiptBoundary(f *testing.F) {
 	})
 }
 
+func FuzzRFC3161TimestampProofBoundary(f *testing.F) {
+	seed, err := json.Marshal(mustTimestampProof(f))
+	if err != nil {
+		f.Fatal(err)
+	}
+	f.Add(seed)
+	f.Add([]byte(nil))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		decoded, err := core.DecodeStrictJSON[TimestampProof](data)
+		if err != nil {
+			return
+		}
+		canonical, err := decoded.Canonical(nil)
+		if err != nil {
+			t.Fatalf("accepted TimestampProof canonicalization = %v, want nil", err)
+		}
+		roundTrip, err := core.DecodeStrictJSON[TimestampProof](canonical)
+		if err != nil {
+			t.Fatalf("canonical TimestampProof decode = %v, want nil", err)
+		}
+		again, err := roundTrip.Canonical(nil)
+		if err != nil || !bytes.Equal(canonical, again) {
+			t.Fatalf("canonical TimestampProof instability: error = %v", err)
+		}
+	})
+}
+
 func FuzzCustodyScalarAndEnumReceivers(f *testing.F) {
 	pathSeed, err := json.Marshal(witnessObjectPath(f))
 	if err != nil {
@@ -189,6 +216,24 @@ func FuzzCustodyScalarAndEnumReceivers(f *testing.F) {
 		priorDisposition := disposition
 		if err := disposition.UnmarshalJSON(data); err != nil && disposition != priorDisposition {
 			t.Fatalf("SessionOpenDisposition.UnmarshalJSON() mutated receiver after rejection")
+		}
+
+		authority := TimestampAuthorityFreeTSA
+		priorAuthority := authority
+		if err := authority.UnmarshalJSON(data); err != nil && authority != priorAuthority {
+			t.Fatalf("TimestampAuthority.UnmarshalJSON() mutated receiver after rejection")
+		}
+
+		token := mustTimestampProof(t).Token
+		priorToken := token.String()
+		if err := token.UnmarshalJSON(data); err != nil && token.String() != priorToken {
+			t.Fatalf("RFC3161Token.UnmarshalJSON() mutated receiver after rejection")
+		}
+
+		response := mustTimestampProof(t).Response
+		priorResponse := response.String()
+		if err := response.UnmarshalJSON(data); err != nil && response.String() != priorResponse {
+			t.Fatalf("RFC3161Response.UnmarshalJSON() mutated receiver after rejection")
 		}
 	})
 }

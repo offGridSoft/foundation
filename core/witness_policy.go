@@ -14,19 +14,21 @@ const (
 	WitnessSilverMachineLimit MachineLimit = 10
 	WitnessGoldMachineLimit   MachineLimit = 10
 
-	WitnessInitialRetentionDuration = 90 * 24 * time.Hour
+	WitnessInitialRetentionDuration = 180 * 24 * time.Hour
 	WitnessPaymentExtensionDuration = 30 * 24 * time.Hour
-	WitnessBronzeRetentionCap       = 90 * 24 * time.Hour
+	WitnessBronzeRetentionCap       = 180 * 24 * time.Hour
 	WitnessSilverRetentionCap       = 3 * 365 * 24 * time.Hour
 	WitnessGoldRetentionCap         = 10 * 365 * 24 * time.Hour
-	WitnessFirstWarningMissedCount  = 1
-	WitnessExportWarningMissedCount = 2
+	WitnessDeletionRiskNoticeAfter  = 60 * 24 * time.Hour
+	WitnessRetrievalOnlyNoticeAfter = 90 * 24 * time.Hour
+	WitnessDeletionEligibleAfter    = 180 * 24 * time.Hour
 
-	RetentionActionTokenRetain         = "retain"
-	RetentionActionTokenPaymentWarning = "payment_warning"
-	RetentionActionTokenExportWarning  = "export_warning"
-	RetentionActionTokenDeleteEligible = "delete_eligible"
-	RetentionActionTokenLegalHold      = "legal_hold"
+	RetentionActionTokenRetain              = "retain"
+	RetentionActionTokenPaymentWarning      = "payment_warning"
+	RetentionActionTokenDeletionRiskWarning = "deletion_notice"
+	RetentionActionTokenRetrievalOnly       = "retrieval_only"
+	RetentionActionTokenDeleteEligible      = "delete_eligible"
+	RetentionActionTokenLegalHold           = "legal_hold"
 
 	ErrFmtMachineLimit             = "core.MachineLimit: %w"
 	ErrFmtWitnessRetentionPolicy   = "core.WitnessRetentionPolicy: %w"
@@ -89,10 +91,12 @@ type WitnessRetentionPolicy struct {
 	InitialRetention        NanosecondsDuration `json:"initial_retention_ns"`
 	PaymentExtension        NanosecondsDuration `json:"payment_extension_ns"`
 	RetentionCap            NanosecondsDuration `json:"retention_cap_ns"`
-	FirstWarningAt          uint8               `json:"first_warning_missed_payments"`
-	ExportWarningAt         uint8               `json:"export_warning_missed_payments"`
+	DeletionRiskNoticeAfter NanosecondsDuration `json:"deletion_risk_notice_after_ns"`
+	RetrievalOnlyAfter      NanosecondsDuration `json:"retrieval_only_after_ns"`
+	DeletionEligibleAfter   NanosecondsDuration `json:"deletion_eligible_after_ns"`
+	PaymentNoticeImmediate  bool                `json:"payment_notice_immediate"`
+	NoticeOutboxRequired    bool                `json:"notice_outbox_required"`
 	DeletionEventRequired   bool                `json:"deletion_event_required"`
-	ExportCureRequired      bool                `json:"export_cure_required"`
 	LegalHoldBlocksDeletion bool                `json:"legal_hold_blocks_deletion"`
 	RetentionExpiryRequired bool                `json:"retention_expiry_required"`
 }
@@ -102,10 +106,12 @@ func NewWitnessRetentionPolicy(retentionCap time.Duration) WitnessRetentionPolic
 		InitialRetention:        NewNanosecondsDuration(WitnessInitialRetentionDuration),
 		PaymentExtension:        NewNanosecondsDuration(WitnessPaymentExtensionDuration),
 		RetentionCap:            NewNanosecondsDuration(retentionCap),
-		FirstWarningAt:          WitnessFirstWarningMissedCount,
-		ExportWarningAt:         WitnessExportWarningMissedCount,
+		DeletionRiskNoticeAfter: NewNanosecondsDuration(WitnessDeletionRiskNoticeAfter),
+		RetrievalOnlyAfter:      NewNanosecondsDuration(WitnessRetrievalOnlyNoticeAfter),
+		DeletionEligibleAfter:   NewNanosecondsDuration(WitnessDeletionEligibleAfter),
+		PaymentNoticeImmediate:  true,
+		NoticeOutboxRequired:    true,
 		DeletionEventRequired:   true,
-		ExportCureRequired:      true,
 		LegalHoldBlocksDeletion: true,
 		RetentionExpiryRequired: true,
 	}
@@ -121,20 +127,45 @@ func (p WitnessRetentionPolicy) Validate() error {
 	if err := validateWitnessRetentionDuration(p.RetentionCap); err != nil {
 		return err
 	}
+	if err := validateWitnessRetentionDuration(p.DeletionRiskNoticeAfter); err != nil {
+		return err
+	}
+	if err := validateWitnessRetentionDuration(p.RetrievalOnlyAfter); err != nil {
+		return err
+	}
+	if err := validateWitnessRetentionDuration(p.DeletionEligibleAfter); err != nil {
+		return err
+	}
 	return validateWitnessRetentionRules(p)
 }
 
 func validateWitnessRetentionRules(p WitnessRetentionPolicy) error {
-	if p.InitialRetention.Duration() > p.RetentionCap.Duration() {
+	if !validWitnessRetentionRange(p) {
 		return fmt.Errorf(ErrFmtWitnessRetentionPolicy, ErrWitnessPolicyContract)
 	}
-	if p.FirstWarningAt != WitnessFirstWarningMissedCount || p.ExportWarningAt != WitnessExportWarningMissedCount {
+	if !validWitnessNoticeSchedule(p) {
 		return fmt.Errorf(ErrFmtWitnessRetentionPolicy, ErrWitnessPolicyContract)
 	}
-	if !p.DeletionEventRequired || !p.ExportCureRequired || !p.LegalHoldBlocksDeletion || !p.RetentionExpiryRequired {
+	if !validWitnessRetentionRequirements(p) {
 		return fmt.Errorf(ErrFmtWitnessRetentionPolicy, ErrWitnessPolicyContract)
 	}
 	return nil
+}
+
+func validWitnessRetentionRange(policy WitnessRetentionPolicy) bool {
+	return policy.InitialRetention.Duration() <= policy.RetentionCap.Duration() &&
+		policy.InitialRetention.Duration() >= WitnessDeletionEligibleAfter
+}
+
+func validWitnessNoticeSchedule(policy WitnessRetentionPolicy) bool {
+	return policy.DeletionRiskNoticeAfter.Duration() == WitnessDeletionRiskNoticeAfter &&
+		policy.RetrievalOnlyAfter.Duration() == WitnessRetrievalOnlyNoticeAfter &&
+		policy.DeletionEligibleAfter.Duration() == WitnessDeletionEligibleAfter
+}
+
+func validWitnessRetentionRequirements(policy WitnessRetentionPolicy) bool {
+	return policy.PaymentNoticeImmediate && policy.NoticeOutboxRequired && policy.DeletionEventRequired &&
+		policy.LegalHoldBlocksDeletion && policy.RetentionExpiryRequired
 }
 
 func validateWitnessRetentionDuration(duration NanosecondsDuration) error {
@@ -235,18 +266,20 @@ const (
 	retentionActionInvalid RetentionAction = iota
 	RetentionActionRetain
 	RetentionActionPaymentWarning
-	RetentionActionExportWarning
+	RetentionActionDeletionRiskWarning
+	RetentionActionRetrievalOnly
 	RetentionActionDeleteEligible
 	RetentionActionLegalHold
 )
 
 func retentionActionNames() [RetentionActionLegalHold + 1]string {
 	return [...]string{
-		RetentionActionRetain:         RetentionActionTokenRetain,
-		RetentionActionPaymentWarning: RetentionActionTokenPaymentWarning,
-		RetentionActionExportWarning:  RetentionActionTokenExportWarning,
-		RetentionActionDeleteEligible: RetentionActionTokenDeleteEligible,
-		RetentionActionLegalHold:      RetentionActionTokenLegalHold,
+		RetentionActionRetain:              RetentionActionTokenRetain,
+		RetentionActionPaymentWarning:      RetentionActionTokenPaymentWarning,
+		RetentionActionDeletionRiskWarning: RetentionActionTokenDeletionRiskWarning,
+		RetentionActionRetrievalOnly:       RetentionActionTokenRetrievalOnly,
+		RetentionActionDeleteEligible:      RetentionActionTokenDeleteEligible,
+		RetentionActionLegalHold:           RetentionActionTokenLegalHold,
 	}
 }
 
@@ -298,46 +331,170 @@ func (a *RetentionAction) UnmarshalJSON(data []byte) error {
 }
 
 type WitnessRetentionDecisionInput struct {
-	Now         UnixNanoTime
-	RetainUntil UnixNanoTime
-	//validate:ignore reason="every uint8 missed-payment count is a valid decision input"
-	MissedPayments uint8
-	//validate:ignore reason="both export-cure states are valid decision inputs"
-	ExportCureComplete bool
-	//validate:ignore reason="both legal-hold states are valid decision inputs"
-	LegalHold bool
+	Now             UnixNanoTime
+	MissedPaymentAt UnixNanoTime
+	NoticeHistory   WitnessCustodyNoticeHistory
+	MissedPayment   bool
+	LegalHold       bool
 }
 
 func (in WitnessRetentionDecisionInput) Validate() error {
 	if err := in.Now.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtWitnessRetentionDecision, errors.Join(ErrWitnessPolicyContract, err))
 	}
-	if err := in.RetainUntil.Validate(); err != nil {
-		return fmt.Errorf(ErrFmtWitnessRetentionDecision, errors.Join(ErrWitnessPolicyContract, err))
+	if err := validateWitnessMissedPaymentAt(in.MissedPaymentAt, in.Now, in.MissedPayment); err != nil {
+		return err
+	}
+	if err := validateWitnessNoticeHistory(in.NoticeHistory, in.MissedPaymentAt, in.Now, in.MissedPayment); err != nil {
+		return err
+	}
+	if !in.MissedPayment && in.LegalHold {
+		return fmt.Errorf(ErrFmtWitnessRetentionDecision, ErrWitnessPolicyContract)
 	}
 	return nil
 }
 
-func DecideWitnessRetention(in WitnessRetentionDecisionInput) (RetentionAction, error) {
+func validateWitnessMissedPaymentAt(value, now UnixNanoTime, required bool) error {
+	if value.IsZero() {
+		if required {
+			return fmt.Errorf(ErrFmtWitnessRetentionDecision, ErrWitnessPolicyContract)
+		}
+		return nil
+	}
+	if err := value.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtWitnessRetentionDecision, errors.Join(ErrWitnessPolicyContract, err))
+	}
+	if !required || value.After(now) {
+		return fmt.Errorf(ErrFmtWitnessRetentionDecision, ErrWitnessPolicyContract)
+	}
+	return nil
+}
+
+func validateWitnessNoticeHistory(history WitnessCustodyNoticeHistory, missedPaymentAt, now UnixNanoTime, required bool) error {
+	if err := history.Validate(); err != nil {
+		return err
+	}
+	if !required {
+		if !history.IsZero() {
+			return fmt.Errorf(ErrFmtWitnessRetentionDecision, ErrWitnessPolicyContract)
+		}
+		return nil
+	}
+	return history.ValidateWindow(missedPaymentAt, now)
+}
+
+type WitnessCustodyNoticeHistory struct {
+	PaymentWarningAt      UnixNanoTime `json:"payment_warning_at"`
+	DeletionRiskWarningAt UnixNanoTime `json:"deletion_risk_warning_at"`
+	RetrievalOnlyAt       UnixNanoTime `json:"retrieval_only_at"`
+}
+
+func (h WitnessCustodyNoticeHistory) IsZero() bool {
+	return h.PaymentWarningAt.IsZero() && h.DeletionRiskWarningAt.IsZero() && h.RetrievalOnlyAt.IsZero()
+}
+
+func (h WitnessCustodyNoticeHistory) Validate() error {
+	if h.PaymentWarningAt.IsZero() {
+		return validateWitnessMissingPaymentNotice(h)
+	}
+	if err := h.PaymentWarningAt.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtWitnessRetentionDecision, errors.Join(ErrWitnessPolicyContract, err))
+	}
+	if err := validateOptionalWitnessNotice(h.DeletionRiskWarningAt, h.PaymentWarningAt); err != nil {
+		return err
+	}
+	return validateOptionalWitnessNotice(h.RetrievalOnlyAt, h.DeletionRiskWarningAt)
+}
+
+func validateOptionalWitnessNotice(value, prior UnixNanoTime) error {
+	if value.IsZero() {
+		return nil
+	}
+	if err := value.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtWitnessRetentionDecision, errors.Join(ErrWitnessPolicyContract, err))
+	}
+	if prior.IsZero() || value.Before(prior) {
+		return fmt.Errorf(ErrFmtWitnessRetentionDecision, ErrWitnessPolicyContract)
+	}
+	return nil
+}
+
+func (h WitnessCustodyNoticeHistory) ValidateWindow(missedPaymentAt, now UnixNanoTime) error {
+	if err := h.Validate(); err != nil {
+		return err
+	}
+	if h.PaymentWarningAt.IsZero() {
+		return nil
+	}
+	if !witnessNoticeTimeValid(h.PaymentWarningAt, missedPaymentAt, now) {
+		return fmt.Errorf(ErrFmtWitnessRetentionDecision, ErrWitnessPolicyContract)
+	}
+	if !validWitnessDeletionRiskNotice(h, missedPaymentAt, now) {
+		return fmt.Errorf(ErrFmtWitnessRetentionDecision, ErrWitnessPolicyContract)
+	}
+	if !validWitnessRetrievalOnlyNotice(h, missedPaymentAt, now) {
+		return fmt.Errorf(ErrFmtWitnessRetentionDecision, ErrWitnessPolicyContract)
+	}
+	return nil
+}
+
+func validateWitnessMissingPaymentNotice(history WitnessCustodyNoticeHistory) error {
+	if !history.DeletionRiskWarningAt.IsZero() || !history.RetrievalOnlyAt.IsZero() {
+		return fmt.Errorf(ErrFmtWitnessRetentionDecision, ErrWitnessPolicyContract)
+	}
+	return nil
+}
+
+func validWitnessDeletionRiskNotice(history WitnessCustodyNoticeHistory, missedPaymentAt, now UnixNanoTime) bool {
+	return history.DeletionRiskWarningAt.IsZero() ||
+		(witnessNoticeTimeValid(history.DeletionRiskWarningAt, history.PaymentWarningAt, now) &&
+			witnessNoticeThresholdValid(history.DeletionRiskWarningAt, missedPaymentAt, WitnessDeletionRiskNoticeAfter))
+}
+
+func validWitnessRetrievalOnlyNotice(history WitnessCustodyNoticeHistory, missedPaymentAt, now UnixNanoTime) bool {
+	return history.RetrievalOnlyAt.IsZero() || (!history.DeletionRiskWarningAt.IsZero() &&
+		witnessNoticeTimeValid(history.RetrievalOnlyAt, history.DeletionRiskWarningAt, now) &&
+		witnessNoticeThresholdValid(history.RetrievalOnlyAt, missedPaymentAt, WitnessRetrievalOnlyNoticeAfter))
+}
+
+func witnessNoticeThresholdValid(value, missedPaymentAt UnixNanoTime, delay time.Duration) bool {
+	threshold, err := AddUnixNanoDuration(missedPaymentAt, delay)
+	return err == nil && !value.Before(threshold)
+}
+
+func witnessNoticeTimeValid(value, earliest, now UnixNanoTime) bool {
+	return value.Validate() == nil && !value.Before(earliest) && !value.After(now)
+}
+
+func DecideWitnessRetention(in WitnessRetentionDecisionInput, policy WitnessRetentionPolicy) (RetentionAction, error) {
 	if err := in.Validate(); err != nil {
+		return retentionActionInvalid, err
+	}
+	if err := policy.Validate(); err != nil {
 		return retentionActionInvalid, err
 	}
 	if in.LegalHold {
 		return RetentionActionLegalHold, nil
 	}
-	if witnessDeletionEligible(in) {
-		return RetentionActionDeleteEligible, nil
+	if !in.MissedPayment {
+		return RetentionActionRetain, nil
 	}
-	if in.MissedPayments >= WitnessExportWarningMissedCount {
-		return RetentionActionExportWarning, nil
-	}
-	if in.MissedPayments >= WitnessFirstWarningMissedCount {
-		return RetentionActionPaymentWarning, nil
-	}
-	return RetentionActionRetain, nil
+	return decideMissedPaymentRetention(in, policy), nil
 }
 
-func witnessDeletionEligible(in WitnessRetentionDecisionInput) bool {
-	return in.MissedPayments >= WitnessExportWarningMissedCount &&
-		in.Now.After(in.RetainUntil) && in.ExportCureComplete
+func decideMissedPaymentRetention(in WitnessRetentionDecisionInput, policy WitnessRetentionPolicy) RetentionAction {
+	if in.NoticeHistory.PaymentWarningAt.IsZero() {
+		return RetentionActionPaymentWarning
+	}
+	elapsed := in.Now.Sub(in.MissedPaymentAt)
+	if elapsed >= policy.DeletionRiskNoticeAfter.Duration() && in.NoticeHistory.DeletionRiskWarningAt.IsZero() {
+		return RetentionActionDeletionRiskWarning
+	}
+	if elapsed >= policy.DeletionEligibleAfter.Duration() && !in.NoticeHistory.RetrievalOnlyAt.IsZero() {
+		return RetentionActionDeleteEligible
+	}
+	if elapsed >= policy.RetrievalOnlyAfter.Duration() && in.NoticeHistory.RetrievalOnlyAt.IsZero() {
+		return RetentionActionRetrievalOnly
+	}
+	return RetentionActionRetain
 }

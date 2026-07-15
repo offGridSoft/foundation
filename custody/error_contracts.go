@@ -15,4 +15,5 @@ const (
 	ErrFmtFinalize        = "custody.FinalizeRequest: %w"
 	ErrFmtReceipt         = "custody.ReceiptBody: %w"
 	ErrFmtOpenDisposition = "custody.SessionOpenDisposition: %w"
+	ErrFmtTimestamp       = "custody.TimestampProof: %w"
 )

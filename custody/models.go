@@ -177,28 +177,19 @@ func validateUploadTargetSet(targets []UploadTarget, customer CustomerID, bundle
 		if err := target.Validate(); err != nil {
 			return fmt.Errorf(errFmt, err)
 		}
+		if target.Provider != core.StorageProviderGCS {
+			return fmt.Errorf(errFmt, core.ErrCustodyContract)
+		}
 		if err := target.Object.ValidateWitnessIdentity(customer, bundleRoot, target.Artifact); err != nil {
 			return fmt.Errorf(errFmt, err)
 		}
 		for _, prior := range targets[:index] {
-			if prior.Provider == target.Provider && (prior.Artifact == target.Artifact || prior.Object == target.Object) {
+			if prior.Artifact == target.Artifact || prior.Object == target.Object {
 				return fmt.Errorf(errFmt, core.ErrCustodyContract)
 			}
 		}
-		if !hasMatchingUploadTarget(targets, target) {
-			return fmt.Errorf(errFmt, core.ErrCustodyContract)
-		}
 	}
 	return nil
-}
-
-func hasMatchingUploadTarget(targets []UploadTarget, target UploadTarget) bool {
-	for _, candidate := range targets {
-		if candidate.Provider != target.Provider && candidate.Artifact == target.Artifact && candidate.Object == target.Object {
-			return true
-		}
-	}
-	return false
 }
 
 type UploadTarget struct {
@@ -329,6 +320,7 @@ type ReceiptBody struct {
 	Session    SessionID         `json:"session_id"`
 	ChainHash  core.SHA256Hex    `json:"chain_hash"`
 	Objects    []UploadedObject  `json:"objects"`
+	Timestamp  TimestampProof    `json:"timestamp"`
 	Retention  RetentionPolicy   `json:"retention"`
 	IssuedAt   core.UnixNanoTime `json:"issued_at"`
 	AcceptedAt core.UnixNanoTime `json:"accepted_at"`
@@ -385,33 +377,27 @@ func validateUploadedObjectSet(objects []UploadedObject, customer CustomerID, bu
 	}
 	for index, object := range objects {
 		if err := object.Validate(); err != nil {
-			return fmt.Errorf(errFmt, err)
+			return fmt.Errorf(errFmt, errors.Join(core.ErrCustodyContract, err))
+		}
+		if object.Provider != core.StorageProviderGCS {
+			return fmt.Errorf(errFmt, core.ErrCustodyContract)
 		}
 		if err := object.Object.ValidateWitnessIdentity(customer, bundleRoot, object.Artifact); err != nil {
 			return fmt.Errorf(errFmt, err)
 		}
 		for _, prior := range objects[:index] {
-			if prior.Provider == object.Provider && (prior.Artifact == object.Artifact || prior.Object == object.Object) {
+			if prior.Artifact == object.Artifact || prior.Object == object.Object {
 				return fmt.Errorf(errFmt, core.ErrCustodyContract)
 			}
-		}
-		if !hasMatchingUploadedObject(objects, object) {
-			return fmt.Errorf(errFmt, core.ErrCustodyContract)
 		}
 	}
 	return nil
 }
 
-func hasMatchingUploadedObject(objects []UploadedObject, object UploadedObject) bool {
-	for _, candidate := range objects {
-		if candidate.Provider != object.Provider && candidate.Artifact == object.Artifact && candidate.Object == object.Object && candidate.SHA256 == object.SHA256 && candidate.BLAKE3 == object.BLAKE3 && candidate.Size == object.Size {
-			return true
-		}
-	}
-	return false
-}
-
 func validateReceiptStorage(b ReceiptBody) error {
+	if err := b.Timestamp.Validate(); err != nil || b.Timestamp.BundleRoot != b.BundleRoot {
+		return fmt.Errorf(ErrFmtReceipt, core.ErrCustodyContract)
+	}
 	if err := b.Retention.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtReceipt, err)
 	}
@@ -426,6 +412,9 @@ func validateReceiptLedger(b ReceiptBody) error {
 		return fmt.Errorf(ErrFmtReceipt, core.ErrCustodyContract)
 	}
 	if err := core.ValidateRequiredUnixNanoTime(b.AcceptedAt); err != nil || b.IssuedAt.Before(b.AcceptedAt) {
+		return fmt.Errorf(ErrFmtReceipt, core.ErrCustodyContract)
+	}
+	if b.Timestamp.TimestampedAt.Before(b.AcceptedAt) || b.IssuedAt.Before(b.Timestamp.TimestampedAt) {
 		return fmt.Errorf(ErrFmtReceipt, core.ErrCustodyContract)
 	}
 	if err := b.LedgerSeq.Validate(); err != nil {
@@ -466,6 +455,7 @@ func appendReceiptBodyJSON(dst []byte, b ReceiptBody) ([]byte, error) {
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldSessionID, b.Session)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldChainHash, b.ChainHash)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldObjects, b.Objects)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldTimestamp, b.Timestamp)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldRetention, b.Retention)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldIssuedAt, b.IssuedAt)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldAcceptedAt, b.AcceptedAt)

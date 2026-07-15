@@ -9,11 +9,14 @@ import (
 
 type RetentionClass uint8
 
+type TimestampAuthority uint8
+
 const (
 	RetentionClassTokenConditional            = "conditional"
 	RetentionClassTokenPrepaid                = "prepaid"
 	SessionOpenDispositionTokenUploadRequired = "upload_required"
 	SessionOpenDispositionTokenReceiptReused  = "receipt_reused"
+	TimestampAuthorityTokenFreeTSA            = "freetsa"
 )
 
 const (
@@ -21,6 +24,62 @@ const (
 	RetentionClassConditional
 	RetentionClassPrepaid
 )
+
+const (
+	timestampAuthorityInvalid TimestampAuthority = iota
+	TimestampAuthorityFreeTSA
+)
+
+func timestampAuthorityNames() [TimestampAuthorityFreeTSA + 1]string {
+	return [...]string{TimestampAuthorityFreeTSA: TimestampAuthorityTokenFreeTSA}
+}
+
+func (a TimestampAuthority) String() string {
+	if a.IsValid() {
+		return timestampAuthorityNames()[a]
+	}
+	return ""
+}
+
+func (a TimestampAuthority) IsValid() bool {
+	return a > timestampAuthorityInvalid && int(a) < len(timestampAuthorityNames()) && timestampAuthorityNames()[a] != ""
+}
+
+func (a TimestampAuthority) Validate() error {
+	if !a.IsValid() {
+		return fmt.Errorf(ErrFmtTimestamp, core.ErrCustodyContract)
+	}
+	return nil
+}
+
+func ParseTimestampAuthority(token string) (TimestampAuthority, error) {
+	for authority := TimestampAuthorityFreeTSA; int(authority) < len(timestampAuthorityNames()); authority++ {
+		if timestampAuthorityNames()[authority] == token {
+			return authority, nil
+		}
+	}
+	return timestampAuthorityInvalid, fmt.Errorf(ErrFmtTimestamp, core.ErrCustodyContract)
+}
+
+func (a TimestampAuthority) MarshalJSON() ([]byte, error) {
+	if err := a.Validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(a.String())
+}
+
+func (a *TimestampAuthority) UnmarshalJSON(data []byte) error {
+	var token string
+	if err := json.Unmarshal(data, &token); err != nil {
+		return fmt.Errorf(ErrFmtTimestamp, core.ErrCustodyContract)
+	}
+	parsed, err := ParseTimestampAuthority(token)
+	if err != nil {
+		return err
+	}
+	*a = parsed
+	return nil
+}
 
 func retentionClassNames() [RetentionClassPrepaid + 1]string {
 	return [...]string{
