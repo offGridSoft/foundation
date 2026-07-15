@@ -624,18 +624,48 @@ func validateUpdateDiagnosticTarget(d UpdateDiagnostic) error {
 
 func validateUpdateDiagnosticSelfTest(d UpdateDiagnostic) error {
 	wantsSelfTest := d.Phase == UpdatePhaseCandidateSelfTest || d.Phase == UpdatePhaseInstalledSelfTest
-	if wantsSelfTest != (d.SelfTest != nil) {
+	if !wantsSelfTest && d.SelfTest != nil {
 		return fmt.Errorf(ErrFmtUpdateDiagnostic, core.ErrReleaseContract)
 	}
-	if d.SelfTest != nil {
-		if err := d.SelfTest.Validate(); err != nil {
-			return wrapReleaseContract(ErrFmtUpdateDiagnostic, err)
-		}
-		if d.SelfTest.Product != d.Product || d.SelfTest.Platform != d.Platform || d.SelfTest.Status != SelfTestStatusFailed {
-			return fmt.Errorf(ErrFmtUpdateDiagnostic, core.ErrReleaseContract)
-		}
+	if !wantsSelfTest {
+		return nil
+	}
+	if d.SelfTest == nil {
+		return validateMissingUpdateSelfTest(d.Failure)
+	}
+	if err := d.SelfTest.Validate(); err != nil {
+		return wrapReleaseContract(ErrFmtUpdateDiagnostic, err)
+	}
+	if d.SelfTest.Product != d.Product || d.SelfTest.Platform != d.Platform {
+		return fmt.Errorf(ErrFmtUpdateDiagnostic, core.ErrReleaseContract)
+	}
+	if d.SelfTest.Status == SelfTestStatusPassed {
+		return validatePassedUpdateSelfTest(d.Failure)
+	}
+	return validateFailedUpdateSelfTest(*d.SelfTest, d.Failure)
+}
+
+func validatePassedUpdateSelfTest(failure UpdateFailure) error {
+	if failure != UpdateFailureContract && failure != UpdateFailureIntegrity {
+		return fmt.Errorf(ErrFmtUpdateDiagnostic, core.ErrReleaseContract)
 	}
 	return nil
+}
+
+func validateFailedUpdateSelfTest(result SelfTestResult, failure UpdateFailure) error {
+	if result.Failure == nil || result.Failure.Failure != failure {
+		return fmt.Errorf(ErrFmtUpdateDiagnostic, core.ErrReleaseContract)
+	}
+	return nil
+}
+
+func validateMissingUpdateSelfTest(failure UpdateFailure) error {
+	switch failure {
+	case UpdateFailureContract, UpdateFailureExecution, UpdateFailureFilesystem, UpdateFailureCancelled, UpdateFailureTimeout:
+		return nil
+	default:
+		return fmt.Errorf(ErrFmtUpdateDiagnostic, core.ErrReleaseContract)
+	}
 }
 
 func (UpdateDiagnostic) APIBody()                       {}

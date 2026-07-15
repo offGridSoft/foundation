@@ -244,7 +244,7 @@ func TestUpdateDiagnosticHostileAndAliasTable(t *testing.T) {
 		{name: "identity digest drift", mutate: func(_ *testing.T, value *UpdateDiagnostic) { value.Failure = UpdateFailureNetwork }},
 		{name: "forged diagnostic id", mutate: func(t *testing.T, value *UpdateDiagnostic) { value.DiagnosticID = mustDiagnosticID(t, "f") }},
 		{name: "self test omitted", mutate: func(_ *testing.T, value *UpdateDiagnostic) { value.SelfTest = nil }},
-		{name: "successful self test not a failure report", mutate: func(t *testing.T, value *UpdateDiagnostic) {
+		{name: "self test mutation without diagnostic identity rehash", mutate: func(t *testing.T, value *UpdateDiagnostic) {
 			passed := validPassedSelfTest(t)
 			value.SelfTest = &passed
 		}},
@@ -276,6 +276,46 @@ func TestUpdateDiagnosticHostileAndAliasTable(t *testing.T) {
 	withRawLog := append(data[:len(data)-1], []byte(`,"raw_stderr":"secret"}`)...)
 	if _, err := core.DecodeStrictJSON[UpdateDiagnostic](withRawLog); !errors.Is(err, core.ErrJSONContract) {
 		t.Fatalf("DecodeStrictJSON(raw log) error = %v, want JSON contract", err)
+	}
+}
+
+func TestUpdateDiagnosticSelfTestOutcomeMatrix(t *testing.T) {
+	t.Parallel()
+	failed := validFailedSelfTest(t)
+	passed := validPassedSelfTest(t)
+
+	for _, tc := range []struct {
+		selfTest *SelfTestResult
+		name     string
+		failure  UpdateFailure
+		accept   bool
+	}{
+		{name: "failed result matches outer integrity failure", selfTest: &failed, failure: UpdateFailureIntegrity, accept: true},
+		{name: "failed result cannot disagree with outer failure", selfTest: &failed, failure: UpdateFailureExecution},
+		{name: "passed result exposes expected identity mismatch", selfTest: &passed, failure: UpdateFailureIntegrity, accept: true},
+		{name: "passed result exposes outer contract mismatch", selfTest: &passed, failure: UpdateFailureContract, accept: true},
+		{name: "passed result cannot claim execution failure", selfTest: &passed, failure: UpdateFailureExecution},
+		{name: "missing result after candidate crash", failure: UpdateFailureExecution, accept: true},
+		{name: "missing result after invalid output", failure: UpdateFailureContract, accept: true},
+		{name: "missing result after permission failure", failure: UpdateFailureFilesystem, accept: true},
+		{name: "missing result after cancellation", failure: UpdateFailureCancelled, accept: true},
+		{name: "missing result after timeout", failure: UpdateFailureTimeout, accept: true},
+		{name: "missing result cannot claim observed integrity drift", failure: UpdateFailureIntegrity},
+		{name: "missing result cannot claim network failure", failure: UpdateFailureNetwork},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			input := validDiagnosticInput(t)
+			input.Failure = tc.failure
+			input.SelfTest = cloneSelfTestResult(tc.selfTest)
+			_, err := BuildUpdateDiagnostic(input)
+			if tc.accept && err != nil {
+				t.Fatalf("BuildUpdateDiagnostic() error = %v", err)
+			}
+			if !tc.accept && !errors.Is(err, core.ErrReleaseContract) {
+				t.Fatalf("BuildUpdateDiagnostic() error = %v, want release contract", err)
+			}
+		})
 	}
 }
 
