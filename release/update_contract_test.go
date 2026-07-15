@@ -15,6 +15,31 @@ import (
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
+func TestUpdateExecutionBudgetsBindSharedClientContract(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		got  time.Duration
+		want time.Duration
+	}{
+		{name: "release api", got: ReleaseAPIHTTPBudget, want: 15 * time.Second},
+		{name: "artifact download", got: UpdateDownloadHTTPBudget, want: 2 * time.Minute},
+		{name: "candidate self test", got: UpdateSelfTestBudget, want: 15 * time.Second},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if tc.got != tc.want {
+				t.Fatalf("budget = %s, want %s", tc.got, tc.want)
+			}
+		})
+	}
+	if UpdateSelfTestOutputMaximumBytes <= 0 || UpdateSelfTestOutputMaximumBytes > UpdateTransportMaximumBytes {
+		t.Fatalf("UpdateSelfTestOutputMaximumBytes = %d, want within (0, %d]", UpdateSelfTestOutputMaximumBytes, UpdateTransportMaximumBytes)
+	}
+}
+
 func TestUpdateCheckVerificationHostileTable(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -153,14 +178,15 @@ func TestUpdateEnumsRejectHostileTokensWithoutMutationTable(t *testing.T) {
 func TestUpdateEndpointsProductBoundaryTable(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		build     func(string) (UpdateEndpoints, error)
-		name      string
-		checkPath string
-		diagPath  string
-		product   core.Product
+		build        func(string) (UpdateEndpoints, error)
+		buildDefault func() (UpdateEndpoints, error)
+		name         string
+		checkPath    string
+		diagPath     string
+		product      core.Product
 	}{
-		{name: core.ProductTokenBug, product: core.ProductBug, checkPath: OffgridBugUpdateCheckPath, diagPath: OffgridBugUpdateDiagnosticPath, build: BugUpdateEndpointsForBaseURL},
-		{name: core.ProductTokenWitness, product: core.ProductWitness, checkPath: OffgridWitnessUpdateCheckPath, diagPath: OffgridWitnessUpdateDiagnosticPath, build: WitnessUpdateEndpointsForBaseURL},
+		{name: core.ProductTokenBug, product: core.ProductBug, checkPath: OffgridBugUpdateCheckPath, diagPath: OffgridBugUpdateDiagnosticPath, build: BugUpdateEndpointsForBaseURL, buildDefault: BugUpdateEndpoints},
+		{name: core.ProductTokenWitness, product: core.ProductWitness, checkPath: OffgridWitnessUpdateCheckPath, diagPath: OffgridWitnessUpdateDiagnosticPath, build: WitnessUpdateEndpointsForBaseURL, buildDefault: WitnessUpdateEndpoints},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -176,6 +202,13 @@ func TestUpdateEndpointsProductBoundaryTable(t *testing.T) {
 			}
 			if got, want := endpoints.Diagnostic.String(), core.OffgridAPIBaseURL+tc.diagPath; got != want {
 				t.Fatalf("diagnostic = %q, want %q", got, want)
+			}
+			defaults, err := tc.buildDefault()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if defaults != endpoints {
+				t.Fatalf("default endpoints = %+v, want %+v", defaults, endpoints)
 			}
 		})
 	}

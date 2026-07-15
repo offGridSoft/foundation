@@ -14,7 +14,7 @@ import (
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
-const DeployHTTPBudget = 15 * time.Second
+const ReleaseAPIHTTPBudget = 15 * time.Second
 
 type DeployAPIError struct {
 	RequestID  core.APIRequestID
@@ -140,7 +140,7 @@ func deployPost[Request core.Validatable, Response core.Validatable](
 	if err != nil {
 		return zero, DeployHTTPError{Cause: err}
 	}
-	requestContext, cancel := context.WithTimeout(ctx, DeployHTTPBudget)
+	requestContext, cancel := context.WithTimeout(ctx, ReleaseAPIHTTPBudget)
 	defer cancel()
 	httpRequest, err := http.NewRequestWithContext(requestContext, http.MethodPost, endpoint.String(), bytes.NewReader(body))
 	if err != nil {
@@ -172,7 +172,7 @@ func deployGet[Response core.Validatable](
 	if ctx == nil {
 		return zero, fmt.Errorf(ErrFmtDeployClient, errors.Join(core.ErrReleaseContract, core.ErrNilContext))
 	}
-	requestContext, cancel := context.WithTimeout(ctx, DeployHTTPBudget)
+	requestContext, cancel := context.WithTimeout(ctx, ReleaseAPIHTTPBudget)
 	defer cancel()
 	httpRequest, err := http.NewRequestWithContext(requestContext, http.MethodGet, endpoint.String(), nil)
 	if err != nil {

@@ -5,8 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/offGridSoft/foundation/v2026/core"
+)
+
+const (
+	UpdateDownloadHTTPBudget         = 2 * time.Minute
+	UpdateSelfTestBudget             = 15 * time.Second
+	UpdateSelfTestOutputMaximumBytes = 64 << 10
 )
 
 type UpdateAPIError struct {
