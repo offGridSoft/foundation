@@ -85,14 +85,14 @@ func (c DeployClient) Finalize(ctx context.Context, request DeployFinalizeReques
 	if err := c.Validate(); err != nil {
 		return DeployFinalizeResponse{}, err
 	}
-	if err := request.Verify(c.ServerKeys); err != nil {
+	if err := request.Verify(c.ReleaseKeys, c.ServerKeys); err != nil {
 		return DeployFinalizeResponse{}, err
 	}
 	response, err := deployPost[DeployFinalizeRequest, DeployFinalizeResponse](ctx, c.HTTP, c.Endpoints.Finalize, request)
 	if err != nil {
 		return DeployFinalizeResponse{}, err
 	}
-	if err := response.Verify(request, c.ServerKeys); err != nil {
+	if err := response.Verify(request, c.ReleaseKeys, c.ServerKeys); err != nil {
 		return DeployFinalizeResponse{}, err
 	}
 	return response, nil
@@ -102,18 +102,12 @@ func (c DeployClient) Finalize(ctx context.Context, request DeployFinalizeReques
 // not-yet-published release returns DeployAPIError with HTTPStatusNotFound.
 // Successful responses are accepted only after both server signatures bind to
 // the caller's manifest.
-func (c DeployClient) Publication(ctx context.Context, releaseID ReleaseID, manifest Manifest) (DeployFinalizeResponse, error) {
+func (c DeployClient) Publication(ctx context.Context, releaseID ReleaseID) (DeployFinalizeResponse, error) {
 	if err := c.Validate(); err != nil {
 		return DeployFinalizeResponse{}, err
 	}
 	if err := releaseID.Validate(); err != nil {
 		return DeployFinalizeResponse{}, fmt.Errorf(ErrFmtDeployClient, err)
-	}
-	if err := manifest.Validate(); err != nil {
-		return DeployFinalizeResponse{}, fmt.Errorf(ErrFmtDeployClient, err)
-	}
-	if releaseID != manifest.ReleaseID {
-		return DeployFinalizeResponse{}, fmt.Errorf(ErrFmtDeployClient, core.ErrReleaseContract)
 	}
 	endpoint, err := c.Endpoints.Status(releaseID)
 	if err != nil {
@@ -123,8 +117,31 @@ func (c DeployClient) Publication(ctx context.Context, releaseID ReleaseID, mani
 	if err != nil {
 		return DeployFinalizeResponse{}, err
 	}
-	if err := response.VerifyPublication(manifest, c.ServerKeys); err != nil {
+	if err := response.VerifyPublication(c.ReleaseKeys, c.ServerKeys); err != nil {
 		return DeployFinalizeResponse{}, err
+	}
+	if response.Manifest.Body.ReleaseID != releaseID {
+		return DeployFinalizeResponse{}, fmt.Errorf(ErrFmtDeployClient, core.ErrReleaseContract)
+	}
+	return response, nil
+}
+
+// Latest returns the newest publication selected by the product-specific
+// endpoint. The publication is accepted only after the offline release
+// authority and online server authority both verify.
+func (c DeployClient) Latest(ctx context.Context) (DeployFinalizeResponse, error) {
+	if err := c.Validate(); err != nil {
+		return DeployFinalizeResponse{}, err
+	}
+	response, err := deployGet[DeployFinalizeResponse](ctx, c.HTTP, c.Endpoints.Latest)
+	if err != nil {
+		return DeployFinalizeResponse{}, err
+	}
+	if err := response.VerifyPublication(c.ReleaseKeys, c.ServerKeys); err != nil {
+		return DeployFinalizeResponse{}, err
+	}
+	if response.Manifest.Body.Product != c.Endpoints.Product {
+		return DeployFinalizeResponse{}, fmt.Errorf(ErrFmtDeployClient, core.ErrReleaseContract)
 	}
 	return response, nil
 }

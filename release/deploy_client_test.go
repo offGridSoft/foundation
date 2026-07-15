@@ -92,6 +92,9 @@ func TestDeployClientFinalizeHostileHTTPTable(t *testing.T) {
 		accept bool
 	}{
 		{name: "valid signed response", body: finalizeSuccessEnvelope, accept: true},
+		{name: "foreign release manifest signature", body: finalizeSuccessEnvelope, mutate: func(t *testing.T, chain *deployTransportChain) {
+			chain.finalizeResponse.Manifest = signDeployBody(t, chain.foreignSigner, chain.finalizeResponse.Manifest.Body)
+		}},
 		{name: "foreign receipt signature", body: finalizeSuccessEnvelope, mutate: func(t *testing.T, chain *deployTransportChain) {
 			chain.finalizeResponse.Receipt = signDeployBody(t, chain.foreignSigner, chain.finalizeResponse.Receipt.Body)
 		}},
@@ -142,11 +145,16 @@ func TestDeployClientPublicationHostileHTTPTable(t *testing.T) {
 		status  int
 		accept  bool
 		wantAPI bool
+		otherID bool
 	}{
 		{name: "exact persisted publication", status: core.HTTPStatusOK, accept: true},
+		{name: "foreign release manifest signature", status: core.HTTPStatusOK, mutate: func(t *testing.T, chain *deployTransportChain) {
+			chain.finalizeResponse.Manifest = signDeployBody(t, chain.foreignSigner, chain.finalizeResponse.Manifest.Body)
+		}},
 		{name: "foreign receipt signature", status: core.HTTPStatusOK, mutate: func(t *testing.T, chain *deployTransportChain) {
 			chain.finalizeResponse.Receipt = signDeployBody(t, chain.foreignSigner, chain.finalizeResponse.Receipt.Body)
 		}},
+		{name: "status response release id mismatch", status: core.HTTPStatusOK, otherID: true},
 		{name: "not published", status: core.HTTPStatusNotFound, wantAPI: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -156,8 +164,12 @@ func TestDeployClientPublicationHostileHTTPTable(t *testing.T) {
 				tc.mutate(t, &chain)
 			}
 			manifest := chain.finalizeRequest.Plan.Body.Manifest
+			requestedReleaseID := manifest.ReleaseID
+			if tc.otherID {
+				requestedReleaseID = mustOtherReleaseID(t)
+			}
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-				wantPath := OffgridBugDeployRootPath + "/" + manifest.ReleaseID.String()
+				wantPath := OffgridBugDeployRootPath + "/" + requestedReleaseID.String()
 				if request.Method != http.MethodGet || request.URL.Path != wantPath {
 					t.Errorf("request = %s %s, want GET %s", request.Method, request.URL.Path, wantPath)
 				}
@@ -178,7 +190,7 @@ func TestDeployClientPublicationHostileHTTPTable(t *testing.T) {
 				HTTP: server.Client(), Endpoints: endpoints,
 				ReleaseKeys: chain.releaseSigner.keyring, ServerKeys: chain.serverSigner.keyring,
 			}
-			_, err = client.Publication(context.Background(), manifest.ReleaseID, manifest)
+			_, err = client.Publication(context.Background(), requestedReleaseID)
 			if tc.accept {
 				if err != nil {
 					t.Fatalf("DeployClient.Publication() error = %v", err)
@@ -191,6 +203,63 @@ func TestDeployClientPublicationHostileHTTPTable(t *testing.T) {
 			var apiErr DeployAPIError
 			if got := errors.As(err, &apiErr); got != tc.wantAPI {
 				t.Fatalf("errors.As(DeployAPIError) = %v, want %v; error=%v", got, tc.wantAPI, err)
+			}
+		})
+	}
+}
+
+func TestDeployClientLatestHostileHTTPTable(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		mutate         func(*testing.T, *deployTransportChain)
+		name           string
+		witnessProduct bool
+		accept         bool
+	}{
+		{name: "exact latest witness publication", witnessProduct: true, accept: true},
+		{name: "foreign manifest authority", mutate: func(t *testing.T, chain *deployTransportChain) {
+			chain.finalizeResponse.Manifest = signDeployBody(t, chain.foreignSigner, chain.finalizeResponse.Manifest.Body)
+		}, witnessProduct: true},
+		{name: "product endpoint cannot substitute publication"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			chain := validDeployTransportChain(t)
+			if tc.mutate != nil {
+				tc.mutate(t, &chain)
+			}
+			wantPath := OffgridBugReleaseLatestPath
+			buildEndpoints := BugDeployEndpointsForBaseURL
+			if tc.witnessProduct {
+				wantPath = OffgridWitnessReleaseLatestPath
+				buildEndpoints = WitnessDeployEndpointsForBaseURL
+			}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+				if request.Method != http.MethodGet || request.URL.Path != wantPath {
+					t.Errorf("request = %s %s, want GET %s", request.Method, request.URL.Path, wantPath)
+				}
+				w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
+				_, _ = w.Write(finalizeSuccessEnvelope(t, chain))
+			}))
+			defer server.Close()
+			endpoints, err := buildEndpoints(server.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			client := DeployClient{
+				HTTP: server.Client(), Endpoints: endpoints,
+				ReleaseKeys: chain.releaseSigner.keyring, ServerKeys: chain.serverSigner.keyring,
+			}
+			_, err = client.Latest(context.Background())
+			if tc.accept {
+				if err != nil {
+					t.Fatalf("DeployClient.Latest() error = %v", err)
+				}
+				return
+			}
+			if !errors.Is(err, core.ErrReleaseContract) && !errors.Is(err, core.ErrFoundationContract) {
+				t.Fatalf("DeployClient.Latest() error = %v, want release/foundation contract", err)
 			}
 		})
 	}

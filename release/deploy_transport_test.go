@@ -83,6 +83,9 @@ func TestDeployFinalizeVerificationRejectsHostileChainTable(t *testing.T) {
 		accept bool
 	}{
 		{name: "exact finalized chain accepted", accept: true},
+		{name: "foreign request manifest signer", mutate: func(t *testing.T, chain *deployTransportChain) {
+			chain.finalizeRequest.Manifest = signDeployBody(t, chain.foreignSigner, chain.finalizeRequest.Manifest.Body)
+		}},
 		{name: "foreign plan signer", mutate: func(t *testing.T, chain *deployTransportChain) {
 			chain.finalizeRequest.Plan = signDeployBody(t, chain.foreignSigner, chain.finalizeRequest.Plan.Body)
 		}},
@@ -99,6 +102,10 @@ func TestDeployFinalizeVerificationRejectsHostileChainTable(t *testing.T) {
 		{name: "foreign receipt signer", mutate: func(t *testing.T, chain *deployTransportChain) {
 			chain.finalizeResponse.Receipt = signDeployBody(t, chain.foreignSigner, chain.finalizeResponse.Receipt.Body)
 		}},
+		{name: "foreign response manifest signer", mutate: func(t *testing.T, chain *deployTransportChain) {
+			chain.finalizeResponse.Manifest = signDeployBody(t, chain.foreignSigner, chain.finalizeResponse.Manifest.Body)
+		}},
+		{name: "trusted response manifest substitution", mutate: replaceResponseWithTrustedManifestSwap},
 		{name: "foreign index signer", mutate: func(t *testing.T, chain *deployTransportChain) {
 			chain.finalizeResponse.Index = signDeployBody(t, chain.foreignSigner, chain.finalizeResponse.Index.Body)
 		}},
@@ -115,7 +122,7 @@ func TestDeployFinalizeVerificationRejectsHostileChainTable(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(t, &chain)
 			}
-			err := chain.finalizeResponse.Verify(chain.finalizeRequest, chain.serverSigner.keyring)
+			err := chain.finalizeResponse.Verify(chain.finalizeRequest, chain.releaseSigner.keyring, chain.serverSigner.keyring)
 			if tc.accept {
 				if err != nil {
 					t.Fatalf("DeployFinalizeResponse.Verify() error = %v", err)
@@ -133,29 +140,31 @@ func TestDeployPublicationVerificationRejectsHostileChainTable(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		mutate func(*testing.T, *deployTransportChain, *Manifest)
+		mutate func(*testing.T, *deployTransportChain)
 		name   string
 		accept bool
 	}{
 		{name: "exact persisted publication accepted", accept: true},
-		{name: "foreign receipt signature", mutate: func(t *testing.T, chain *deployTransportChain, _ *Manifest) {
+		{name: "foreign manifest signature", mutate: func(t *testing.T, chain *deployTransportChain) {
+			chain.finalizeResponse.Manifest = signDeployBody(t, chain.foreignSigner, chain.finalizeResponse.Manifest.Body)
+		}},
+		{name: "foreign receipt signature", mutate: func(t *testing.T, chain *deployTransportChain) {
 			chain.finalizeResponse.Receipt = signDeployBody(t, chain.foreignSigner, chain.finalizeResponse.Receipt.Body)
 		}},
-		{name: "foreign index signature", mutate: func(t *testing.T, chain *deployTransportChain, _ *Manifest) {
+		{name: "foreign index signature", mutate: func(t *testing.T, chain *deployTransportChain) {
 			chain.finalizeResponse.Index = signDeployBody(t, chain.foreignSigner, chain.finalizeResponse.Index.Body)
 		}},
-		{name: "caller manifest changed after publication", mutate: func(_ *testing.T, _ *deployTransportChain, manifest *Manifest) {
-			manifest.CreatedAt = core.UnixNanoTimeFromInt64(manifest.CreatedAt.UnixNano() + 1)
+		{name: "manifest changed after release signature", mutate: func(_ *testing.T, chain *deployTransportChain) {
+			chain.finalizeResponse.Manifest.Body.CreatedAt = core.UnixNanoTimeFromInt64(chain.finalizeResponse.Manifest.Body.CreatedAt.UnixNano() + 1)
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			chain := validDeployTransportChain(t)
-			manifest := chain.finalizeRequest.Plan.Body.Manifest
 			if tc.mutate != nil {
-				tc.mutate(t, &chain, &manifest)
+				tc.mutate(t, &chain)
 			}
-			err := chain.finalizeResponse.VerifyPublication(manifest, chain.serverSigner.keyring)
+			err := chain.finalizeResponse.VerifyPublication(chain.releaseSigner.keyring, chain.serverSigner.keyring)
 			if tc.accept {
 				if err != nil {
 					t.Fatalf("DeployFinalizeResponse.VerifyPublication() error = %v", err)
@@ -246,7 +255,7 @@ func TestDeployTransportBuildersDoNotRetainCallerSlices(t *testing.T) {
 
 	plan := chain.finalizeRequest.Plan
 	objects := append([]UploadedArtifact(nil), chain.finalizeRequest.Objects...)
-	finalize, err := BuildDeployFinalizeRequest(chain.finalizeRequest.RequestID, plan, objects)
+	finalize, err := BuildDeployFinalizeRequest(chain.finalizeRequest.RequestID, plan, chain.finalizeRequest.Manifest, objects)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,6 +263,21 @@ func TestDeployTransportBuildersDoNotRetainCallerSlices(t *testing.T) {
 	objects[0] = UploadedArtifact{}
 	if err := finalize.Validate(); err != nil {
 		t.Fatalf("BuildDeployFinalizeRequest() retained caller alias: %v", err)
+	}
+
+	responseManifest := chain.finalizeRequest.Manifest
+	response, err := BuildDeployFinalizeResponse(
+		chain.finalizeResponse.RequestID,
+		responseManifest,
+		chain.finalizeResponse.Receipt,
+		chain.finalizeResponse.Index,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	responseManifest.Body.Artifacts[0] = Artifact{}
+	if err := response.Validate(); err != nil {
+		t.Fatalf("BuildDeployFinalizeResponse() retained manifest alias: %v", err)
 	}
 }
 
@@ -351,12 +375,12 @@ func validDeployTransportChain(t *testing.T) deployTransportChain {
 		t.Fatal(err)
 	}
 	receipt := validUploadReceipt(t)
-	finalizeRequest, err := BuildDeployFinalizeRequest(requestID, prepareResponse.Plan, receipt.Objects)
+	finalizeRequest, err := BuildDeployFinalizeRequest(requestID, prepareResponse.Plan, prepareRequest.Manifest, receipt.Objects)
 	if err != nil {
 		t.Fatal(err)
 	}
 	finalizeResponse, err := BuildDeployFinalizeResponse(
-		requestID, signDeployBody(t, serverSigner, receipt), signDeployBody(t, serverSigner, validDownloadIndex(t)),
+		requestID, prepareRequest.Manifest, signDeployBody(t, serverSigner, receipt), signDeployBody(t, serverSigner, validDownloadIndex(t)),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -430,6 +454,13 @@ func replaceReceiptWithTrustedObjectSwap(t *testing.T, chain *deployTransportCha
 	object.Binding = binding
 	receipt.Objects[0] = object
 	chain.finalizeResponse.Receipt = signDeployBody(t, chain.serverSigner, receipt)
+}
+
+func replaceResponseWithTrustedManifestSwap(t *testing.T, chain *deployTransportChain) {
+	t.Helper()
+	manifest := chain.finalizeResponse.Manifest.Body
+	manifest.CreatedAt = core.UnixNanoTimeFromInt64(manifest.CreatedAt.UnixNano() + 1)
+	chain.finalizeResponse.Manifest = signDeployBody(t, chain.releaseSigner, manifest)
 }
 
 func replaceReceiptWithTrustedAttemptSwap(t *testing.T, chain *deployTransportChain) {

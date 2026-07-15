@@ -46,11 +46,13 @@ func TestProductDeployEndpointsUseOneSharedContract(t *testing.T) {
 	for _, tc := range []struct {
 		build        func(string) (DeployEndpoints, error)
 		buildDefault func() (DeployEndpoints, error)
+		latest       string
 		name         string
 		root         string
+		product      core.Product
 	}{
-		{name: core.ProductTokenBug, root: OffgridBugDeployRootPath, build: BugDeployEndpointsForBaseURL, buildDefault: BugDeployEndpoints},
-		{name: core.ProductTokenWitness, root: OffgridWitnessDeployRootPath, build: WitnessDeployEndpointsForBaseURL, buildDefault: WitnessDeployEndpoints},
+		{name: core.ProductTokenBug, product: core.ProductBug, root: OffgridBugDeployRootPath, latest: OffgridBugReleaseLatestPath, build: BugDeployEndpointsForBaseURL, buildDefault: BugDeployEndpoints},
+		{name: core.ProductTokenWitness, product: core.ProductWitness, root: OffgridWitnessDeployRootPath, latest: OffgridWitnessReleaseLatestPath, build: WitnessDeployEndpointsForBaseURL, buildDefault: WitnessDeployEndpoints},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -64,11 +66,17 @@ func TestProductDeployEndpointsUseOneSharedContract(t *testing.T) {
 			if got, want := endpoints.Finalize.String(), core.OffgridAPIBaseURL+tc.root+"/finalize"; got != want {
 				t.Fatalf("finalize endpoint = %q, want %q", got, want)
 			}
+			if got, want := endpoints.Latest.String(), core.OffgridAPIBaseURL+tc.latest; got != want {
+				t.Fatalf("latest endpoint = %q, want %q", got, want)
+			}
+			if endpoints.Product != tc.product {
+				t.Fatalf("product = %v, want %v", endpoints.Product, tc.product)
+			}
 			defaults, err := tc.buildDefault()
 			if err != nil {
 				t.Fatal(err)
 			}
-			if defaults.Prepare != endpoints.Prepare || defaults.Finalize != endpoints.Finalize || defaults.StatusRoot != endpoints.StatusRoot {
+			if defaults != endpoints {
 				t.Fatalf("default endpoints = %#v, want %#v", defaults, endpoints)
 			}
 		})
@@ -89,6 +97,9 @@ func TestDeployEndpointPathsAreCompilerOwned(t *testing.T) {
 	}
 	if got, want := endpoints.Finalize.String(), core.OffgridAPIBaseURL+OffgridBugDeployFinalizePath; got != want {
 		t.Fatalf("finalize endpoint = %q, want %q", got, want)
+	}
+	if got, want := endpoints.Latest.String(), core.OffgridAPIBaseURL+OffgridBugReleaseLatestPath; got != want {
+		t.Fatalf("latest endpoint = %q, want %q", got, want)
 	}
 	releaseID := mustBugReleaseID(t)
 	status, err := endpoints.Status(releaseID)

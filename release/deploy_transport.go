@@ -180,6 +180,7 @@ func (r DeployPrepareResponse) MarshalJSON() ([]byte, error) {
 }
 
 type DeployFinalizeRequest struct {
+	Manifest    core.Signed[Manifest]   `json:"manifest"`
 	Plan        core.Signed[DeployPlan] `json:"plan"`
 	RequestID   DeployRequestID         `json:"request_id"`
 	Objects     []UploadedArtifact      `json:"objects"`
@@ -202,7 +203,13 @@ func (r DeployFinalizeRequest) validateStructure() error {
 	if err := r.Plan.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtDeployFinalizeRequest, err)
 	}
+	if err := r.Manifest.Validate(); err != nil {
+		return wrapReleaseContract(ErrFmtDeployFinalizeRequest, err)
+	}
 	if r.RequestID != r.Plan.Body.RequestID {
+		return fmt.Errorf(ErrFmtDeployFinalizeRequest, core.ErrReleaseContract)
+	}
+	if !sameManifest(r.Manifest.Body, r.Plan.Body.Manifest) {
 		return fmt.Errorf(ErrFmtDeployFinalizeRequest, core.ErrReleaseContract)
 	}
 	if err := validateDeployCompletions(r); err != nil {
@@ -222,9 +229,12 @@ func (r DeployFinalizeRequest) validatedJSON() ([]byte, error) {
 	return encoded, nil
 }
 
-func (r DeployFinalizeRequest) Verify(serverKeys core.SigningKeyring) error {
+func (r DeployFinalizeRequest) Verify(releaseKeys, serverKeys core.SigningKeyring) error {
 	if err := r.Validate(); err != nil {
 		return err
+	}
+	if err := r.Manifest.Verify(releaseKeys); err != nil {
+		return wrapReleaseContract(ErrFmtDeployFinalizeRequest, err)
 	}
 	if err := r.Plan.Verify(serverKeys); err != nil {
 		return wrapReleaseContract(ErrFmtDeployFinalizeRequest, err)
@@ -237,6 +247,7 @@ func (r DeployFinalizeRequest) MarshalJSON() ([]byte, error) {
 }
 
 type DeployFinalizeResponse struct {
+	Manifest  core.Signed[Manifest]      `json:"manifest"`
 	Receipt   core.Signed[UploadReceipt] `json:"receipt"`
 	Index     core.Signed[DownloadIndex] `json:"index"`
 	RequestID DeployRequestID            `json:"request_id"`
@@ -253,6 +264,9 @@ func (r DeployFinalizeResponse) validateStructure() error {
 		return fmt.Errorf(ErrFmtDeployFinalizeResponse, core.ErrReleaseContract)
 	}
 	if err := r.RequestID.Validate(); err != nil {
+		return wrapReleaseContract(ErrFmtDeployFinalizeResponse, err)
+	}
+	if err := r.Manifest.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtDeployFinalizeResponse, err)
 	}
 	if err := r.Receipt.Validate(); err != nil {
@@ -275,28 +289,17 @@ func (r DeployFinalizeResponse) validatedJSON() ([]byte, error) {
 	return encoded, nil
 }
 
-func (r DeployFinalizeResponse) Verify(request DeployFinalizeRequest, serverKeys core.SigningKeyring) error {
-	if err := request.Verify(serverKeys); err != nil {
+func (r DeployFinalizeResponse) Verify(request DeployFinalizeRequest, releaseKeys, serverKeys core.SigningKeyring) error {
+	if err := request.Verify(releaseKeys, serverKeys); err != nil {
 		return err
 	}
-	if err := r.Validate(); err != nil {
+	if err := r.VerifyPublication(releaseKeys, serverKeys); err != nil {
 		return err
-	}
-	if err := r.Receipt.Verify(serverKeys); err != nil {
-		return wrapReleaseContract(ErrFmtDeployFinalizeResponse, err)
-	}
-	if err := r.Index.Verify(serverKeys); err != nil {
-		return wrapReleaseContract(ErrFmtDeployFinalizeResponse, err)
 	}
 	plan := request.Plan.Body
-	if r.RequestID != request.RequestID || r.Receipt.Body.AttemptID != plan.AttemptID {
+	if r.RequestID != request.RequestID || r.Receipt.Body.AttemptID != plan.AttemptID ||
+		!sameManifest(r.Manifest.Body, request.Manifest.Body) {
 		return fmt.Errorf(ErrFmtDeployFinalizeResponse, core.ErrReleaseContract)
-	}
-	if err := r.Receipt.Body.VerifyManifest(plan.Manifest); err != nil {
-		return wrapReleaseContract(ErrFmtDeployFinalizeResponse, err)
-	}
-	if err := r.Index.Body.VerifyManifest(plan.Manifest); err != nil {
-		return wrapReleaseContract(ErrFmtDeployFinalizeResponse, err)
 	}
 	if !slices.Equal(r.Receipt.Body.Objects, request.Objects) {
 		return fmt.Errorf(ErrFmtDeployFinalizeResponse, core.ErrReleaseContract)
@@ -308,12 +311,12 @@ func (r DeployFinalizeResponse) Verify(request DeployFinalizeRequest, serverKeys
 // the original finalize request. The nested server signatures bind the receipt
 // and download index to manifest, so a status/read path can return the exact
 // persisted publication rather than minting a second upload attempt.
-func (r DeployFinalizeResponse) VerifyPublication(manifest Manifest, serverKeys core.SigningKeyring) error {
-	if err := manifest.Validate(); err != nil {
-		return wrapReleaseContract(ErrFmtDeployFinalizeResponse, err)
-	}
+func (r DeployFinalizeResponse) VerifyPublication(releaseKeys, serverKeys core.SigningKeyring) error {
 	if err := r.Validate(); err != nil {
 		return err
+	}
+	if err := r.Manifest.Verify(releaseKeys); err != nil {
+		return wrapReleaseContract(ErrFmtDeployFinalizeResponse, err)
 	}
 	if err := r.Receipt.Verify(serverKeys); err != nil {
 		return wrapReleaseContract(ErrFmtDeployFinalizeResponse, err)
@@ -321,10 +324,10 @@ func (r DeployFinalizeResponse) VerifyPublication(manifest Manifest, serverKeys 
 	if err := r.Index.Verify(serverKeys); err != nil {
 		return wrapReleaseContract(ErrFmtDeployFinalizeResponse, err)
 	}
-	if err := r.Receipt.Body.VerifyManifest(manifest); err != nil {
+	if err := r.Receipt.Body.VerifyManifest(r.Manifest.Body); err != nil {
 		return wrapReleaseContract(ErrFmtDeployFinalizeResponse, err)
 	}
-	if err := r.Index.Body.VerifyManifest(manifest); err != nil {
+	if err := r.Index.Body.VerifyManifest(r.Manifest.Body); err != nil {
 		return wrapReleaseContract(ErrFmtDeployFinalizeResponse, err)
 	}
 	return nil
@@ -357,6 +360,7 @@ func BuildDeployPrepareResponse(requestID DeployRequestID, plan core.Signed[Depl
 func BuildDeployFinalizeRequest(
 	requestID DeployRequestID,
 	plan core.Signed[DeployPlan],
+	manifest core.Signed[Manifest],
 	objects []UploadedArtifact,
 ) (DeployFinalizeRequest, error) {
 	set, err := core.BuildArtifactSet(objects)
@@ -365,7 +369,7 @@ func BuildDeployFinalizeRequest(
 	}
 	request := DeployFinalizeRequest{
 		Schema: core.SchemaReleaseDeployFinalizeRequest, RequestID: requestID,
-		Plan: cloneSignedDeployPlan(plan), Objects: set.Items, ObjectCount: set.Count,
+		Plan: cloneSignedDeployPlan(plan), Manifest: cloneSignedManifest(manifest), Objects: set.Items, ObjectCount: set.Count,
 	}
 	if err := request.Validate(); err != nil {
 		return DeployFinalizeRequest{}, err
@@ -375,12 +379,13 @@ func BuildDeployFinalizeRequest(
 
 func BuildDeployFinalizeResponse(
 	requestID DeployRequestID,
+	manifest core.Signed[Manifest],
 	receipt core.Signed[UploadReceipt],
 	index core.Signed[DownloadIndex],
 ) (DeployFinalizeResponse, error) {
 	response := DeployFinalizeResponse{
 		Schema: core.SchemaReleaseDeployFinalizeResponse, RequestID: requestID,
-		Receipt: cloneSignedUploadReceipt(receipt), Index: cloneSignedDownloadIndex(index),
+		Manifest: cloneSignedManifest(manifest), Receipt: cloneSignedUploadReceipt(receipt), Index: cloneSignedDownloadIndex(index),
 	}
 	if err := response.Validate(); err != nil {
 		return DeployFinalizeResponse{}, err
@@ -487,6 +492,7 @@ func appendDeployFinalizeRequestJSON(dst []byte, value DeployFinalizeRequest) ([
 	var err error
 	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, value.Schema)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldRequestID, value.RequestID)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldManifest, value.Manifest)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldPlan, value.Plan)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldObjects, value.Objects)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldObjectCount, value.ObjectCount)
@@ -498,6 +504,7 @@ func appendDeployFinalizeResponseJSON(dst []byte, value DeployFinalizeResponse) 
 	var err error
 	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, value.Schema)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldRequestID, value.RequestID)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldManifest, value.Manifest)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldReceipt, value.Receipt)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldIndex, value.Index)
 	return closeDeployTransportJSON(dst, err)
