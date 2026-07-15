@@ -516,6 +516,21 @@ func (i DownloadIndex) MarshalJSON() ([]byte, error) {
 	return appendDownloadIndexJSON(nil, i)
 }
 
+func DownloadForPlatform(index DownloadIndex, platform core.Platform) (Download, error) {
+	if err := index.Validate(); err != nil {
+		return Download{}, err
+	}
+	if err := validateReleasePlatform(platform, ErrFmtDownloadIndex); err != nil {
+		return Download{}, err
+	}
+	for _, download := range index.Downloads {
+		if download.Platform == platform {
+			return download, nil
+		}
+	}
+	return Download{}, fmt.Errorf(ErrFmtDownloadIndex, core.ErrReleaseContract)
+}
+
 func appendDownloadIndexJSON(dst []byte, i DownloadIndex) ([]byte, error) {
 	dst = append(dst, '{')
 	var err error

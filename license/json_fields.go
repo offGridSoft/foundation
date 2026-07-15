@@ -23,4 +23,5 @@ const (
 	jsonFieldDecision          = "decision"
 	jsonFieldGrant             = "grant"
 	jsonFieldWriterRevocations = "writer_revocations"
+	jsonFieldUpdateNotice      = "update_notice"
 )

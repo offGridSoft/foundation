@@ -16,6 +16,8 @@ import (
 func TestSignedBodyCanonicalProjectionCoversEveryTaggedField(t *testing.T) {
 	t.Parallel()
 	grant, _, _ := signedBugGrant(t)
+	bugResponse := testRefusedBugResponse(t).Authority.Body
+	bugResponse.UpdateNotice = testUpdateNotice(t, core.ProductBug)
 	for _, tc := range []struct {
 		body core.CanonicalBody
 		name string
@@ -25,7 +27,7 @@ func TestSignedBodyCanonicalProjectionCoversEveryTaggedField(t *testing.T) {
 		{name: "writer certificate", body: grant.WriterCertificate.Body},
 		{name: "writer attestation", body: testWriterAttestationBody(t)},
 		{name: "writer revocation", body: testBugWriterRevocation(t)},
-		{name: "bug response", body: testRefusedBugResponse(t).Authority.Body},
+		{name: "bug response", body: bugResponse},
 		{name: "witness response", body: refusedWitnessResponseBody(t)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -41,11 +43,25 @@ func refusedWitnessResponseBody(t *testing.T) WitnessCheckInResponseBody {
 		Schema:       core.SchemaWitnessCheckInResponse,
 		RequestNonce: testCheckInNonce(t),
 		Decision:     CheckInDecision{Refusal: RefusalPaymentRequired, Remediation: RemediationUpdatePayment},
+		UpdateNotice: testUpdateNotice(t, core.ProductWitness),
 	}
 	if err := body.Validate(); err != nil {
 		t.Fatalf("WitnessCheckInResponseBody.Validate() error = %v", err)
 	}
 	return body
+}
+
+func testUpdateNotice(t *testing.T, product core.Product) *core.UpdateNotice {
+	t.Helper()
+	version, err := core.ParseProductVersion(core.FoundationVersion2026)
+	if err != nil {
+		t.Fatal(err)
+	}
+	notice, err := core.BuildUpdateNotice(product, &version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &notice
 }
 
 func requireCanonicalJSONFieldCoverage(t *testing.T, body core.CanonicalBody) {

@@ -53,10 +53,11 @@ func (d CheckInDecision) Validate() error {
 
 type BugCheckInResponseBody struct {
 	Grant             *BugCheckInGrant            `json:"grant,omitempty"`
+	UpdateNotice      *core.UpdateNotice          `json:"update_notice,omitempty"`
 	WriterRevocations BugWriterRevocationDelivery `json:"writer_revocations"`
-	Decision          CheckInDecision             `json:"decision"`
-	RequestNonce      CheckInNonce                `json:"request_nonce"`
 	Schema            core.SchemaID               `json:"schema"`
+	RequestNonce      CheckInNonce                `json:"request_nonce"`
+	Decision          CheckInDecision             `json:"decision"`
 }
 
 func (b BugCheckInResponseBody) Validate() error {
@@ -77,6 +78,9 @@ func (b BugCheckInResponseBody) Validate() error {
 			return checkInResponseError(err)
 		}
 	}
+	if err := validateUpdateNotice(b.UpdateNotice, core.ProductBug); err != nil {
+		return err
+	}
 	return b.WriterRevocations.Validate()
 }
 
@@ -91,6 +95,9 @@ func (b BugCheckInResponseBody) Canonical(dst []byte) ([]byte, error) {
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDecision, b.Decision)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldGrant, b.Grant)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldWriterRevocations, b.WriterRevocations)
+	if b.UpdateNotice != nil {
+		dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldUpdateNotice, b.UpdateNotice)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -252,9 +259,10 @@ func earliestWriterRevocation(left, right core.Signed[BugWriterRevocationBody]) 
 
 type WitnessCheckInResponseBody struct {
 	Grant        *WitnessCheckInGrant `json:"grant,omitempty"`
-	Decision     CheckInDecision      `json:"decision"`
-	RequestNonce CheckInNonce         `json:"request_nonce"`
+	UpdateNotice *core.UpdateNotice   `json:"update_notice,omitempty"`
 	Schema       core.SchemaID        `json:"schema"`
+	RequestNonce CheckInNonce         `json:"request_nonce"`
+	Decision     CheckInDecision      `json:"decision"`
 }
 
 func (b WitnessCheckInResponseBody) Validate() error {
@@ -275,7 +283,7 @@ func (b WitnessCheckInResponseBody) Validate() error {
 			return checkInResponseError(err)
 		}
 	}
-	return nil
+	return validateUpdateNotice(b.UpdateNotice, core.ProductWitness)
 }
 
 func (b WitnessCheckInResponseBody) Canonical(dst []byte) ([]byte, error) {
@@ -288,6 +296,9 @@ func (b WitnessCheckInResponseBody) Canonical(dst []byte) ([]byte, error) {
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldRequestNonce, b.RequestNonce)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDecision, b.Decision)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldGrant, b.Grant)
+	if b.UpdateNotice != nil {
+		dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldUpdateNotice, b.UpdateNotice)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -331,6 +342,19 @@ func (r WitnessCheckInResponse) VerifyRequestNonce(nonce CheckInNonce) error {
 
 func checkInResponseError(err error) error {
 	return fmt.Errorf(ErrFmtCheckInResponse, errors.Join(core.ErrLicenseContract, err))
+}
+
+func validateUpdateNotice(notice *core.UpdateNotice, product core.Product) error {
+	if notice == nil {
+		return nil
+	}
+	if err := notice.Validate(); err != nil {
+		return checkInResponseError(err)
+	}
+	if notice.Product != product {
+		return checkInResponseError(core.ErrLicenseContract)
+	}
+	return nil
 }
 
 func checkInResponseErrorOptional(err error) error {

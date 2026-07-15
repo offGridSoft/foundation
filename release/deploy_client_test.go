@@ -208,63 +208,6 @@ func TestDeployClientPublicationHostileHTTPTable(t *testing.T) {
 	}
 }
 
-func TestDeployClientLatestHostileHTTPTable(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		mutate         func(*testing.T, *deployTransportChain)
-		name           string
-		witnessProduct bool
-		accept         bool
-	}{
-		{name: "exact latest witness publication", witnessProduct: true, accept: true},
-		{name: "foreign manifest authority", mutate: func(t *testing.T, chain *deployTransportChain) {
-			chain.finalizeResponse.Manifest = signDeployBody(t, chain.foreignSigner, chain.finalizeResponse.Manifest.Body)
-		}, witnessProduct: true},
-		{name: "product endpoint cannot substitute publication"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			chain := validDeployTransportChain(t)
-			if tc.mutate != nil {
-				tc.mutate(t, &chain)
-			}
-			wantPath := OffgridBugReleaseLatestPath
-			buildEndpoints := BugDeployEndpointsForBaseURL
-			if tc.witnessProduct {
-				wantPath = OffgridWitnessReleaseLatestPath
-				buildEndpoints = WitnessDeployEndpointsForBaseURL
-			}
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-				if request.Method != http.MethodGet || request.URL.Path != wantPath {
-					t.Errorf("request = %s %s, want GET %s", request.Method, request.URL.Path, wantPath)
-				}
-				w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
-				_, _ = w.Write(finalizeSuccessEnvelope(t, chain))
-			}))
-			defer server.Close()
-			endpoints, err := buildEndpoints(server.URL)
-			if err != nil {
-				t.Fatal(err)
-			}
-			client := DeployClient{
-				HTTP: server.Client(), Endpoints: endpoints,
-				ReleaseKeys: chain.releaseSigner.keyring, ServerKeys: chain.serverSigner.keyring,
-			}
-			_, err = client.Latest(context.Background())
-			if tc.accept {
-				if err != nil {
-					t.Fatalf("DeployClient.Latest() error = %v", err)
-				}
-				return
-			}
-			if !errors.Is(err, core.ErrReleaseContract) && !errors.Is(err, core.ErrFoundationContract) {
-				t.Fatalf("DeployClient.Latest() error = %v, want release/foundation contract", err)
-			}
-		})
-	}
-}
-
 func prepareSuccessEnvelope(t *testing.T, chain deployTransportChain) []byte {
 	t.Helper()
 	envelope := core.APIEnvelope[DeployPrepareResponse]{

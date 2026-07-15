@@ -126,26 +126,6 @@ func (c DeployClient) Publication(ctx context.Context, releaseID ReleaseID) (Dep
 	return response, nil
 }
 
-// Latest returns the newest publication selected by the product-specific
-// endpoint. The publication is accepted only after the offline release
-// authority and online server authority both verify.
-func (c DeployClient) Latest(ctx context.Context) (DeployFinalizeResponse, error) {
-	if err := c.Validate(); err != nil {
-		return DeployFinalizeResponse{}, err
-	}
-	response, err := deployGet[DeployFinalizeResponse](ctx, c.HTTP, c.Endpoints.Latest)
-	if err != nil {
-		return DeployFinalizeResponse{}, err
-	}
-	if err := response.VerifyPublication(c.ReleaseKeys, c.ServerKeys); err != nil {
-		return DeployFinalizeResponse{}, err
-	}
-	if response.Manifest.Body.Product != c.Endpoints.Product {
-		return DeployFinalizeResponse{}, fmt.Errorf(ErrFmtDeployClient, core.ErrReleaseContract)
-	}
-	return response, nil
-}
-
 func deployPost[Request core.Validatable, Response core.Validatable](
 	ctx context.Context,
 	httpClient *http.Client,

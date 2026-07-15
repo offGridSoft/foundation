@@ -28,63 +28,69 @@ type CanonicalBody interface {
 type SigningDomain uint16
 
 const (
-	SigningDomainUnknown                  = SigningDomain(SchemaUnknown)
-	SigningDomainBugCheckInResponse       = SigningDomain(SchemaBugCheckInResponse)
-	SigningDomainBugSeatLease             = SigningDomain(SchemaBugSeatLease)
-	SigningDomainBugWriterAttestation     = SigningDomain(SchemaBugWriterAttestation)
-	SigningDomainBugWriterCertificate     = SigningDomain(SchemaBugWriterCertificate)
-	SigningDomainBugWriterRevocation      = SigningDomain(SchemaBugWriterRevocation)
-	SigningDomainWitnessSubscriptionLease = SigningDomain(SchemaWitnessSubscription)
-	SigningDomainWitnessCheckInResponse   = SigningDomain(SchemaWitnessCheckInResponse)
-	SigningDomainWitnessCustodyReceipt    = SigningDomain(SchemaCustodyReceipt)
-	SigningDomainReleaseManifest          = SigningDomain(SchemaReleaseManifest)
-	SigningDomainReleaseUploadReceipt     = SigningDomain(SchemaReleaseUploadReceipt)
-	SigningDomainReleaseDownloadIndex     = SigningDomain(SchemaReleaseDownloadIndex)
-	SigningDomainReleaseDeployPlan        = SigningDomain(SchemaReleaseDeployPlan)
-	SigningDomainReleasePlan              = SigningDomain(SchemaReleasePlan)
-	SigningDomainReleaseRootLayout        = SigningDomain(SchemaReleaseRootLayout)
-	SigningDomainReleaseCommandRun        = SigningDomain(SchemaReleaseCommandRun)
-	SigningDomainReleaseSeedGrant         = SigningDomain(SchemaReleaseSeedGrant)
+	SigningDomainUnknown                        = SigningDomain(SchemaUnknown)
+	SigningDomainBugCheckInResponse             = SigningDomain(SchemaBugCheckInResponse)
+	SigningDomainBugSeatLease                   = SigningDomain(SchemaBugSeatLease)
+	SigningDomainBugWriterAttestation           = SigningDomain(SchemaBugWriterAttestation)
+	SigningDomainBugWriterCertificate           = SigningDomain(SchemaBugWriterCertificate)
+	SigningDomainBugWriterRevocation            = SigningDomain(SchemaBugWriterRevocation)
+	SigningDomainWitnessSubscriptionLease       = SigningDomain(SchemaWitnessSubscription)
+	SigningDomainWitnessCheckInResponse         = SigningDomain(SchemaWitnessCheckInResponse)
+	SigningDomainWitnessCustodyReceipt          = SigningDomain(SchemaCustodyReceipt)
+	SigningDomainReleaseManifest                = SigningDomain(SchemaReleaseManifest)
+	SigningDomainReleaseUploadReceipt           = SigningDomain(SchemaReleaseUploadReceipt)
+	SigningDomainReleaseDownloadIndex           = SigningDomain(SchemaReleaseDownloadIndex)
+	SigningDomainReleaseDeployPlan              = SigningDomain(SchemaReleaseDeployPlan)
+	SigningDomainReleasePlan                    = SigningDomain(SchemaReleasePlan)
+	SigningDomainReleaseRootLayout              = SigningDomain(SchemaReleaseRootLayout)
+	SigningDomainReleaseCommandRun              = SigningDomain(SchemaReleaseCommandRun)
+	SigningDomainReleaseSeedGrant               = SigningDomain(SchemaReleaseSeedGrant)
+	SigningDomainReleaseUpdateCheckResponse     = SigningDomain(SchemaReleaseUpdateCheckResponse)
+	SigningDomainReleaseUpdateDiagnosticReceipt = SigningDomain(SchemaReleaseUpdateDiagnosticReceipt)
 )
 
 const (
-	SigningDomainTokenBugSeatLease             = "bug-seat-lease-" + ContractYear // #nosec G101 -- public signing-domain token, not a credential.
-	SigningDomainTokenBugCheckInResponse       = "bug-check-in-response-" + ContractYear
-	SigningDomainTokenBugWriterAttestation     = "bug-writer-attestation-" + ContractYear
-	SigningDomainTokenBugWriterCertificate     = "bug-writer-certificate-" + ContractYear
-	SigningDomainTokenBugWriterRevocation      = "bug-writer-revocation-" + ContractYear
-	SigningDomainTokenWitnessSubscriptionLease = "witness-subscription-lease-" + ContractYear
-	SigningDomainTokenWitnessCheckInResponse   = "witness-check-in-response-" + ContractYear
-	SigningDomainTokenWitnessCustodyReceipt    = "witness-custody-receipt-" + ContractYear
-	SigningDomainTokenReleaseManifest          = "release-manifest-" + ContractYear
-	SigningDomainTokenReleaseUploadReceipt     = "release-upload-receipt-" + ContractYear
-	SigningDomainTokenReleaseDownloadIndex     = "release-download-index-" + ContractYear
-	SigningDomainTokenReleaseDeployPlan        = "release-deploy-plan-" + ContractYear
-	SigningDomainTokenReleasePlan              = "release-plan-" + ContractYear
-	SigningDomainTokenReleaseRootLayout        = "release-root-layout-" + ContractYear
-	SigningDomainTokenReleaseCommandRun        = "release-command-run-" + ContractYear
-	SigningDomainTokenReleaseSeedGrant         = "release-seed-grant-" + ContractYear
-	ErrFmtSigningDomain                        = "core.SigningDomain: %w"
+	SigningDomainTokenBugSeatLease                   = "bug-seat-lease-" + ContractYear // #nosec G101 -- public signing-domain token, not a credential.
+	SigningDomainTokenBugCheckInResponse             = "bug-check-in-response-" + ContractYear
+	SigningDomainTokenBugWriterAttestation           = "bug-writer-attestation-" + ContractYear
+	SigningDomainTokenBugWriterCertificate           = "bug-writer-certificate-" + ContractYear
+	SigningDomainTokenBugWriterRevocation            = "bug-writer-revocation-" + ContractYear
+	SigningDomainTokenWitnessSubscriptionLease       = "witness-subscription-lease-" + ContractYear
+	SigningDomainTokenWitnessCheckInResponse         = "witness-check-in-response-" + ContractYear
+	SigningDomainTokenWitnessCustodyReceipt          = "witness-custody-receipt-" + ContractYear
+	SigningDomainTokenReleaseManifest                = "release-manifest-" + ContractYear
+	SigningDomainTokenReleaseUploadReceipt           = "release-upload-receipt-" + ContractYear
+	SigningDomainTokenReleaseDownloadIndex           = "release-download-index-" + ContractYear
+	SigningDomainTokenReleaseDeployPlan              = "release-deploy-plan-" + ContractYear
+	SigningDomainTokenReleasePlan                    = "release-plan-" + ContractYear
+	SigningDomainTokenReleaseRootLayout              = "release-root-layout-" + ContractYear
+	SigningDomainTokenReleaseCommandRun              = "release-command-run-" + ContractYear
+	SigningDomainTokenReleaseSeedGrant               = "release-seed-grant-" + ContractYear
+	SigningDomainTokenReleaseUpdateCheckResponse     = "release-update-check-response-" + ContractYear
+	SigningDomainTokenReleaseUpdateDiagnosticReceipt = "release-update-diagnostic-receipt-" + ContractYear
+	ErrFmtSigningDomain                              = "core.SigningDomain: %w"
 )
 
-func signingDomainNames() [SchemaReleaseDeployFinalizeResponse + 1]string {
-	return [SchemaReleaseDeployFinalizeResponse + 1]string{
-		SigningDomainBugCheckInResponse:       SigningDomainTokenBugCheckInResponse,
-		SigningDomainBugSeatLease:             SigningDomainTokenBugSeatLease,
-		SigningDomainBugWriterAttestation:     SigningDomainTokenBugWriterAttestation,
-		SigningDomainBugWriterCertificate:     SigningDomainTokenBugWriterCertificate,
-		SigningDomainBugWriterRevocation:      SigningDomainTokenBugWriterRevocation,
-		SigningDomainWitnessSubscriptionLease: SigningDomainTokenWitnessSubscriptionLease,
-		SigningDomainWitnessCheckInResponse:   SigningDomainTokenWitnessCheckInResponse,
-		SigningDomainWitnessCustodyReceipt:    SigningDomainTokenWitnessCustodyReceipt,
-		SigningDomainReleaseManifest:          SigningDomainTokenReleaseManifest,
-		SigningDomainReleaseUploadReceipt:     SigningDomainTokenReleaseUploadReceipt,
-		SigningDomainReleaseDownloadIndex:     SigningDomainTokenReleaseDownloadIndex,
-		SigningDomainReleaseDeployPlan:        SigningDomainTokenReleaseDeployPlan,
-		SigningDomainReleasePlan:              SigningDomainTokenReleasePlan,
-		SigningDomainReleaseRootLayout:        SigningDomainTokenReleaseRootLayout,
-		SigningDomainReleaseCommandRun:        SigningDomainTokenReleaseCommandRun,
-		SigningDomainReleaseSeedGrant:         SigningDomainTokenReleaseSeedGrant,
+func signingDomainNames() [SchemaReleaseUpdateDiagnosticReceipt + 1]string {
+	return [SchemaReleaseUpdateDiagnosticReceipt + 1]string{
+		SigningDomainBugCheckInResponse:             SigningDomainTokenBugCheckInResponse,
+		SigningDomainBugSeatLease:                   SigningDomainTokenBugSeatLease,
+		SigningDomainBugWriterAttestation:           SigningDomainTokenBugWriterAttestation,
+		SigningDomainBugWriterCertificate:           SigningDomainTokenBugWriterCertificate,
+		SigningDomainBugWriterRevocation:            SigningDomainTokenBugWriterRevocation,
+		SigningDomainWitnessSubscriptionLease:       SigningDomainTokenWitnessSubscriptionLease,
+		SigningDomainWitnessCheckInResponse:         SigningDomainTokenWitnessCheckInResponse,
+		SigningDomainWitnessCustodyReceipt:          SigningDomainTokenWitnessCustodyReceipt,
+		SigningDomainReleaseManifest:                SigningDomainTokenReleaseManifest,
+		SigningDomainReleaseUploadReceipt:           SigningDomainTokenReleaseUploadReceipt,
+		SigningDomainReleaseDownloadIndex:           SigningDomainTokenReleaseDownloadIndex,
+		SigningDomainReleaseDeployPlan:              SigningDomainTokenReleaseDeployPlan,
+		SigningDomainReleasePlan:                    SigningDomainTokenReleasePlan,
+		SigningDomainReleaseRootLayout:              SigningDomainTokenReleaseRootLayout,
+		SigningDomainReleaseCommandRun:              SigningDomainTokenReleaseCommandRun,
+		SigningDomainReleaseSeedGrant:               SigningDomainTokenReleaseSeedGrant,
+		SigningDomainReleaseUpdateCheckResponse:     SigningDomainTokenReleaseUpdateCheckResponse,
+		SigningDomainReleaseUpdateDiagnosticReceipt: SigningDomainTokenReleaseUpdateDiagnosticReceipt,
 	}
 }
 

@@ -110,6 +110,46 @@ func TestBugCheckInResponseBoundaryTable(t *testing.T) {
 	}
 }
 
+func TestCheckInUpdateNoticeProductBindingTable(t *testing.T) {
+	t.Parallel()
+	version, err := core.ParseProductVersion(core.FoundationVersion2026)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		body    core.Validatable
+		name    string
+		product core.Product
+		accept  bool
+	}{
+		{name: "bug notice", product: core.ProductBug, accept: true},
+		{name: "bug rejects witness notice", product: core.ProductWitness},
+		{name: "witness notice", product: core.ProductWitness, body: WitnessCheckInResponseBody{}, accept: true},
+		{name: "witness rejects bug notice", product: core.ProductBug, body: WitnessCheckInResponseBody{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			notice, buildErr := core.BuildUpdateNotice(tc.product, &version)
+			if buildErr != nil {
+				t.Fatal(buildErr)
+			}
+			var candidate core.Validatable
+			if _, witness := tc.body.(WitnessCheckInResponseBody); witness {
+				candidate = WitnessCheckInResponseBody{Schema: core.SchemaWitnessCheckInResponse, RequestNonce: testCheckInNonce(t), Decision: CheckInDecision{Refusal: RefusalPaymentRequired, Remediation: RemediationUpdatePayment}, UpdateNotice: &notice}
+			} else {
+				candidate = BugCheckInResponseBody{Schema: core.SchemaBugCheckInResponse, RequestNonce: testCheckInNonce(t), Decision: CheckInDecision{Refusal: RefusalPaymentRequired, Remediation: RemediationUpdatePayment}, WriterRevocations: BugWriterRevocationDelivery{}, UpdateNotice: &notice}
+			}
+			err := candidate.Validate()
+			if tc.accept && err != nil {
+				t.Fatalf("Validate() error = %v", err)
+			}
+			if !tc.accept && !errors.Is(err, core.ErrLicenseContract) {
+				t.Fatalf("Validate() error = %v, want license contract", err)
+			}
+		})
+	}
+}
+
 func TestUnsignedRefusalCannotCrossVerificationBoundary(t *testing.T) {
 	t.Parallel()
 

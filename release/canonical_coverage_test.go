@@ -28,10 +28,48 @@ func TestSignedBodyCanonicalProjectionCoversEveryTaggedField(t *testing.T) {
 		{name: "release root", body: validWitnessReleaseRootLayout(t)},
 		{name: "command run", body: validCommandRun(t)},
 		{name: "seed grant", body: validSeedGrant(t)},
+		{name: "update check response", body: validUpdateTestChain(t).response.Authority.Body},
+		{name: "update diagnostic receipt", body: validUpdateDiagnosticReceiptBody(t)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			requireCanonicalJSONFieldCoverage(t, tc.body)
+		})
+	}
+}
+
+func TestUpdateTransportJSONProjectionCoversEveryTaggedField(t *testing.T) {
+	t.Parallel()
+	chain := validUpdateTestChain(t)
+	requested := chain.deploy.finalizeResponse.Manifest.Body.ReleaseID
+	requestWithTarget := chain.request
+	requestWithTarget.RequestedReleaseID = &requested
+	diagnostic, err := BuildUpdateDiagnostic(validDiagnosticInput(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		value any
+		name  string
+	}{
+		{name: "check request", value: requestWithTarget},
+		{name: "self test result", value: validFailedSelfTest(t)},
+		{name: "update diagnostic", value: diagnostic},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			encoded, err := json.Marshal(tc.value)
+			if err != nil {
+				t.Fatalf("MarshalJSON() error = %v", err)
+			}
+			want := taggedJSONFieldNames(reflect.TypeOf(tc.value))
+			got, err := topLevelJSONFieldNames(encoded)
+			if err != nil {
+				t.Fatalf("JSON field scan error = %v", err)
+			}
+			if !slices.Equal(got, want) {
+				t.Fatalf("JSON fields = %v, want %v", got, want)
+			}
 		})
 	}
 }

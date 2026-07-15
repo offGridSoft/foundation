@@ -10,6 +10,7 @@ type coreContractInventory struct {
 	RetentionPolicy    protocolFact[WitnessRetentionPolicy]
 	RetentionWindow    protocolFact[WitnessRetentionWindow]
 	RetentionDecision  internalFlow[WitnessRetentionDecisionInput]
+	UpdateNotice       protocolFact[UpdateNotice]
 }
 
 var _ = coreContractInventory{}
