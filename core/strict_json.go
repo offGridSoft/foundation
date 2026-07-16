@@ -197,6 +197,10 @@ func collectJSONFieldNames(valueType reflect.Type, fields map[string]struct{}, v
 	for valueType.Kind() == reflect.Pointer || valueType.Kind() == reflect.Slice || valueType.Kind() == reflect.Array {
 		valueType = valueType.Elem()
 	}
+	unmarshaler := reflect.TypeFor[json.Unmarshaler]()
+	if valueType.Implements(unmarshaler) || reflect.PointerTo(valueType).Implements(unmarshaler) {
+		return
+	}
 	if valueType.Kind() == reflect.Map {
 		collectJSONFieldNames(valueType.Elem(), fields, visited)
 		return
