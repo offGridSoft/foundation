@@ -11,6 +11,9 @@ func TestFoundationModulePathContractsTable(t *testing.T) {
 	}{
 		{name: "module generation", got: FoundationModulePath, want: "github.com/offGridSoft/foundation/v" + ContractYear},
 		{name: "core package", got: FoundationCorePackagePath, want: FoundationModulePath + "/core"},
+		{name: "custody package", got: FoundationCustodyPackagePath, want: FoundationModulePath + "/custody"},
+		{name: "license package", got: FoundationLicensePackagePath, want: FoundationModulePath + "/license"},
+		{name: "release package", got: FoundationReleasePackagePath, want: FoundationModulePath + "/release"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

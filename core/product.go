@@ -17,10 +17,13 @@ const (
 	ContractVersionToken = "v" + ContractYear
 	// FoundationVersion2026 is this module's compiler-owned source version.
 	FoundationVersion2026 = ContractYear + ".0.0"
-	// FoundationModulePath and FoundationCorePackagePath are the compiler-owned
-	// Go import identities used by generators in every consuming product.
-	FoundationModulePath      = "github.com/offGridSoft/foundation/" + ContractVersionToken
-	FoundationCorePackagePath = FoundationModulePath + "/core"
+	// FoundationModulePath and the package paths derived from it are the
+	// compiler-owned Go import identities used by every consuming generator.
+	FoundationModulePath         = "github.com/offGridSoft/foundation/" + ContractVersionToken
+	FoundationCorePackagePath    = FoundationModulePath + "/core"
+	FoundationCustodyPackagePath = FoundationModulePath + "/custody"
+	FoundationLicensePackagePath = FoundationModulePath + "/license"
+	FoundationReleasePackagePath = FoundationModulePath + "/release"
 )
 
 func ParseProductVersion(value string) (ProductVersion, error) {
