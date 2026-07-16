@@ -26,7 +26,7 @@ const (
 )
 
 const (
-	GoTestSerialPackageName = "testlock"
+	GoTestSerialPackageName = "testserial"
 	GoTestSerialFunction    = "Serial"
 )
 
