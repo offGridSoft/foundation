@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -36,7 +37,7 @@ func DecodeStrictJSONStructure[T any](data []byte) (T, error) {
 	if len(data) == 0 || len(data) > StrictJSONMaxBytes || !utf8.Valid(data) {
 		return value, fmt.Errorf(ErrFmtJSONUnexpectedValue, ErrJSONContract)
 	}
-	if err := rejectDuplicateJSONFields(data); err != nil {
+	if err := rejectDuplicateJSONFields[T](data); err != nil {
 		return value, err
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
@@ -71,9 +72,10 @@ type strictJSONContainer struct {
 	expectKey bool
 }
 
-func rejectDuplicateJSONFields(data []byte) error {
+func rejectDuplicateJSONFields[T any](data []byte) error {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	stack := make([]strictJSONContainer, 0)
+	fields := jsonFieldNamesForType(reflect.TypeFor[T]())
 	for range StrictJSONMaxBytes {
 		token, err := decoder.Token()
 		if err != nil && onlyJSONWhitespaceAfter(data, decoder.InputOffset()) {
@@ -82,7 +84,7 @@ func rejectDuplicateJSONFields(data []byte) error {
 		if err != nil {
 			return jsonContractError(err)
 		}
-		next, scanErr := scanStrictJSONToken(stack, token)
+		next, scanErr := scanStrictJSONToken(stack, token, fields)
 		if scanErr != nil {
 			return scanErr
 		}
@@ -111,7 +113,7 @@ func onlyJSONWhitespace(data []byte) bool {
 	return true
 }
 
-func scanStrictJSONToken(stack []strictJSONContainer, token json.Token) ([]strictJSONContainer, error) {
+func scanStrictJSONToken(stack []strictJSONContainer, token json.Token, fields map[string]struct{}) ([]strictJSONContainer, error) {
 	if len(stack) == 0 && token == nil {
 		return nil, fmt.Errorf(ErrFmtJSONUnexpectedValue, ErrJSONContract)
 	}
@@ -119,7 +121,7 @@ func scanStrictJSONToken(stack []strictJSONContainer, token json.Token) ([]stric
 		return scanStrictJSONDelim(stack, delim)
 	}
 	if key, ok := token.(string); ok && strictJSONTopExpectsKey(stack) {
-		return scanStrictJSONKey(stack, key)
+		return scanStrictJSONKey(stack, key, fields)
 	}
 	return completeStrictJSONValue(stack)
 }
@@ -149,7 +151,7 @@ func scanStrictJSONDelim(stack []strictJSONContainer, delim json.Delim) ([]stric
 	}
 }
 
-func scanStrictJSONKey(stack []strictJSONContainer, key string) ([]strictJSONContainer, error) {
+func scanStrictJSONKey(stack []strictJSONContainer, key string, fields map[string]struct{}) ([]strictJSONContainer, error) {
 	if len(stack) == 0 {
 		return nil, fmt.Errorf(ErrFmtJSONUnexpectedField, ErrJSONContract)
 	}
@@ -162,12 +164,59 @@ func scanStrictJSONKey(stack []strictJSONContainer, key string) ([]strictJSONCon
 	}) {
 		return nil, fmt.Errorf(ErrFmtJSONDuplicateField, ErrJSONContract)
 	}
-	if err := ValidateJSONFieldName(key); err != nil {
+	if _, declared := fields[key]; !declared {
 		return nil, fmt.Errorf(ErrFmtJSONUnexpectedField, ErrJSONContract)
 	}
 	top.keys = append(top.keys, key)
 	top.expectKey = false
 	return stack, nil
+}
+
+func jsonFieldNamesForType(root reflect.Type) map[string]struct{} {
+	fields := make(map[string]struct{})
+	visited := make(map[reflect.Type]struct{})
+	collectJSONFieldNames(root, fields, visited)
+	return fields
+}
+
+func collectJSONFieldNames(valueType reflect.Type, fields map[string]struct{}, visited map[reflect.Type]struct{}) {
+	for valueType.Kind() == reflect.Pointer || valueType.Kind() == reflect.Slice || valueType.Kind() == reflect.Array {
+		valueType = valueType.Elem()
+	}
+	if valueType.Kind() == reflect.Map {
+		collectJSONFieldNames(valueType.Elem(), fields, visited)
+		return
+	}
+	if valueType.Kind() != reflect.Struct {
+		return
+	}
+	if _, found := visited[valueType]; found {
+		return
+	}
+	visited[valueType] = struct{}{}
+	for index := range valueType.NumField() {
+		field := valueType.Field(index)
+		if !field.IsExported() {
+			continue
+		}
+		name, included := reflectedJSONFieldName(field)
+		if included && name != "" {
+			fields[name] = struct{}{}
+		}
+		collectJSONFieldNames(field.Type, fields, visited)
+	}
+}
+
+func reflectedJSONFieldName(field reflect.StructField) (string, bool) {
+	tag := field.Tag.Get("json")
+	name, _, _ := strings.Cut(tag, ",")
+	if name == "-" {
+		return "", false
+	}
+	if name == "" {
+		return field.Name, true
+	}
+	return name, true
 }
 
 func strictJSONTopExpectsKey(stack []strictJSONContainer) bool {

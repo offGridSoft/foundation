@@ -967,9 +967,10 @@ func TestByteCountRejectsZero(t *testing.T) {
 }
 
 type strictJSONHostilePayload struct {
-	Name string `json:"name"`
-	At   int64  `json:"at"`
-	OK   bool   `json:"ok"`
+	Name      string `json:"name"`
+	FirstName string `json:"firstName"`
+	At        int64  `json:"at"`
+	OK        bool   `json:"ok"`
 }
 
 func (p strictJSONHostilePayload) Validate() error {
@@ -1016,6 +1017,36 @@ func TestDecodeStrictJSONStructureDefersDomainValidation(t *testing.T) {
 	}
 	if _, err := DecodeStrictJSON[strictJSONHostilePayload](raw); !errors.Is(err, ErrJSONContract) {
 		t.Fatalf("DecodeStrictJSON() error = %v, want errors.Is(..., %v)", err, ErrJSONContract)
+	}
+}
+
+func TestDecodeStrictJSONStructureUsesCompilerDeclaredFieldNames(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		raw     string
+		wantErr error
+	}{
+		{name: "lower camel tag accepted", raw: `{"name":"Ada","firstName":"Ada","at":1,"ok":true}`},
+		{name: "flattened case rejected", raw: `{"name":"Ada","firstname":"Ada","at":1,"ok":true}`, wantErr: ErrJSONContract},
+		{name: "title case rejected", raw: `{"name":"Ada","FirstName":"Ada","at":1,"ok":true}`, wantErr: ErrJSONContract},
+		{name: "upper snake invention rejected", raw: `{"name":"Ada","first_name":"Ada","at":1,"ok":true}`, wantErr: ErrJSONContract},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := DecodeStrictJSONStructure[strictJSONHostilePayload]([]byte(tc.raw))
+			if tc.wantErr == nil {
+				if err != nil {
+					t.Fatalf("DecodeStrictJSONStructure() error = %v, want nil", err)
+				}
+				return
+			}
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("DecodeStrictJSONStructure() error = %v, want errors.Is(..., %v)", err, tc.wantErr)
+			}
+		})
 	}
 }
 
