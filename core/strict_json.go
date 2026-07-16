@@ -165,11 +165,25 @@ func scanStrictJSONKey(stack []strictJSONContainer, key string, fields map[strin
 		return nil, fmt.Errorf(ErrFmtJSONDuplicateField, ErrJSONContract)
 	}
 	if _, declared := fields[key]; !declared {
-		return nil, fmt.Errorf(ErrFmtJSONUnexpectedField, ErrJSONContract)
+		if hasCaseFoldJSONField(fields, key) {
+			return nil, fmt.Errorf(ErrFmtJSONUnexpectedField, ErrJSONContract)
+		}
+		if err := ValidateJSONFieldName(key); err != nil {
+			return nil, fmt.Errorf(ErrFmtJSONUnexpectedField, ErrJSONContract)
+		}
 	}
 	top.keys = append(top.keys, key)
 	top.expectKey = false
 	return stack, nil
+}
+
+func hasCaseFoldJSONField(fields map[string]struct{}, key string) bool {
+	for declared := range fields {
+		if strings.EqualFold(declared, key) {
+			return true
+		}
+	}
+	return false
 }
 
 func jsonFieldNamesForType(root reflect.Type) map[string]struct{} {
