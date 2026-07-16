@@ -378,6 +378,31 @@ func TestAppendJSONFieldNameHostileTable(t *testing.T) {
 	}
 }
 
+func TestCrossPackageJSONFieldOwnershipTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		got  string
+		want string
+	}{
+		{name: "device fingerprint", got: JSONFieldDeviceFingerprint, want: "device_fingerprint"},
+		{name: "object count", got: JSONFieldObjectCount, want: "object_count"},
+		{name: "product", got: JSONFieldProduct, want: "product"},
+		{name: "total bytes", got: JSONFieldTotalBytes, want: "total_bytes"},
+		{name: "writer key id", got: JSONFieldWriterKeyID, want: "writer_key_id"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if tc.got != tc.want {
+				t.Fatalf("field = %q, want %q", tc.got, tc.want)
+			}
+			if err := ValidateJSONFieldName(tc.got); err != nil {
+				t.Fatalf("ValidateJSONFieldName(%q) error = %v", tc.got, err)
+			}
+		})
+	}
+}
+
 type fixedHexJSONKind uint8
 
 const (

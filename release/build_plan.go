@@ -574,7 +574,7 @@ func (s ProductReleaseSpec) MarshalJSON() ([]byte, error) {
 	}
 	dst := []byte{'{'}
 	var err error
-	dst, err = core.AppendJSONField(dst, jsonFieldProduct, s.Product)
+	dst, err = core.AppendJSONField(dst, core.JSONFieldProduct, s.Product)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldVersion, s.Version)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCommands, s.Commands)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCommandCount, s.CommandCount)

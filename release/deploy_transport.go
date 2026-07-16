@@ -499,7 +499,7 @@ func appendDeployFinalizeRequestJSON(dst []byte, value DeployFinalizeRequest) ([
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldManifest, value.Manifest)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldPlan, value.Plan)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldObjects, value.Objects)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldObjectCount, value.ObjectCount)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldObjectCount, value.ObjectCount)
 	return closeDeployTransportJSON(dst, err)
 }
 

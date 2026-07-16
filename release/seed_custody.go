@@ -135,7 +135,7 @@ func (r SeedRequest) MarshalJSON() ([]byte, error) {
 	}
 	dst := []byte{'{'}
 	var err error
-	dst, err = core.AppendJSONField(dst, jsonFieldProduct, r.Product)
+	dst, err = core.AppendJSONField(dst, core.JSONFieldProduct, r.Product)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldVersion, r.Version)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldReleaseID, r.ReleaseID)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCommit, r.Commit)
@@ -213,7 +213,7 @@ func (b SeedGrantBody) Canonical(dst []byte) ([]byte, error) {
 	dst = append(dst, '{')
 	var err error
 	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, b.Schema)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldProduct, b.Product)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldProduct, b.Product)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldVersion, b.Version)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldReleaseID, b.ReleaseID)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCommit, b.Commit)

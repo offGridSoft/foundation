@@ -137,7 +137,7 @@ func (r UpdateCheckRequest) validatedJSON() ([]byte, error) {
 	dst := []byte{'{'}
 	dst, err := core.AppendJSONField(dst, core.JSONFieldSchema, r.Schema)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldRequestID, r.RequestID)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldProduct, r.Product)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldProduct, r.Product)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldInstalledVersion, r.InstalledVersion)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldInstalledReleaseID, r.InstalledReleaseID)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldInstalledCommit, r.InstalledCommit)
@@ -213,7 +213,7 @@ func (b UpdateCheckResponseBody) appendJSON(dst []byte) ([]byte, error) {
 	dst = append(dst, '{')
 	dst, err := core.AppendJSONField(dst, core.JSONFieldSchema, b.Schema)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldRequestID, b.RequestID)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldProduct, b.Product)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldProduct, b.Product)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDecision, b.Decision)
 	if b.Publication != nil {
 		dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldPublication, b.Publication)
@@ -433,7 +433,7 @@ func (r SelfTestResult) validatedJSON() ([]byte, error) {
 	}
 	dst := []byte{'{'}
 	dst, err := core.AppendJSONField(dst, core.JSONFieldSchema, r.Schema)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldProduct, r.Product)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldProduct, r.Product)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldVersion, r.Version)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCommit, r.Commit)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldPlatform, r.Platform)
@@ -678,7 +678,7 @@ func (d UpdateDiagnostic) validatedJSON() ([]byte, error) {
 	dst := []byte{'{'}
 	dst, err := core.AppendJSONField(dst, core.JSONFieldSchema, d.Schema)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDiagnosticID, d.DiagnosticID)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldProduct, d.Product)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldProduct, d.Product)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldInstalledVersion, d.InstalledVersion)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldInstalledReleaseID, d.InstalledReleaseID)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldInstalledCommit, d.InstalledCommit)

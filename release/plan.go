@@ -176,7 +176,7 @@ func appendReleasePlanJSON(dst []byte, p ReleasePlan) ([]byte, error) {
 	dst = append(dst, '{')
 	var err error
 	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, p.Schema)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldProduct, p.Product)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldProduct, p.Product)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldVersion, p.Version)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldReleaseID, p.ReleaseID)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDate, p.Date)
@@ -337,7 +337,7 @@ func appendDeployPlanJSON(dst []byte, p DeployPlan) ([]byte, error) {
 	dst = append(dst, '{')
 	var err error
 	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, p.Schema)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldProduct, p.Product)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldProduct, p.Product)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldVersion, p.Version)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldReleaseID, p.ReleaseID)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldRequestID, p.RequestID)

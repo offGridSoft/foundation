@@ -114,7 +114,7 @@ func appendReleaseRootLayoutJSON(dst []byte, l ReleaseRootLayout) ([]byte, error
 	dst = append(dst, '{')
 	var err error
 	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, l.Schema)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldProduct, l.Product)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldProduct, l.Product)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldVersion, l.Version)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDate, l.Date)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldReleaseID, l.ReleaseID)

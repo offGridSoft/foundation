@@ -162,7 +162,7 @@ func (i UploadBindingInput) canonical(dst []byte) ([]byte, error) {
 	dst = append(dst, '{')
 	var err error
 	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, UploadBindingSchema)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldProduct, i.Product)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldProduct, i.Product)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldReleaseID, i.ReleaseID)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldManifestSHA256, i.ManifestSHA256)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldArtifact, i.Artifact)

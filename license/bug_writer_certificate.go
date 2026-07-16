@@ -53,7 +53,7 @@ func (b BugWriterCertificateBody) Canonical(dst []byte) ([]byte, error) {
 	dst = append(dst, '{')
 	var err error
 	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, b.Schema)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDeviceFingerprint, b.DeviceFingerprint)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldDeviceFingerprint, b.DeviceFingerprint)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldWriter, b.Writer)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldIssuedAt, b.IssuedAt)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldValidUntil, b.ValidUntil)

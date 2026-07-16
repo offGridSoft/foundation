@@ -211,9 +211,9 @@ func appendManifestJSON(dst []byte, m Manifest) ([]byte, error) {
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCommit, m.Commit)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldArtifacts, m.Artifacts)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCreatedAt, m.CreatedAt)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldTotalBytes, m.TotalBytes)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldTotalBytes, m.TotalBytes)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldArtifactCount, m.ArtifactCount)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldProduct, m.Product)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldProduct, m.Product)
 	if err != nil {
 		return nil, err
 	}
@@ -396,9 +396,9 @@ func appendUploadReceiptJSON(dst []byte, r UploadReceipt) ([]byte, error) {
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldObjects, r.Objects)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldUploadAttemptID, r.AttemptID)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldUploadedAt, r.UploadedAt)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldTotalBytes, r.TotalBytes)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldObjectCount, r.ObjectCount)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldProduct, r.Product)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldTotalBytes, r.TotalBytes)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldObjectCount, r.ObjectCount)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldProduct, r.Product)
 	if err != nil {
 		return nil, err
 	}
@@ -541,7 +541,7 @@ func appendDownloadIndexJSON(dst []byte, i DownloadIndex) ([]byte, error) {
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDownloads, i.Downloads)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldGeneratedAt, i.GeneratedAt)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDownloadCount, i.DownloadCount)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldProduct, i.Product)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldProduct, i.Product)
 	if err != nil {
 		return nil, err
 	}

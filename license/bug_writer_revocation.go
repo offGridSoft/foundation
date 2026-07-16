@@ -45,7 +45,7 @@ func (b BugWriterRevocationBody) Canonical(dst []byte) ([]byte, error) {
 	dst = append(dst, '{')
 	var err error
 	dst, err = core.AppendJSONField(dst, core.JSONFieldSchema, b.Schema)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldWriterKeyID, b.WriterKeyID)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldWriterKeyID, b.WriterKeyID)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldRevokedAt, b.RevokedAt)
 	if err != nil {
 		return nil, err

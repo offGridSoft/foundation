@@ -301,7 +301,7 @@ func appendCommandRunJSON(dst []byte, r CommandRun) ([]byte, error) {
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldKind, r.Kind)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldStatus, r.Status)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldTreeState, r.TreeState)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldProduct, r.Product)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldProduct, r.Product)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldVersion, r.Version)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldReleaseID, r.ReleaseID)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldGitCommit, r.GitCommit)
