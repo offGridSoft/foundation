@@ -678,7 +678,7 @@ func TestCheckInTransportContractLayerTriad(t *testing.T) {
 	t.Parallel()
 	grant := testBugGrantContract(t)
 	tests := []struct {
-		body    TransportResponseBody
+		body    core.APIBody
 		name    string
 		wantErr bool
 	}{
@@ -692,12 +692,12 @@ func TestCheckInTransportContractLayerTriad(t *testing.T) {
 			err := tc.body.Validate()
 			if tc.wantErr {
 				if !errors.Is(err, core.ErrLicenseContract) {
-					t.Fatalf("TransportResponseBody.Validate() error = %v, want ErrLicenseContract", err)
+					t.Fatalf("APIBody.Validate() error = %v, want ErrLicenseContract", err)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("TransportResponseBody.Validate() error = %v", err)
+				t.Fatalf("APIBody.Validate() error = %v", err)
 			}
 		})
 	}

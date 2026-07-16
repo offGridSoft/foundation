@@ -13,9 +13,9 @@ import (
 var (
 	_ core.Validatable = DeployRequestID{}
 	_ core.Validatable = DeployPrepareRequest{}
-	_ core.Validatable = DeployPrepareResponse{}
+	_ core.APIBody     = DeployPrepareResponse{}
 	_ core.Validatable = DeployFinalizeRequest{}
-	_ core.Validatable = DeployFinalizeResponse{}
+	_ core.APIBody     = DeployFinalizeResponse{}
 )
 
 const DeployTransportMaximumBytes = 512 << 10
@@ -122,6 +122,8 @@ type DeployPrepareResponse struct {
 	RequestID DeployRequestID         `json:"request_id"`
 	Schema    core.SchemaID           `json:"schema"`
 }
+
+func (DeployPrepareResponse) APIBody() {}
 
 func (r DeployPrepareResponse) Validate() error {
 	_, err := r.validatedJSON()
@@ -253,6 +255,8 @@ type DeployFinalizeResponse struct {
 	RequestID DeployRequestID            `json:"request_id"`
 	Schema    core.SchemaID              `json:"schema"`
 }
+
+func (DeployFinalizeResponse) APIBody() {}
 
 func (r DeployFinalizeResponse) Validate() error {
 	_, err := r.validatedJSON()
