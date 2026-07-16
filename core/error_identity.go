@@ -24,6 +24,7 @@ var (
 	ErrExpiredUploadSession     = fmt.Errorf("expired upload session: %w", ErrCustodyContract)
 	ErrStorageVerification      = fmt.Errorf("storage verification failure: %w", ErrCustodyContract)
 	ErrAccessContract           = fmt.Errorf("access contract violation: %w", ErrFoundationContract)
+	ErrIPNetworkContract        = fmt.Errorf("ip network contract violation: %w", ErrFoundationContract)
 	ErrNilContext               = fmt.Errorf("nil context: %w", ErrFoundationContract)
 )
 
@@ -39,6 +40,7 @@ const (
 	ErrFmtFileNameToken       = "core.FileNameToken: %w"
 	ErrFmtPathToken           = "core.PathToken: %w" // #nosec G101 -- path token error label, not a credential.
 	ErrFmtHTTPSURL            = "core.HTTPSURL: %w"
+	ErrFmtIPNetwork           = "core.IPNetwork: %w"
 	ErrFmtAPIEndpoint         = "core.APIEndpoint: %w"
 	ErrFmtUniqueToken         = "core.UniqueToken: %w"
 	ErrFmtArtifactSet         = "core.ArtifactSet: %w"
