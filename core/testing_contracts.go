@@ -26,8 +26,11 @@ const (
 )
 
 const (
-	GoTestSerialPackageName = "testserial"
-	GoTestSerialFunction    = "Serial"
+	GoTestSerialPackageName   = "testserial"
+	GoTestSerialFunction      = "Serial"
+	GoWitnessWaiverDirective  = "witness:waiver"
+	GoLegacySerialDirective   = "serial:"
+	GoTestParallelDefaultRule = "test/parallel/default"
 )
 
 func testSerialReasonNames() [testSerialReasonLimit]string {

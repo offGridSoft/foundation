@@ -62,6 +62,15 @@ func TestTestSerialFunctionContract(t *testing.T) {
 	if GoTestSerialFunction == "" {
 		t.Fatal("GoTestSerialFunction is empty")
 	}
+	if GoWitnessWaiverDirective == "" {
+		t.Fatal("GoWitnessWaiverDirective is empty")
+	}
+	if GoLegacySerialDirective == "" {
+		t.Fatal("GoLegacySerialDirective is empty")
+	}
+	if GoTestParallelDefaultRule == "" {
+		t.Fatal("GoTestParallelDefaultRule is empty")
+	}
 }
 
 func FuzzTestSerialReasonValidateNeverPanics(f *testing.F) {
