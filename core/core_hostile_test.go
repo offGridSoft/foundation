@@ -1040,6 +1040,9 @@ func TestDecodeStrictJSONStructureHostileTable(t *testing.T) {
 			}
 		})
 	}
+	if _, err := DecodeStrictJSONStructure[strictJSONHostilePayload]([]byte{'{', '"', 'n', 'a', 'm', 'e', '"', ':', '"', 0xff, '"', '}'}); !errors.Is(err, ErrJSONContract) {
+		t.Fatalf("DecodeStrictJSONStructure(invalid UTF-8) error = %v, want errors.Is(..., %v)", err, ErrJSONContract)
+	}
 }
 
 func TestDecodeStrictJSONRejectsNonCanonicalAPIFieldCase(t *testing.T) {

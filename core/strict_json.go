@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode/utf8"
 )
 
 const (
@@ -32,7 +33,7 @@ func DecodeStrictJSON[T Validatable](data []byte) (T, error) {
 // structure before the owning type can validate the complete boundary value.
 func DecodeStrictJSONStructure[T any](data []byte) (T, error) {
 	var value T
-	if len(data) == 0 || len(data) > StrictJSONMaxBytes {
+	if len(data) == 0 || len(data) > StrictJSONMaxBytes || !utf8.Valid(data) {
 		return value, fmt.Errorf(ErrFmtJSONUnexpectedValue, ErrJSONContract)
 	}
 	if err := rejectDuplicateJSONFields(data); err != nil {
