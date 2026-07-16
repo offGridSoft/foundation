@@ -25,6 +25,7 @@ var (
 	ErrStorageVerification      = fmt.Errorf("storage verification failure: %w", ErrCustodyContract)
 	ErrAccessContract           = fmt.Errorf("access contract violation: %w", ErrFoundationContract)
 	ErrIPNetworkContract        = fmt.Errorf("ip network contract violation: %w", ErrFoundationContract)
+	ErrTestSerialContract       = fmt.Errorf("test serial contract violation: %w", ErrFoundationContract)
 	ErrNilContext               = fmt.Errorf("nil context: %w", ErrFoundationContract)
 )
 
@@ -41,6 +42,7 @@ const (
 	ErrFmtPathToken           = "core.PathToken: %w" // #nosec G101 -- path token error label, not a credential.
 	ErrFmtHTTPSURL            = "core.HTTPSURL: %w"
 	ErrFmtIPNetwork           = "core.IPNetwork: %w"
+	ErrFmtTestSerialReason    = "core.TestSerialReason: %w"
 	ErrFmtAPIEndpoint         = "core.APIEndpoint: %w"
 	ErrFmtUniqueToken         = "core.UniqueToken: %w"
 	ErrFmtArtifactSet         = "core.ArtifactSet: %w"
