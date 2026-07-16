@@ -21,6 +21,12 @@ func FuzzDecodeStrictJSONNeverPanics(f *testing.F) {
 	f.Add(valid)
 	f.Add([]byte(nil))
 	f.Fuzz(func(t *testing.T, data []byte) {
+		structured, structureErr := DecodeStrictJSONStructure[strictJSONFuzzContract](data)
+		if structureErr == nil {
+			if _, err := json.Marshal(structured); err != nil {
+				t.Fatalf("json.Marshal(structured) error = %v", err)
+			}
+		}
 		decoded, err := DecodeStrictJSON[strictJSONFuzzContract](data)
 		if err != nil {
 			return

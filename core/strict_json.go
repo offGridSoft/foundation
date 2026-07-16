@@ -16,6 +16,21 @@ const (
 )
 
 func DecodeStrictJSON[T Validatable](data []byte) (T, error) {
+	value, err := DecodeStrictJSONStructure[T](data)
+	if err != nil {
+		return value, err
+	}
+	if err := value.Validate(); err != nil {
+		return value, errors.Join(ErrJSONContract, err)
+	}
+	return value, nil
+}
+
+// DecodeStrictJSONStructure enforces the complete Foundation JSON grammar
+// without invoking the decoded domain type's Validate method. Transports use
+// this when request path, query, or header fields must be projected into the
+// structure before the owning type can validate the complete boundary value.
+func DecodeStrictJSONStructure[T any](data []byte) (T, error) {
 	var value T
 	if len(data) == 0 || len(data) > StrictJSONMaxBytes {
 		return value, fmt.Errorf(ErrFmtJSONUnexpectedValue, ErrJSONContract)
@@ -30,9 +45,6 @@ func DecodeStrictJSON[T Validatable](data []byte) (T, error) {
 	}
 	if err := rejectTrailingJSON(decoder, data); err != nil {
 		return value, err
-	}
-	if err := value.Validate(); err != nil {
-		return value, errors.Join(ErrJSONContract, err)
 	}
 	return value, nil
 }

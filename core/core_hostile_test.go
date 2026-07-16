@@ -1003,6 +1003,45 @@ func TestDecodeStrictJSONHostileTable(t *testing.T) {
 	}
 }
 
+func TestDecodeStrictJSONStructureDefersDomainValidation(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`{"name":"","at":0,"ok":true}`)
+	decoded, err := DecodeStrictJSONStructure[strictJSONHostilePayload](raw)
+	if err != nil {
+		t.Fatalf("DecodeStrictJSONStructure() error = %v, want nil", err)
+	}
+	if decoded.OK != true || decoded.Name != "" || decoded.At != 0 {
+		t.Fatalf("DecodeStrictJSONStructure() = %+v, want decoded wire structure", decoded)
+	}
+	if _, err := DecodeStrictJSON[strictJSONHostilePayload](raw); !errors.Is(err, ErrJSONContract) {
+		t.Fatalf("DecodeStrictJSON() error = %v, want errors.Is(..., %v)", err, ErrJSONContract)
+	}
+}
+
+func TestDecodeStrictJSONStructureHostileTable(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		raw  string
+	}{
+		{name: "duplicate", raw: `{"name":"a","name":"b"}`},
+		{name: "case folded duplicate", raw: `{"name":"a","Name":"b"}`},
+		{name: "unknown", raw: `{"name":"a","extra":1}`},
+		{name: "trailing", raw: `{"name":"a"}{}`},
+		{name: "null", raw: `null`},
+		{name: "excess depth", raw: strings.Repeat("[", StrictJSONMaxDepth+1) + strings.Repeat("]", StrictJSONMaxDepth+1)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if _, err := DecodeStrictJSONStructure[strictJSONHostilePayload]([]byte(tc.raw)); !errors.Is(err, ErrJSONContract) {
+				t.Fatalf("DecodeStrictJSONStructure() error = %v, want errors.Is(..., %v)", err, ErrJSONContract)
+			}
+		})
+	}
+}
+
 func TestDecodeStrictJSONRejectsNonCanonicalAPIFieldCase(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
