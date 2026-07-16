@@ -2,7 +2,6 @@ package core
 
 import (
 	"strings"
-	"unicode"
 	"unicode/utf8"
 )
 
@@ -15,7 +14,7 @@ func ValidateOpaqueToken(value string, maxRunes int) error {
 	if maxRunes < 1 {
 		return ErrFoundationContract
 	}
-	if !utf8.ValidString(value) {
+	if err := ValidateControlFreeUTF8(value); err != nil {
 		return ErrFoundationContract
 	}
 	if value == "" || strings.TrimSpace(value) != value {
@@ -23,11 +22,6 @@ func ValidateOpaqueToken(value string, maxRunes int) error {
 	}
 	if utf8.RuneCountInString(value) > maxRunes {
 		return ErrFoundationContract
-	}
-	for _, r := range value {
-		if unicode.IsControl(r) {
-			return ErrFoundationContract
-		}
 	}
 	return nil
 }
