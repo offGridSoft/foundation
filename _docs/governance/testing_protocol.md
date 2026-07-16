@@ -1330,8 +1330,11 @@ Bad:
 // TODO
 ```
 
-Waivers are not permission slips. They are evidence that the exception was
-deliberate.
+Waivers are not permission slips. Kernel tests do not use serial waiver
+comments: they call `testserial.Serial` with a Foundation-owned
+`core.TestSerialReason`. That typed call is the compiler-visible reason the
+test cannot call `t.Parallel`, and invalid or zero reasons fail at execution.
+Witness-lint verifies the exact imported package and function contract.
 
 Canonical grammar:
 
@@ -1340,8 +1343,9 @@ Canonical grammar:
 ```
 
 The reason must name why this case is structurally different, not why fixing it
-is inconvenient. Legacy local comments such as `serial:` may still appear in
-older code, but new waivers use the canonical grammar.
+is inconvenient. Legacy local comments such as `serial:` are rejected. The
+comment grammar remains available to external repositories only where the
+typed helper has not yet been installed; Kernel's ratchet rejects both forms.
 
 ## Automation Map
 
