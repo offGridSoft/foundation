@@ -15,6 +15,7 @@ type BugUsage struct {
 	WindowStart  core.UnixNanoTime `json:"window_start"`
 	Green        uint32            `json:"green"`
 	Reattest     uint32            `json:"reattest"`
+	Retire       uint32            `json:"retire"`
 	Verify       uint32            `json:"verify"`
 	Start        uint32            `json:"start"`
 	Show         uint32            `json:"show"`

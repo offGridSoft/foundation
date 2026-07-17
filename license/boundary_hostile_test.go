@@ -328,7 +328,7 @@ func TestBugUsageMarshalTable(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "zero usage marshals as nullable first check-in body", usage: BugUsage{}, want: `{}`},
-		{name: "schema usage marshals typed usage body", usage: goodBugUsage(), want: `{"window_end":1782302401000000000,"window_start":1782302400000000000,"green":0,"reattest":0,"verify":0,"start":0,"show":0,"list":0,"red":0,"license_admin":0,"audit":0,"dupe":0,"init":0,"languages":0,"install_hooks":0,"ledger_admin":0,"schema":"bug-usage-v2026"}`},
+		{name: "schema usage marshals typed usage body", usage: goodBugUsage(), want: `{"window_end":1782302401000000000,"window_start":1782302400000000000,"green":0,"reattest":0,"retire":0,"verify":0,"start":0,"show":0,"list":0,"red":0,"license_admin":0,"audit":0,"dupe":0,"init":0,"languages":0,"install_hooks":0,"ledger_admin":0,"schema":"bug-usage-v2026"}`},
 		{name: "invalid nonzero usage returns license contract", usage: BugUsage{
 			Schema:      core.SchemaUnknown,
 			WindowStart: testTime(1782302400000000000),
