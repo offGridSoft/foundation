@@ -29,6 +29,20 @@ func TestGateEnumWireContractsHostileTable(t *testing.T) {
 	}
 }
 
+func TestGateCheckOutputPolicyExhaustiveTable(t *testing.T) {
+	t.Parallel()
+
+	for check := GateCheckGoFix; check <= GateCheckGitTreeClean; check++ {
+		wantEmpty := check != GateCheckGoVulnCheck && check != GateCheckGoSec && check != GateCheckGoTest && check != GateCheckGoTestRaceShuffle
+		if got := check.RequiresEmptyStdout(); got != wantEmpty {
+			t.Fatalf("GateCheck(%d).RequiresEmptyStdout() = %v, want %v", check, got, wantEmpty)
+		}
+	}
+	if GateCheckUnknown.RequiresEmptyStdout() {
+		t.Fatalf("GateCheckUnknown.RequiresEmptyStdout() = true, want false")
+	}
+}
+
 func TestGateReportHostileBoundaryTable(t *testing.T) {
 	t.Parallel()
 

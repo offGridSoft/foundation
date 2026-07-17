@@ -153,6 +153,15 @@ func (c GateCheck) Validate() error {
 	return nil
 }
 
+func (c GateCheck) RequiresEmptyStdout() bool {
+	switch c {
+	case GateCheckGoVulnCheck, GateCheckGoSec, GateCheckGoTest, GateCheckGoTestRaceShuffle:
+		return false
+	default:
+		return c.IsValid()
+	}
+}
+
 func ParseGateCheck(token string) (GateCheck, error) {
 	for check := GateCheckGoFix; int(check) < len(gateCheckNames()); check++ {
 		if check.String() == token {
