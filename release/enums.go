@@ -16,15 +16,19 @@ const (
 	KindManifest
 	KindDownloadIndex
 	KindCustodyRecord
+	KindGateEvidence
+	KindLegalDocument
 )
 
-func kindNames() [KindCustodyRecord + 1]string {
+func kindNames() [KindLegalDocument + 1]string {
 	return [...]string{
 		KindProductBinary: kindTokenProductBinary,
 		KindToolBundle:    kindTokenToolBundle,
 		KindManifest:      kindTokenManifest,
 		KindDownloadIndex: kindTokenDownloadIndex,
 		KindCustodyRecord: kindTokenCustodyRecord,
+		KindGateEvidence:  kindTokenGateEvidence,
+		KindLegalDocument: kindTokenLegalDocument,
 	}
 }
 
@@ -34,6 +38,8 @@ const (
 	kindTokenManifest      = "manifest"
 	kindTokenDownloadIndex = "download_index"
 	kindTokenCustodyRecord = "custody_record"
+	kindTokenGateEvidence  = "gate_evidence"
+	kindTokenLegalDocument = "legal_document"
 )
 
 func (k Kind) String() string {

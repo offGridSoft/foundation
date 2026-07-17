@@ -3,6 +3,7 @@ package release
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -161,7 +162,7 @@ func topLevelJSONFieldNames(data []byte) ([]string, error) {
 	if _, err := decoder.Token(); err != nil {
 		return nil, err
 	}
-	if _, err := decoder.Token(); err != io.EOF {
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("trailing JSON contract")
 	}
 	sort.Strings(fields)

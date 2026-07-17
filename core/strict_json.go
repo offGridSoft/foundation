@@ -113,7 +113,7 @@ func onlyJSONWhitespace(data []byte) bool {
 	return true
 }
 
-func scanStrictJSONToken(stack []strictJSONContainer, token json.Token, fields map[string]struct{}) ([]strictJSONContainer, error) {
+func scanStrictJSONToken(stack []strictJSONContainer, token json.Token, fields []string) ([]strictJSONContainer, error) {
 	if len(stack) == 0 && token == nil {
 		return nil, fmt.Errorf(ErrFmtJSONUnexpectedValue, ErrJSONContract)
 	}
@@ -151,7 +151,7 @@ func scanStrictJSONDelim(stack []strictJSONContainer, delim json.Delim) ([]stric
 	}
 }
 
-func scanStrictJSONKey(stack []strictJSONContainer, key string, fields map[string]struct{}) ([]strictJSONContainer, error) {
+func scanStrictJSONKey(stack []strictJSONContainer, key string, fields []string) ([]strictJSONContainer, error) {
 	if len(stack) == 0 {
 		return nil, fmt.Errorf(ErrFmtJSONUnexpectedField, ErrJSONContract)
 	}
@@ -164,7 +164,7 @@ func scanStrictJSONKey(stack []strictJSONContainer, key string, fields map[strin
 	}) {
 		return nil, fmt.Errorf(ErrFmtJSONDuplicateField, ErrJSONContract)
 	}
-	if _, declared := fields[key]; !declared {
+	if _, declared := slices.BinarySearch(fields, key); !declared {
 		if hasCaseFoldJSONField(fields, key) {
 			return nil, fmt.Errorf(ErrFmtJSONUnexpectedField, ErrJSONContract)
 		}
@@ -177,8 +177,8 @@ func scanStrictJSONKey(stack []strictJSONContainer, key string, fields map[strin
 	return stack, nil
 }
 
-func hasCaseFoldJSONField(fields map[string]struct{}, key string) bool {
-	for declared := range fields {
+func hasCaseFoldJSONField(fields []string, key string) bool {
+	for _, declared := range fields {
 		if strings.EqualFold(declared, key) {
 			return true
 		}
@@ -186,43 +186,62 @@ func hasCaseFoldJSONField(fields map[string]struct{}, key string) bool {
 	return false
 }
 
-func jsonFieldNamesForType(root reflect.Type) map[string]struct{} {
-	fields := make(map[string]struct{})
+func jsonFieldNamesForType(root reflect.Type) []string {
+	fields := make([]string, 0)
 	visited := make(map[reflect.Type]struct{})
-	collectJSONFieldNames(root, fields, visited)
-	return fields
+	pending := []reflect.Type{root}
+	for len(pending) > 0 {
+		last := len(pending) - 1
+		valueType := indirectJSONFieldType(pending[last])
+		pending = pending[:last]
+		fields, pending = collectJSONFieldType(valueType, fields, pending, visited)
+	}
+	slices.Sort(fields)
+	return slices.Compact(fields)
 }
 
-func collectJSONFieldNames(valueType reflect.Type, fields map[string]struct{}, visited map[reflect.Type]struct{}) {
+func indirectJSONFieldType(valueType reflect.Type) reflect.Type {
 	for valueType.Kind() == reflect.Pointer || valueType.Kind() == reflect.Slice || valueType.Kind() == reflect.Array {
 		valueType = valueType.Elem()
 	}
+	return valueType
+}
+
+func jsonFieldTypeOwnsContract(valueType reflect.Type) bool {
 	unmarshaler := reflect.TypeFor[json.Unmarshaler]()
-	if valueType.Implements(unmarshaler) || reflect.PointerTo(valueType).Implements(unmarshaler) {
-		return
+	return valueType.Implements(unmarshaler) || reflect.PointerTo(valueType).Implements(unmarshaler)
+}
+
+func collectJSONFieldType(
+	valueType reflect.Type,
+	fields []string,
+	pending []reflect.Type,
+	visited map[reflect.Type]struct{},
+) ([]string, []reflect.Type) {
+	if jsonFieldTypeOwnsContract(valueType) {
+		return fields, pending
 	}
 	if valueType.Kind() == reflect.Map {
-		collectJSONFieldNames(valueType.Elem(), fields, visited)
-		return
+		return fields, append(pending, valueType.Elem())
 	}
 	if valueType.Kind() != reflect.Struct {
-		return
+		return fields, pending
 	}
 	if _, found := visited[valueType]; found {
-		return
+		return fields, pending
 	}
 	visited[valueType] = struct{}{}
-	for index := range valueType.NumField() {
-		field := valueType.Field(index)
+	for field := range valueType.Fields() {
 		if !field.IsExported() {
 			continue
 		}
 		name, included := reflectedJSONFieldName(field)
 		if included && name != "" {
-			fields[name] = struct{}{}
+			fields = append(fields, name)
 		}
-		collectJSONFieldNames(field.Type, fields, visited)
+		pending = append(pending, field.Type)
 	}
+	return fields, pending
 }
 
 func reflectedJSONFieldName(field reflect.StructField) (string, bool) {

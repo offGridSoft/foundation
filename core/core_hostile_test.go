@@ -1024,9 +1024,9 @@ func TestDecodeStrictJSONStructureUsesCompilerDeclaredFieldNames(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
+		wantErr error
 		name    string
 		raw     string
-		wantErr error
 	}{
 		{name: "lower camel tag accepted", raw: `{"name":"Ada","firstName":"Ada","at":1,"ok":true}`},
 		{name: "flattened case rejected", raw: `{"name":"Ada","firstname":"Ada","at":1,"ok":true}`, wantErr: ErrJSONContract},

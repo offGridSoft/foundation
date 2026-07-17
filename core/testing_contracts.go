@@ -1,6 +1,9 @@
 package core
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // TestSerialReason is the compiler-owned reason a Go test cannot safely call
 // testing.T.Parallel. It replaces informal serial comments with a closed
@@ -51,20 +54,49 @@ func testSerialReasonNames() [testSerialReasonLimit]string {
 }
 
 func (r TestSerialReason) String() string {
-	if !r.Valid() {
+	if !r.IsValid() {
 		return ""
 	}
 	return testSerialReasonNames()[r]
 }
 
-func (r TestSerialReason) Valid() bool {
+func (r TestSerialReason) IsValid() bool {
 	return r > TestSerialReasonInvalid && r < testSerialReasonLimit && testSerialReasonNames()[r] != ""
 }
 
 // Validate rejects the zero value and values outside the closed reason set.
 func (r TestSerialReason) Validate() error {
-	if !r.Valid() {
+	if !r.IsValid() {
 		return fmt.Errorf(ErrFmtTestSerialReason, ErrTestSerialContract)
 	}
+	return nil
+}
+
+func (r TestSerialReason) MarshalJSON() ([]byte, error) {
+	if err := r.Validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(r.String())
+}
+
+func ParseTestSerialReason(token string) (TestSerialReason, error) {
+	for reason := TestSerialReasonProcessEnvironment; reason < testSerialReasonLimit; reason++ {
+		if reason.String() == token {
+			return reason, nil
+		}
+	}
+	return TestSerialReasonInvalid, fmt.Errorf(ErrFmtTestSerialReason, ErrTestSerialContract)
+}
+
+func (r *TestSerialReason) UnmarshalJSON(data []byte) error {
+	var token string
+	if err := json.Unmarshal(data, &token); err != nil {
+		return fmt.Errorf(ErrFmtTestSerialReason, ErrTestSerialContract)
+	}
+	parsed, err := ParseTestSerialReason(token)
+	if err != nil {
+		return err
+	}
+	*r = parsed
 	return nil
 }

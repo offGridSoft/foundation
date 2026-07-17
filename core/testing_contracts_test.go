@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 )
@@ -9,9 +10,9 @@ func TestTestSerialReasonHostileTable(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
+		want    string
 		name    string
 		reason  TestSerialReason
-		want    string
 		wantErr bool
 	}{
 		{name: "reject zero", reason: TestSerialReasonInvalid, wantErr: true},
@@ -56,20 +57,44 @@ func TestTestSerialReasonHostileTable(t *testing.T) {
 func TestTestSerialFunctionContract(t *testing.T) {
 	t.Parallel()
 
-	if GoTestSerialPackageName == "" {
-		t.Fatal("GoTestSerialPackageName is empty")
+	for _, value := range []string{
+		GoTestSerialPackageName,
+		GoTestSerialFunction,
+		GoWitnessWaiverDirective,
+		GoLegacySerialDirective,
+		GoTestParallelDefaultRule,
+	} {
+		if value == "" {
+			t.Fatalf("compiler-owned test protocol value = %q, want non-empty", value)
+		}
 	}
-	if GoTestSerialFunction == "" {
-		t.Fatal("GoTestSerialFunction is empty")
+}
+
+func TestTestSerialReasonJSONHostileTable(t *testing.T) {
+	t.Parallel()
+
+	for reason := TestSerialReasonProcessEnvironment; reason < testSerialReasonLimit; reason++ {
+		encoded, err := json.Marshal(reason)
+		if err != nil {
+			t.Fatalf("json.Marshal(%d) error = %v", reason, err)
+		}
+		var decoded TestSerialReason
+		if err := json.Unmarshal(encoded, &decoded); err != nil {
+			t.Fatalf("json.Unmarshal(%d) error = %v", reason, err)
+		}
+		if decoded != reason {
+			t.Fatalf("JSON round trip = %d, want %d", decoded, reason)
+		}
 	}
-	if GoWitnessWaiverDirective == "" {
-		t.Fatal("GoWitnessWaiverDirective is empty")
+	for _, raw := range [][]byte{[]byte(`null`), []byte(`""`), []byte(`"unknown"`), []byte(`1`)} {
+		var decoded TestSerialReason
+		if err := json.Unmarshal(raw, &decoded); !errors.Is(err, ErrTestSerialContract) {
+			t.Fatalf("json.Unmarshal(%q) error = %v, want ErrTestSerialContract", raw, err)
+		}
 	}
-	if GoLegacySerialDirective == "" {
-		t.Fatal("GoLegacySerialDirective is empty")
-	}
-	if GoTestParallelDefaultRule == "" {
-		t.Fatal("GoTestParallelDefaultRule is empty")
+	var decoded TestSerialReason
+	if err := json.Unmarshal(nil, &decoded); err == nil {
+		t.Fatalf("json.Unmarshal(nil) error = %v, want malformed JSON refusal", err)
 	}
 }
 
@@ -82,7 +107,7 @@ func FuzzTestSerialReasonValidateNeverPanics(f *testing.F) {
 	f.Fuzz(func(t *testing.T, raw uint8) {
 		reason := TestSerialReason(raw)
 		err := reason.Validate()
-		if reason.Valid() {
+		if reason.IsValid() {
 			if err != nil {
 				t.Fatalf("valid reason %d Validate() error = %v", raw, err)
 			}

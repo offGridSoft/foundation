@@ -9,9 +9,9 @@ func TestValidateControlFreeUTF8HostileTable(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
+		wantErr error
 		name    string
 		value   string
-		wantErr error
 	}{
 		{name: "empty is structurally safe"},
 		{name: "ordinary text", value: "customer evidence"},

@@ -28,7 +28,13 @@ func TestEnumWireContractsHostileTable(t *testing.T) {
 		name    string
 		wantErr bool
 	}{
+		{name: "kind product binary wire token", run: requireKindJSON(KindProductBinary, "product_binary")},
 		{name: "kind tool bundle wire token", run: requireKindJSON(KindToolBundle, "tool_bundle")},
+		{name: "kind manifest wire token", run: requireKindJSON(KindManifest, "manifest")},
+		{name: "kind download index wire token", run: requireKindJSON(KindDownloadIndex, "download_index")},
+		{name: "kind custody record wire token", run: requireKindJSON(KindCustodyRecord, "custody_record")},
+		{name: "kind gate evidence wire token", run: requireKindJSON(KindGateEvidence, "gate_evidence")},
+		{name: "kind legal document wire token", run: requireKindJSON(KindLegalDocument, "legal_document")},
 		{name: "kind unknown rejects", run: enumMarshalFails(KindUnknown), wantErr: true},
 		{name: "visibility public wire token", run: requireVisibilityJSON(VisibilityPublic, "public")},
 		{name: "visibility unknown rejects", run: enumMarshalFails(VisibilityUnknown), wantErr: true},
