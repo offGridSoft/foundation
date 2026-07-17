@@ -30,6 +30,8 @@ const (
 	ToolVersionMaxRunes     = 128
 	GoSumHashMaxRunes       = 256
 	GoSumHashPrefix         = "h1:"
+	LicenseFileName         = "LICENSE"
+	ThirdPartyNoticesName   = "THIRD_PARTY_NOTICES"
 )
 
 type ReleaseID struct {

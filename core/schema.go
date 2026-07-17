@@ -45,6 +45,7 @@ const (
 	SchemaReleaseSelfTestResult
 	SchemaReleaseUpdateDiagnostic
 	SchemaReleaseUpdateDiagnosticReceipt
+	SchemaReleaseGateReport
 )
 
 const (
@@ -80,9 +81,10 @@ const (
 	SchemaTokenReleaseSelfTestResult          = "offgrid-release-self-test-result-" + ContractVersionToken
 	SchemaTokenReleaseUpdateDiagnostic        = "offgrid-release-update-diagnostic-" + ContractVersionToken
 	SchemaTokenReleaseUpdateDiagnosticReceipt = "offgrid-release-update-diagnostic-receipt-" + ContractVersionToken
+	SchemaTokenReleaseGateReport              = "offgrid-release-gate-report-" + ContractVersionToken
 )
 
-func schemaNames() [SchemaReleaseUpdateDiagnosticReceipt + 1]string {
+func schemaNames() [SchemaReleaseGateReport + 1]string {
 	return [...]string{
 		SchemaBugUsage:                       SchemaTokenBugUsage,
 		SchemaWitnessUsage:                   SchemaTokenWitnessUsage,
@@ -116,6 +118,7 @@ func schemaNames() [SchemaReleaseUpdateDiagnosticReceipt + 1]string {
 		SchemaReleaseSelfTestResult:          SchemaTokenReleaseSelfTestResult,
 		SchemaReleaseUpdateDiagnostic:        SchemaTokenReleaseUpdateDiagnostic,
 		SchemaReleaseUpdateDiagnosticReceipt: SchemaTokenReleaseUpdateDiagnosticReceipt,
+		SchemaReleaseGateReport:              SchemaTokenReleaseGateReport,
 	}
 }
 

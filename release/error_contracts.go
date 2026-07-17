@@ -71,4 +71,8 @@ const (
 	ErrFmtCustodySeed             = "release.GarbleCustodySeed: %w"
 	ErrFmtSeedRequest             = "release.SeedRequest: %w"
 	ErrFmtSeedGrant               = "release.SeedGrantBody: %w"
+	ErrFmtGatePhase               = "release.GatePhase: %w"
+	ErrFmtGateCheck               = "release.GateCheck: %w"
+	ErrFmtGateCheckResult         = "release.GateCheckResult: %w"
+	ErrFmtGateReport              = "release.GateReport: %w"
 )

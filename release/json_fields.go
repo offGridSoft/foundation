@@ -105,4 +105,6 @@ const (
 	jsonFieldRequestedReleaseID = "requested_release_id"
 	jsonFieldTarget             = "target"
 	jsonFieldTargetVersion      = "target_version"
+	jsonFieldStdoutSHA256       = "stdout_sha256"
+	jsonFieldStderrSHA256       = "stderr_sha256"
 )
