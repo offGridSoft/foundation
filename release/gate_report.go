@@ -96,21 +96,22 @@ const (
 )
 
 const (
-	gateCheckTokenGoFix             = "go_fix"
-	gateCheckTokenGoVet             = "go_vet"
+	gateCheckTokenGoPrefix          = "go_"
+	gateCheckTokenGoFix             = gateCheckTokenGoPrefix + "fix"
+	gateCheckTokenGoVet             = gateCheckTokenGoPrefix + "vet"
 	gateCheckTokenFieldAlignment    = "field_alignment"
-	gateCheckTokenGoCyclo           = "go_cyclo"
-	gateCheckTokenGoConst           = "go_const"
+	gateCheckTokenGoCyclo           = gateCheckTokenGoPrefix + "cyclo"
+	gateCheckTokenGoConst           = gateCheckTokenGoPrefix + "const"
 	gateCheckTokenNilAway           = "nil_away"
 	gateCheckTokenErrCheck          = "err_check"
 	gateCheckTokenStaticCheck       = "static_check"
 	gateCheckTokenDeadCode          = "dead_code"
 	gateCheckTokenDeadCodeTests     = "dead_code_tests"
-	gateCheckTokenGoVulnCheck       = "go_vuln_check"
-	gateCheckTokenGoSec             = "go_sec"
+	gateCheckTokenGoVulnCheck       = gateCheckTokenGoPrefix + "vuln_check"
+	gateCheckTokenGoSec             = gateCheckTokenGoPrefix + "sec"
 	gateCheckTokenWitnessLint       = "witness_lint"
-	gateCheckTokenGoTest            = "go_test"
-	gateCheckTokenGoTestRaceShuffle = "go_test_race_shuffle"
+	gateCheckTokenGoTest            = gateCheckTokenGoPrefix + "test"
+	gateCheckTokenGoTestRaceShuffle = gateCheckTokenGoTest + "_race_shuffle"
 	gateCheckTokenGitTreeClean      = "git_tree_clean"
 )
 
