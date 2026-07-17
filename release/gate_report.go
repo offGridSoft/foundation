@@ -155,7 +155,7 @@ func (c GateCheck) Validate() error {
 
 func (c GateCheck) RequiresEmptyStdout() bool {
 	switch c {
-	case GateCheckGoVulnCheck, GateCheckGoSec, GateCheckGoTest, GateCheckGoTestRaceShuffle:
+	case GateCheckDeadCode, GateCheckDeadCodeTests, GateCheckGoVulnCheck, GateCheckGoSec, GateCheckGoTest, GateCheckGoTestRaceShuffle:
 		return false
 	default:
 		return c.IsValid()

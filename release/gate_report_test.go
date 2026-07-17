@@ -33,7 +33,8 @@ func TestGateCheckOutputPolicyExhaustiveTable(t *testing.T) {
 	t.Parallel()
 
 	for check := GateCheckGoFix; check <= GateCheckGitTreeClean; check++ {
-		wantEmpty := check != GateCheckGoVulnCheck && check != GateCheckGoSec && check != GateCheckGoTest && check != GateCheckGoTestRaceShuffle
+		wantEmpty := check != GateCheckDeadCode && check != GateCheckDeadCodeTests && check != GateCheckGoVulnCheck &&
+			check != GateCheckGoSec && check != GateCheckGoTest && check != GateCheckGoTestRaceShuffle
 		if got := check.RequiresEmptyStdout(); got != wantEmpty {
 			t.Fatalf("GateCheck(%d).RequiresEmptyStdout() = %v, want %v", check, got, wantEmpty)
 		}
