@@ -18,8 +18,10 @@ const (
 	jsonFieldOccurredAt        = "occurred_at"
 	jsonFieldRevokedAt         = "revoked_at"
 	jsonFieldRequestNonce      = "request_nonce"
+	jsonFieldServerObservedAt  = "server_observed_at"
 	jsonFieldDecision          = "decision"
 	jsonFieldGrant             = "grant"
 	jsonFieldWriterRevocations = "writer_revocations"
+	jsonFieldTimeCommitment    = "time_commitment"
 	jsonFieldUpdateNotice      = "update_notice"
 )

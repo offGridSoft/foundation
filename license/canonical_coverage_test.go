@@ -17,7 +17,7 @@ import (
 func TestSignedBodyCanonicalProjectionCoversEveryTaggedField(t *testing.T) {
 	t.Parallel()
 	grant, _, _ := signedBugGrant(t)
-	bugResponse := testRefusedBugResponse(t).Authority.Body
+	bugResponse := testGrantedBugResponse(t, grant).Authority.Body
 	bugResponse.UpdateNotice = testUpdateNotice(t, core.ProductBug)
 	for _, tc := range []struct {
 		body core.CanonicalBody
@@ -28,6 +28,7 @@ func TestSignedBodyCanonicalProjectionCoversEveryTaggedField(t *testing.T) {
 		{name: "writer certificate", body: grant.WriterCertificate.Body},
 		{name: "writer attestation", body: testWriterAttestationBody(t)},
 		{name: "writer revocation", body: testBugWriterRevocation(t)},
+		{name: "bug check-in time commitment", body: bugResponse.TimeCommitment.Body},
 		{name: "bug response", body: bugResponse},
 		{name: "witness response", body: refusedWitnessResponseBody(t)},
 	} {

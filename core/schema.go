@@ -17,6 +17,7 @@ const (
 	SchemaWitnessUsage
 	SchemaBugCheckIn
 	SchemaBugCheckInResponse
+	SchemaBugCheckInTimeCommitment
 	SchemaBugSeatLease
 	SchemaBugWriterAttestation
 	SchemaBugWriterCertificate
@@ -53,6 +54,7 @@ const (
 	SchemaTokenWitnessUsage                   = ProductTokenWitness + "-usage-" + ContractVersionToken
 	SchemaTokenBugCheckIn                     = ProductTokenBug + "-license-check-in-" + ContractVersionToken
 	SchemaTokenBugCheckInResponse             = ProductTokenBug + "-license-check-in-response-" + ContractVersionToken
+	SchemaTokenBugCheckInTimeCommitment       = ProductTokenBug + "-license-check-in-time-commitment-" + ContractVersionToken
 	SchemaTokenBugSeatLease                   = ProductTokenBug + "-license-lease-" + ContractVersionToken
 	SchemaTokenBugWriterAttestation           = ProductTokenBug + "-writer-attestation-" + ContractVersionToken
 	SchemaTokenBugWriterCertificate           = ProductTokenBug + "-writer-certificate-" + ContractVersionToken
@@ -90,6 +92,7 @@ func schemaNames() [SchemaReleaseGateReport + 1]string {
 		SchemaWitnessUsage:                   SchemaTokenWitnessUsage,
 		SchemaBugCheckIn:                     SchemaTokenBugCheckIn,
 		SchemaBugCheckInResponse:             SchemaTokenBugCheckInResponse,
+		SchemaBugCheckInTimeCommitment:       SchemaTokenBugCheckInTimeCommitment,
 		SchemaBugSeatLease:                   SchemaTokenBugSeatLease,
 		SchemaBugWriterAttestation:           SchemaTokenBugWriterAttestation,
 		SchemaBugWriterCertificate:           SchemaTokenBugWriterCertificate,

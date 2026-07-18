@@ -30,6 +30,7 @@ type SigningDomain uint16
 const (
 	SigningDomainUnknown                        = SigningDomain(SchemaUnknown)
 	SigningDomainBugCheckInResponse             = SigningDomain(SchemaBugCheckInResponse)
+	SigningDomainBugCheckInTimeCommitment       = SigningDomain(SchemaBugCheckInTimeCommitment)
 	SigningDomainBugSeatLease                   = SigningDomain(SchemaBugSeatLease)
 	SigningDomainBugWriterAttestation           = SigningDomain(SchemaBugWriterAttestation)
 	SigningDomainBugWriterCertificate           = SigningDomain(SchemaBugWriterCertificate)
@@ -52,6 +53,7 @@ const (
 const (
 	SigningDomainTokenBugSeatLease                   = "bug-seat-lease-" + ContractYear // #nosec G101 -- public signing-domain token, not a credential.
 	SigningDomainTokenBugCheckInResponse             = "bug-check-in-response-" + ContractYear
+	SigningDomainTokenBugCheckInTimeCommitment       = "bug-check-in-time-commitment-" + ContractYear
 	SigningDomainTokenBugWriterAttestation           = "bug-writer-attestation-" + ContractYear
 	SigningDomainTokenBugWriterCertificate           = "bug-writer-certificate-" + ContractYear
 	SigningDomainTokenBugWriterRevocation            = "bug-writer-revocation-" + ContractYear
@@ -74,6 +76,7 @@ const (
 func signingDomainNames() [SchemaReleaseUpdateDiagnosticReceipt + 1]string {
 	return [SchemaReleaseUpdateDiagnosticReceipt + 1]string{
 		SigningDomainBugCheckInResponse:             SigningDomainTokenBugCheckInResponse,
+		SigningDomainBugCheckInTimeCommitment:       SigningDomainTokenBugCheckInTimeCommitment,
 		SigningDomainBugSeatLease:                   SigningDomainTokenBugSeatLease,
 		SigningDomainBugWriterAttestation:           SigningDomainTokenBugWriterAttestation,
 		SigningDomainBugWriterCertificate:           SigningDomainTokenBugWriterCertificate,

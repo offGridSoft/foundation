@@ -897,6 +897,18 @@ func testLeaseID(t *testing.T) core.LeaseID {
 func signBugCheckInResponse(t *testing.T, body BugCheckInResponseBody) BugCheckInResponse {
 	t.Helper()
 	keyID, _, privateKey := testServerSigningKey(t)
+	if body.Grant != nil && body.TimeCommitment == nil {
+		lease := body.Grant.Lease.Body
+		commitment := signTestBody(t, keyID, privateKey, BugCheckInTimeCommitmentBody{
+			Schema:            core.SchemaBugCheckInTimeCommitment,
+			DeviceFingerprint: lease.DeviceFingerprint,
+			LeaseID:           lease.LeaseID,
+			LeaseGeneration:   lease.Generation,
+			RequestNonce:      body.RequestNonce,
+			ServerObservedAt:  core.UnixNanoTimeFromInt64(1_800_000_000_000_000_000),
+		})
+		body.TimeCommitment = &commitment
+	}
 	return BugCheckInResponse{Authority: signTestBody(t, keyID, privateKey, body)}
 }
 

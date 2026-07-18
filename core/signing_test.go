@@ -199,6 +199,8 @@ func TestSchemaSigningDomainTable(t *testing.T) {
 		{name: "bug usage is not signable", schema: SchemaBugUsage, domain: SigningDomainUnknown},
 		{name: "witness usage is not signable", schema: SchemaWitnessUsage, domain: SigningDomainUnknown},
 		{name: "bug check-in is not signable", schema: SchemaBugCheckIn, domain: SigningDomainUnknown},
+		{name: "bug check-in response owns its domain", schema: SchemaBugCheckInResponse, domain: SigningDomainBugCheckInResponse},
+		{name: "bug check-in time commitment owns its domain", schema: SchemaBugCheckInTimeCommitment, domain: SigningDomainBugCheckInTimeCommitment},
 		{name: "bug seat lease owns its domain", schema: SchemaBugSeatLease, domain: SigningDomainBugSeatLease},
 		{name: "witness check-in is not signable", schema: SchemaWitnessCheckIn, domain: SigningDomainUnknown},
 		{name: "witness subscription owns its domain", schema: SchemaWitnessSubscription, domain: SigningDomainWitnessSubscriptionLease},
@@ -234,6 +236,8 @@ func TestSigningDomainJSONHostileTable(t *testing.T) {
 		domain    SigningDomain
 		wantError bool
 	}{
+		{name: "bug check-in response domain round trips", domain: SigningDomainBugCheckInResponse, token: SigningDomainTokenBugCheckInResponse},
+		{name: "bug check-in time commitment domain round trips", domain: SigningDomainBugCheckInTimeCommitment, token: SigningDomainTokenBugCheckInTimeCommitment},
 		{name: "bug seat lease domain round trips", domain: SigningDomainBugSeatLease, token: SigningDomainTokenBugSeatLease},
 		{name: "witness subscription domain round trips", domain: SigningDomainWitnessSubscriptionLease, token: SigningDomainTokenWitnessSubscriptionLease},
 		{name: "custody receipt domain round trips", domain: SigningDomainWitnessCustodyReceipt, token: SigningDomainTokenWitnessCustodyReceipt},
@@ -285,6 +289,8 @@ func TestParseSigningDomainHostileTable(t *testing.T) {
 		want      SigningDomain
 		wantError bool
 	}{
+		{name: "bug check-in response token accepted", token: SigningDomainTokenBugCheckInResponse, want: SigningDomainBugCheckInResponse},
+		{name: "bug check-in time commitment token accepted", token: SigningDomainTokenBugCheckInTimeCommitment, want: SigningDomainBugCheckInTimeCommitment},
 		{name: "bug seat lease token accepted", token: SigningDomainTokenBugSeatLease, want: SigningDomainBugSeatLease},
 		{name: "witness subscription token accepted", token: SigningDomainTokenWitnessSubscriptionLease, want: SigningDomainWitnessSubscriptionLease},
 		{name: "custody receipt token accepted", token: SigningDomainTokenWitnessCustodyReceipt, want: SigningDomainWitnessCustodyReceipt},

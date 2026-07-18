@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,24 +23,18 @@ func TestBugCheckInResponseBoundaryTable(t *testing.T) {
 	overMaximum := makeRevocationDelivery(t, keyID, int(BugWriterRevocationDeliveryMaximum)+1)
 
 	granted := func(values ...core.Signed[BugWriterRevocationBody]) BugCheckInResponse {
-		body := BugCheckInResponseBody{
-			Schema:            core.SchemaBugCheckInResponse,
-			RequestNonce:      testCheckInNonce(t),
-			Decision:          CheckInDecision{Granted: true, Refusal: RefusalNone},
-			Grant:             grant,
-			WriterRevocations: BugWriterRevocationDelivery{Values: values},
-		}
-		if body.Validate() == nil {
-			return signBugCheckInResponse(t, body)
-		}
-		response := signBugCheckInResponse(t, BugCheckInResponseBody{
+		valid := signBugCheckInResponse(t, BugCheckInResponseBody{
 			Schema:       core.SchemaBugCheckInResponse,
 			RequestNonce: testCheckInNonce(t),
 			Decision:     CheckInDecision{Granted: true, Refusal: RefusalNone},
 			Grant:        grant,
 		})
-		response.Authority.Body = body
-		return response
+		valid.Authority.Body.WriterRevocations = BugWriterRevocationDelivery{Values: values}
+		if valid.Authority.Body.Validate() == nil {
+			keyID, _, privateKey := testServerSigningKey(t)
+			valid.Authority = signTestBody(t, keyID, privateKey, valid.Authority.Body)
+		}
+		return valid
 	}
 	refused := func(refusal Refusal, remediation Remediation, values ...core.Signed[BugWriterRevocationBody]) BugCheckInResponse {
 		valid := signBugCheckInResponse(t, BugCheckInResponseBody{
@@ -107,6 +102,92 @@ func TestBugCheckInResponseBoundaryTable(t *testing.T) {
 				t.Fatalf("BugCheckInResponse.Verify() error = %v", err)
 			}
 		})
+	}
+}
+
+func TestBugCheckInTimeCommitmentHostileBoundary(t *testing.T) {
+	t.Parallel()
+
+	grant, keyID, publicKey := signedBugGrant(t)
+	valid := testGrantedBugResponse(t, grant)
+	commitment := valid.Authority.Body.TimeCommitment.Body
+	otherLeaseID, err := core.ParseLeaseID("lease-2026-other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherNonce, err := ParseCheckInNonce("0202020202020202020202020202020202020202020202020202020202020202")
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherDevice, err := core.ParseDeviceFingerprint(core.DeviceFingerprintPrefixSHA256 + strings.Repeat("b", 64))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		name   string
+		mutate func(*BugCheckInTimeCommitmentBody)
+	}{
+		{name: "zero schema", mutate: func(body *BugCheckInTimeCommitmentBody) { body.Schema = core.SchemaUnknown }},
+		{name: "wrong schema", mutate: func(body *BugCheckInTimeCommitmentBody) { body.Schema = core.SchemaBugCheckInResponse }},
+		{name: "foreign device", mutate: func(body *BugCheckInTimeCommitmentBody) { body.DeviceFingerprint = otherDevice }},
+		{name: "foreign lease", mutate: func(body *BugCheckInTimeCommitmentBody) { body.LeaseID = otherLeaseID }},
+		{name: "zero generation", mutate: func(body *BugCheckInTimeCommitmentBody) { body.LeaseGeneration = 0 }},
+		{name: "future generation", mutate: func(body *BugCheckInTimeCommitmentBody) { body.LeaseGeneration++ }},
+		{name: "foreign nonce", mutate: func(body *BugCheckInTimeCommitmentBody) { body.RequestNonce = otherNonce }},
+		{name: "unset server time", mutate: func(body *BugCheckInTimeCommitmentBody) { body.ServerObservedAt = core.UnixNanoTime{} }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			candidate := commitment
+			tc.mutate(&candidate)
+			if err := candidate.MatchesGrant(*grant, valid.Authority.Body.RequestNonce); !errors.Is(err, core.ErrLicenseContract) {
+				t.Fatalf("BugCheckInTimeCommitmentBody.MatchesGrant() error = %v, want %v", err, core.ErrLicenseContract)
+			}
+		})
+	}
+
+	missing := valid
+	missing.Authority.Body.TimeCommitment = nil
+	if err := missing.Validate(); !errors.Is(err, core.ErrLicenseContract) {
+		t.Fatalf("BugCheckInResponse.Validate(missing commitment) error = %v, want %v", err, core.ErrLicenseContract)
+	}
+	refused := testRefusedBugResponse(t)
+	refused.Authority.Body.TimeCommitment = valid.Authority.Body.TimeCommitment
+	if err := refused.Validate(); !errors.Is(err, core.ErrLicenseContract) {
+		t.Fatalf("BugCheckInResponse.Validate(refusal commitment) error = %v, want %v", err, core.ErrLicenseContract)
+	}
+
+	_, _, privateKey := testServerSigningKey(t)
+	tampered := valid
+	tampered.Authority.Body.TimeCommitment.Body.ServerObservedAt = commitment.ServerObservedAt.Add(time.Nanosecond)
+	tampered.Authority = signTestBody(t, keyID, privateKey, tampered.Authority.Body)
+	keyring := core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
+	if err := tampered.Verify(keyring); !errors.Is(err, core.ErrLicenseContract) {
+		t.Fatalf("BugCheckInResponse.Verify(tampered time) error = %v, want %v", err, core.ErrLicenseContract)
+	}
+
+	foreignKeyID, err := core.ParseSigningKeyID("server-key-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seed := make([]byte, ed25519.SeedSize)
+	seed[len(seed)-1] = 43
+	foreignPrivate := ed25519.NewKeyFromSeed(seed)
+	foreignPublic, err := core.NewEd25519PublicKeyHex(foreignPrivate.Public().(ed25519.PublicKey))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mixed := valid
+	foreignCommitment := signTestBody(t, foreignKeyID, foreignPrivate, commitment)
+	mixed.Authority.Body.TimeCommitment = &foreignCommitment
+	mixed.Authority = signTestBody(t, keyID, privateKey, mixed.Authority.Body)
+	mixedKeyring := core.SigningKeyring{Keys: []core.SigningPublicKey{
+		{ID: keyID, PublicKey: publicKey},
+		{ID: foreignKeyID, PublicKey: foreignPublic},
+	}}
+	if err := mixed.Verify(mixedKeyring); !errors.Is(err, core.ErrLicenseContract) {
+		t.Fatalf("BugCheckInResponse.Verify(mixed signing keys) error = %v, want %v", err, core.ErrLicenseContract)
 	}
 }
 
