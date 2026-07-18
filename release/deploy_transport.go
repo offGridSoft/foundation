@@ -276,6 +276,9 @@ func (r DeployFinalizeResponse) validateStructure() error {
 	if err := r.Manifest.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtDeployFinalizeResponse, err)
 	}
+	if err := r.Manifest.Body.RequireCertified(); err != nil {
+		return wrapReleaseContract(ErrFmtDeployFinalizeResponse, err)
+	}
 	if err := r.Receipt.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtDeployFinalizeResponse, err)
 	}
