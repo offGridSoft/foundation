@@ -47,6 +47,9 @@ const (
 	SchemaReleaseUpdateDiagnostic
 	SchemaReleaseUpdateDiagnosticReceipt
 	SchemaReleaseGateReport
+	SchemaBugSeatMember
+	SchemaBugSeatInvite
+	SchemaBugSeatAssignment
 )
 
 const (
@@ -55,6 +58,9 @@ const (
 	SchemaTokenBugCheckIn                     = ProductTokenBug + "-license-check-in-" + ContractVersionToken
 	SchemaTokenBugCheckInResponse             = ProductTokenBug + "-license-check-in-response-" + ContractVersionToken
 	SchemaTokenBugCheckInTimeCommitment       = ProductTokenBug + "-license-check-in-time-commitment-" + ContractVersionToken
+	SchemaTokenBugSeatMember                  = ProductTokenBug + "-seat-member-" + ContractVersionToken
+	SchemaTokenBugSeatInvite                  = ProductTokenBug + "-seat-invite-" + ContractVersionToken
+	SchemaTokenBugSeatAssignment              = ProductTokenBug + "-seat-assignment-" + ContractVersionToken
 	SchemaTokenBugSeatLease                   = ProductTokenBug + "-license-lease-" + ContractVersionToken
 	SchemaTokenBugWriterAttestation           = ProductTokenBug + "-writer-attestation-" + ContractVersionToken
 	SchemaTokenBugWriterCertificate           = ProductTokenBug + "-writer-certificate-" + ContractVersionToken
@@ -86,7 +92,7 @@ const (
 	SchemaTokenReleaseGateReport              = "offgrid-release-gate-report-" + ContractVersionToken
 )
 
-func schemaNames() [SchemaReleaseGateReport + 1]string {
+func schemaNames() [SchemaBugSeatAssignment + 1]string {
 	return [...]string{
 		SchemaBugUsage:                       SchemaTokenBugUsage,
 		SchemaWitnessUsage:                   SchemaTokenWitnessUsage,
@@ -122,6 +128,9 @@ func schemaNames() [SchemaReleaseGateReport + 1]string {
 		SchemaReleaseUpdateDiagnostic:        SchemaTokenReleaseUpdateDiagnostic,
 		SchemaReleaseUpdateDiagnosticReceipt: SchemaTokenReleaseUpdateDiagnosticReceipt,
 		SchemaReleaseGateReport:              SchemaTokenReleaseGateReport,
+		SchemaBugSeatMember:                  SchemaTokenBugSeatMember,
+		SchemaBugSeatInvite:                  SchemaTokenBugSeatInvite,
+		SchemaBugSeatAssignment:              SchemaTokenBugSeatAssignment,
 	}
 }
 
