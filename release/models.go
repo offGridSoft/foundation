@@ -137,6 +137,7 @@ type Manifest struct {
 	Date          ReleaseDate         `json:"date"`
 	Commit        core.BuildCommit    `json:"commit"`
 	Artifacts     []Artifact          `json:"artifacts"`
+	Evidence      ReleaseGateEvidence `json:"evidence"`
 	CreatedAt     core.UnixNanoTime   `json:"created_at"`
 	TotalBytes    core.ByteCount      `json:"total_bytes"`
 	ArtifactCount uint32              `json:"artifact_count"`
@@ -180,7 +181,17 @@ func validateManifestIdentity(m Manifest) error {
 	if err := core.ValidateRequiredUnixNanoTime(m.CreatedAt); err != nil {
 		return fmt.Errorf(ErrFmtManifest, core.ErrReleaseContract)
 	}
+	if err := m.Evidence.ValidateForCommit(m.Commit); err != nil {
+		return wrapReleaseContract(ErrFmtManifest, err)
+	}
 	return nil
+}
+
+func (m Manifest) RequireCertified() error {
+	if err := m.Validate(); err != nil {
+		return err
+	}
+	return m.Evidence.RequireCertified(m.Commit)
 }
 
 func (m Manifest) Canonical(dst []byte) ([]byte, error) {
@@ -210,6 +221,7 @@ func appendManifestJSON(dst []byte, m Manifest) ([]byte, error) {
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDate, m.Date)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCommit, m.Commit)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldArtifacts, m.Artifacts)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldEvidence, m.Evidence)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCreatedAt, m.CreatedAt)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, core.JSONFieldTotalBytes, m.TotalBytes)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldArtifactCount, m.ArtifactCount)

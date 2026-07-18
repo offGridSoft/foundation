@@ -67,15 +67,15 @@ func (s VulnDBSnapshot) MarshalJSON() ([]byte, error) {
 }
 
 type ReleaseGateEvidence struct {
-	FastGateRef      EvidenceRef `json:"fast_gate_ref"`
-	FinalEvidenceRef EvidenceRef `json:"final_evidence_ref"`
+	FastGateRef      EvidenceRef              `json:"fast_gate_ref"`
+	FinalCertificate FinalCertificateEvidence `json:"final_certificate"`
 }
 
 func (e ReleaseGateEvidence) Validate() error {
 	if err := e.FastGateRef.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtGateEvidence, err)
 	}
-	if err := e.FinalEvidenceRef.Validate(); err != nil {
+	if err := e.FinalCertificate.Validate(); err != nil {
 		return wrapReleaseContract(ErrFmtGateEvidence, err)
 	}
 	return nil
@@ -88,11 +88,25 @@ func (e ReleaseGateEvidence) MarshalJSON() ([]byte, error) {
 	dst := []byte{'{'}
 	var err error
 	dst, err = core.AppendJSONField(dst, jsonFieldFastGateRef, e.FastGateRef)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldFinalEvidenceRef, e.FinalEvidenceRef)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldFinalCertificate, e.FinalCertificate)
 	if err != nil {
 		return nil, err
 	}
 	return append(dst, '}'), nil
+}
+
+func (e ReleaseGateEvidence) ValidateForCommit(commit core.BuildCommit) error {
+	if err := e.Validate(); err != nil {
+		return err
+	}
+	return e.FinalCertificate.ValidateForCommit(commit)
+}
+
+func (e ReleaseGateEvidence) RequireCertified(commit core.BuildCommit) error {
+	if err := e.Validate(); err != nil {
+		return err
+	}
+	return e.FinalCertificate.RequireCertified(commit)
 }
 
 type ToolProvenance struct {

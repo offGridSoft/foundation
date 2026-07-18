@@ -191,7 +191,7 @@ func TestBuildDownloadIndexSupportsMultipleArtifactsOnOnePlatform(t *testing.T) 
 	manifest, err := BuildManifest(ManifestInput{
 		Product: core.ProductWitness, Version: mustVersion(t), ReleaseID: mustReleaseID(t),
 		Date: mustReleaseDate(t), Commit: mustCommit(t), CreatedAt: core.UnixNanoTimeFromInt64(1782302400000000000),
-		Artifacts: []Artifact{first, second},
+		Artifacts: []Artifact{first, second}, Evidence: validReleaseGateEvidence(t),
 	})
 	if err != nil {
 		t.Fatalf("BuildManifest() error = %v", err)

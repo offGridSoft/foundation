@@ -78,7 +78,7 @@ func maximumWidthReleasePlan(t *testing.T) ReleasePlan {
 	plan.SeedRef = mustGarbleSeedRef(t, strings.Repeat("😀", GarbleSeedRefMaxRunes))
 	plan.Evidence = ReleaseGateEvidence{
 		FastGateRef:      mustEvidenceRef(t, strings.Repeat("😀", EvidenceRefMaxRunes)),
-		FinalEvidenceRef: mustEvidenceRef(t, strings.Repeat("😁", EvidenceRefMaxRunes)),
+		FinalCertificate: validFinalCertificateEvidence(t),
 	}
 	plan.Tools = make([]ToolProvenance, 0, MaxToolProvenanceItems)
 	for index := range MaxToolProvenanceItems {

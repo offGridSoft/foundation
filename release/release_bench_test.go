@@ -92,7 +92,7 @@ func benchmarkReleasePlan(b *testing.B, toolCount int) ReleasePlan {
 		},
 		Evidence: ReleaseGateEvidence{
 			FastGateRef:      benchmarkEvidenceRef(b, "witness://release/fast/green"),
-			FinalEvidenceRef: benchmarkEvidenceRef(b, "witness://release/final/green"),
+			FinalCertificate: benchmarkFinalCertificateEvidence(b),
 		},
 		VulnDB: VulnDBSnapshot{
 			DBVersion:  benchmarkToolVersion(b, "2026-07-08T00:00:00Z"),
@@ -101,6 +101,15 @@ func benchmarkReleasePlan(b *testing.B, toolCount int) ReleasePlan {
 		Tools:     tools,
 		ToolCount: uint32(len(tools)),
 	}
+}
+
+func benchmarkFinalCertificateEvidence(b *testing.B) FinalCertificateEvidence {
+	b.Helper()
+	evidence, err := BuildCertifiedFinalCertificateEvidence(benchmarkSHA256(b, "f"), benchmarkCommit(b, "a"))
+	if err != nil {
+		b.Fatal(err)
+	}
+	return evidence
 }
 
 func benchmarkSpec(b *testing.B) ProductReleaseSpec {
@@ -211,6 +220,15 @@ func benchmarkCommit(b *testing.B, digit string) core.BuildCommit {
 		b.Fatal(err)
 	}
 	return commit
+}
+
+func benchmarkSHA256(b *testing.B, digit string) core.SHA256Hex {
+	b.Helper()
+	digest, err := core.ParseSHA256Hex(strings.Repeat(digit, 64))
+	if err != nil {
+		b.Fatal(err)
+	}
+	return digest
 }
 
 func benchmarkSeed(b *testing.B) GarbleSeed {

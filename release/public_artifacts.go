@@ -7,19 +7,19 @@ import (
 )
 
 const (
-	FastGateEvidenceFileName  = "fast_gate.json"
-	FinalGateEvidenceFileName = "final_gate.json"
+	FastGateEvidenceFileName = "fast_gate.json"
+	FinalCertificateFileName = "final_certificate.json"
 )
 
 type publicArtifactCoverage struct {
-	darwinARM64  bool
-	linuxAMD64   bool
-	linuxARM64   bool
-	windowsAMD64 bool
-	fastGate     bool
-	finalGate    bool
-	license      bool
-	notices      bool
+	darwinARM64      bool
+	linuxAMD64       bool
+	linuxARM64       bool
+	windowsAMD64     bool
+	fastGate         bool
+	finalCertificate bool
+	license          bool
+	notices          bool
 }
 
 func ValidatePublicReleaseArtifacts(artifacts []Artifact) error {
@@ -76,8 +76,8 @@ func (c *publicArtifactCoverage) acceptGateEvidence(name string) error {
 	switch name {
 	case FastGateEvidenceFileName:
 		return acceptOnce(&c.fastGate)
-	case FinalGateEvidenceFileName:
-		return acceptOnce(&c.finalGate)
+	case FinalCertificateFileName:
+		return acceptOnce(&c.finalCertificate)
 	default:
 		return fmt.Errorf(ErrFmtManifest, core.ErrReleaseContract)
 	}
@@ -104,5 +104,25 @@ func acceptOnce(seen *bool) error {
 
 func (c publicArtifactCoverage) complete() bool {
 	return c.darwinARM64 && c.linuxAMD64 && c.linuxARM64 && c.windowsAMD64 &&
-		c.fastGate && c.finalGate && c.license && c.notices
+		c.fastGate && c.finalCertificate && c.license && c.notices
+}
+
+func ValidatePublicReleaseManifest(manifest Manifest) error {
+	if err := manifest.Validate(); err != nil {
+		return err
+	}
+	if err := manifest.Evidence.RequireCertified(manifest.Commit); err != nil {
+		return wrapReleaseContract(ErrFmtManifest, err)
+	}
+	if err := ValidatePublicReleaseArtifacts(manifest.Artifacts); err != nil {
+		return err
+	}
+	for _, artifact := range manifest.Artifacts {
+		if artifact.Name.String() == FinalCertificateFileName &&
+			artifact.Kind == KindGateEvidence &&
+			artifact.SHA256 == manifest.Evidence.FinalCertificate.SHA256 {
+			return nil
+		}
+	}
+	return fmt.Errorf(ErrFmtManifest, core.ErrReleaseContract)
 }

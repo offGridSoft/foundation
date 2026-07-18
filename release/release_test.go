@@ -379,7 +379,10 @@ func TestManifestCanonicalWireForm(t *testing.T) {
 		strings.Repeat("a", 40) +
 		`","artifacts":[{"name":"tools.tar.gz","sha256":"` +
 		strings.Repeat("b", 64) +
-		`","size_bytes":12,"kind":"tool_bundle","platform":"linux-amd64"}],"created_at":1782302400000000000,"total_bytes":12,"artifact_count":1,"product":"witness"}`
+		`","size_bytes":12,"kind":"tool_bundle","platform":"linux-amd64"}],"evidence":{"fast_gate_ref":"witness://release/fast/green","final_certificate":{"qualification":"certified","reference":"final_certificate.json","sha256":"` +
+		strings.Repeat("f", 64) +
+		`","subject_commit":"` + strings.Repeat("a", 40) +
+		`"}},"created_at":1782302400000000000,"total_bytes":12,"artifact_count":1,"product":"witness"}`
 	if string(got) != want {
 		t.Fatalf("Manifest.Canonical()\n got: %s\nwant: %s", got, want)
 	}
@@ -1458,7 +1461,7 @@ func TestReleasePreflightHostileTable(t *testing.T) {
 		{name: "random seed rejected", wantErr: true, mutate: func(in *ReleasePreflightInput) { in.Seed = GarbleSeed{value: GarbleSeedRandom} }},
 		{name: "bad go version rejected", wantErr: true, mutate: func(in *ReleasePreflightInput) { in.Toolchain.GoVersion = ToolVersion{value: "go1.25\nshadow"} }},
 		{name: "zero vuln snapshot rejected", wantErr: true, mutate: func(in *ReleasePreflightInput) { in.VulnDB.SnapshotAt = core.UnixNanoTime{} }},
-		{name: "blank final gate ref rejected", wantErr: true, mutate: func(in *ReleasePreflightInput) { in.Evidence.FinalEvidenceRef = EvidenceRef{} }},
+		{name: "zero final certificate rejected", wantErr: true, mutate: func(in *ReleasePreflightInput) { in.Evidence.FinalCertificate = FinalCertificateEvidence{} }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -1709,6 +1712,7 @@ func validManifest(t *testing.T) Manifest {
 		Commit:        mustCommit(t),
 		CreatedAt:     core.UnixNanoTimeFromInt64(1782302400000000000),
 		Artifacts:     []Artifact{validArtifactWithSize(t, ToolsArchiveName, 12)},
+		Evidence:      validReleaseGateEvidence(t),
 		ArtifactCount: 1,
 		TotalBytes:    core.NewByteCount(12),
 	}
@@ -1799,8 +1803,17 @@ func validReleaseGateEvidence(t *testing.T) ReleaseGateEvidence {
 	t.Helper()
 	return ReleaseGateEvidence{
 		FastGateRef:      mustEvidenceRef(t, "witness://release/fast/green"),
-		FinalEvidenceRef: mustEvidenceRef(t, "witness://release/final/green"),
+		FinalCertificate: validFinalCertificateEvidence(t),
 	}
+}
+
+func validFinalCertificateEvidence(t *testing.T) FinalCertificateEvidence {
+	t.Helper()
+	evidence, err := BuildCertifiedFinalCertificateEvidence(mustSHA256(t, "f"), mustCommit(t))
+	if err != nil {
+		t.Fatalf("BuildCertifiedFinalCertificateEvidence() error = %v", err)
+	}
+	return evidence
 }
 
 func validToolProvenance(t *testing.T) []ToolProvenance {

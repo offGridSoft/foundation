@@ -110,6 +110,9 @@ func (r DeployPrepareRequest) Verify(releaseKeys core.SigningKeyring) error {
 	if err := r.Manifest.Verify(releaseKeys); err != nil {
 		return wrapReleaseContract(ErrFmtDeployPrepareRequest, err)
 	}
+	if err := r.Manifest.Body.RequireCertified(); err != nil {
+		return wrapReleaseContract(ErrFmtDeployPrepareRequest, err)
+	}
 	return nil
 }
 

@@ -99,7 +99,8 @@ func releasePlanRawStringBytes(p ReleasePlan) int64 {
 	total += releaseRootRawStringBytes(p.Layout)
 	total += releaseSpecRawStringBytes(p.Spec)
 	total += int64(len(p.Toolchain.GoVersion.String()) + len(p.Toolchain.GarbleVersion.String()) +
-		len(p.VulnDB.DBVersion.String()) + len(p.Evidence.FastGateRef.String()) + len(p.Evidence.FinalEvidenceRef.String()))
+		len(p.VulnDB.DBVersion.String()) + len(p.Evidence.FastGateRef.String()))
+	total += finalCertificateEvidenceRawStringBytes(p.Evidence.FinalCertificate)
 	for _, tool := range p.Tools {
 		total += int64(len(tool.Module.String()) + len(tool.Version.String()) + len(tool.GoSum.String()))
 	}
@@ -247,7 +248,15 @@ func validatePlanCrossIdentity(p ReleasePlan) error {
 	if !policyCommitMatchesPlan(p.Spec.Policy.CommitStamp, p.Commit) {
 		return fmt.Errorf(ErrFmtReleasePlan, core.ErrReleaseContract)
 	}
+	if err := p.Evidence.ValidateForCommit(p.Commit); err != nil {
+		return wrapReleaseContract(ErrFmtReleasePlan, err)
+	}
 	return nil
+}
+
+func finalCertificateEvidenceRawStringBytes(evidence FinalCertificateEvidence) int64 {
+	return int64(len(evidence.Qualification.String()) + len(evidence.Reference.String()) +
+		len(evidence.SHA256.String()) + len(evidence.SubjectCommit.String()))
 }
 
 func validateReleasePlanFacts(p ReleasePlan) error {

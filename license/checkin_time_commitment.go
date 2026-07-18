@@ -70,6 +70,28 @@ func (b BugCheckInTimeCommitmentBody) MarshalJSON() ([]byte, error) {
 }
 
 func (b BugCheckInTimeCommitmentBody) MatchesGrant(grant BugCheckInGrant, nonce CheckInNonce) error {
+	if err := b.matchesStoredGrant(grant); err != nil {
+		return err
+	}
+	if err := nonce.Validate(); err != nil {
+		return checkInTimeCommitmentError(err)
+	}
+	if b.RequestNonce != nonce {
+		return checkInTimeCommitmentError(core.ErrLicenseContract)
+	}
+	return nil
+}
+
+// MatchesStoredGrant verifies the durable grant bindings that remain
+// independently meaningful after the initiating request nonce has been
+// consumed. The signed commitment still retains that nonce as audit evidence;
+// resolve-time validation deliberately does not pretend to compare it against
+// an unavailable pending request.
+func (b BugCheckInTimeCommitmentBody) MatchesStoredGrant(grant BugCheckInGrant) error {
+	return b.matchesStoredGrant(grant)
+}
+
+func (b BugCheckInTimeCommitmentBody) matchesStoredGrant(grant BugCheckInGrant) error {
 	if err := b.Validate(); err != nil {
 		return err
 	}
@@ -79,8 +101,7 @@ func (b BugCheckInTimeCommitmentBody) MatchesGrant(grant BugCheckInGrant, nonce 
 	lease := grant.Lease.Body
 	if b.DeviceFingerprint.String() != lease.DeviceFingerprint.String() ||
 		b.LeaseID.String() != lease.LeaseID.String() ||
-		b.LeaseGeneration != lease.Generation ||
-		b.RequestNonce != nonce {
+		b.LeaseGeneration != lease.Generation {
 		return checkInTimeCommitmentError(core.ErrLicenseContract)
 	}
 	return nil

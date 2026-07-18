@@ -146,6 +146,14 @@ func TestBugCheckInTimeCommitmentHostileBoundary(t *testing.T) {
 			}
 		})
 	}
+	if err := commitment.MatchesStoredGrant(*grant); err != nil {
+		t.Fatalf("BugCheckInTimeCommitmentBody.MatchesStoredGrant() error = %v, want nil", err)
+	}
+	nonceOnly := commitment
+	nonceOnly.RequestNonce = otherNonce
+	if err := nonceOnly.MatchesStoredGrant(*grant); err != nil {
+		t.Fatalf("MatchesStoredGrant(nonce-only drift) error = %v, want nil: stored resolution has no pending nonce", err)
+	}
 
 	missing := valid
 	missing.Authority.Body.TimeCommitment = nil

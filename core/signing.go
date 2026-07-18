@@ -48,6 +48,7 @@ const (
 	SigningDomainReleaseSeedGrant               = SigningDomain(SchemaReleaseSeedGrant)
 	SigningDomainReleaseUpdateCheckResponse     = SigningDomain(SchemaReleaseUpdateCheckResponse)
 	SigningDomainReleaseUpdateDiagnosticReceipt = SigningDomain(SchemaReleaseUpdateDiagnosticReceipt)
+	SigningDomainReleaseSeedGrantAccess         = SigningDomain(SchemaReleaseSeedGrantAccess)
 )
 
 const (
@@ -70,11 +71,12 @@ const (
 	SigningDomainTokenReleaseSeedGrant               = "release-seed-grant-" + ContractYear
 	SigningDomainTokenReleaseUpdateCheckResponse     = "release-update-check-response-" + ContractYear
 	SigningDomainTokenReleaseUpdateDiagnosticReceipt = "release-update-diagnostic-receipt-" + ContractYear
+	SigningDomainTokenReleaseSeedGrantAccess         = "release-seed-grant-access-" + ContractYear
 	ErrFmtSigningDomain                              = "core.SigningDomain: %w"
 )
 
-func signingDomainNames() [SchemaReleaseUpdateDiagnosticReceipt + 1]string {
-	return [SchemaReleaseUpdateDiagnosticReceipt + 1]string{
+func signingDomainNames() [SchemaReleaseSeedGrantAccess + 1]string {
+	return [SchemaReleaseSeedGrantAccess + 1]string{
 		SigningDomainBugCheckInResponse:             SigningDomainTokenBugCheckInResponse,
 		SigningDomainBugCheckInTimeCommitment:       SigningDomainTokenBugCheckInTimeCommitment,
 		SigningDomainBugSeatLease:                   SigningDomainTokenBugSeatLease,
@@ -94,6 +96,7 @@ func signingDomainNames() [SchemaReleaseUpdateDiagnosticReceipt + 1]string {
 		SigningDomainReleaseSeedGrant:               SigningDomainTokenReleaseSeedGrant,
 		SigningDomainReleaseUpdateCheckResponse:     SigningDomainTokenReleaseUpdateCheckResponse,
 		SigningDomainReleaseUpdateDiagnosticReceipt: SigningDomainTokenReleaseUpdateDiagnosticReceipt,
+		SigningDomainReleaseSeedGrantAccess:         SigningDomainTokenReleaseSeedGrantAccess,
 	}
 }
 

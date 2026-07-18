@@ -16,7 +16,7 @@ func TestBuildManifestDerivesArtifactSetWithoutAliasingInput(t *testing.T) {
 	input := ManifestInput{
 		Product: core.ProductBug, Version: mustVersion(t), ReleaseID: mustBugReleaseID(t),
 		Date: mustReleaseDate(t), Commit: mustCommit(t), CreatedAt: core.UnixNanoTimeFromInt64(1782302400000000000),
-		Artifacts: artifacts,
+		Artifacts: artifacts, Evidence: validReleaseGateEvidence(t),
 	}
 	manifest, err := BuildManifest(input)
 	if err != nil {
@@ -39,7 +39,7 @@ func TestManifestInputRejectsHostileArtifactSets(t *testing.T) {
 	valid := ManifestInput{
 		Product: core.ProductBug, Version: mustVersion(t), ReleaseID: mustBugReleaseID(t),
 		Date: mustReleaseDate(t), Commit: mustCommit(t), CreatedAt: core.UnixNanoTimeFromInt64(1782302400000000000),
-		Artifacts: []Artifact{validArtifactWithSize(t, "bug-linux-amd64", 12)},
+		Artifacts: []Artifact{validArtifactWithSize(t, "bug-linux-amd64", 12)}, Evidence: validReleaseGateEvidence(t),
 	}
 	cases := []struct {
 		mutate func(*ManifestInput)
@@ -50,6 +50,7 @@ func TestManifestInputRejectsHostileArtifactSets(t *testing.T) {
 		{name: "missing release id", mutate: func(i *ManifestInput) { i.ReleaseID = ReleaseID{} }},
 		{name: "missing date", mutate: func(i *ManifestInput) { i.Date = ReleaseDate{} }},
 		{name: "missing commit", mutate: func(i *ManifestInput) { i.Commit = core.BuildCommit{} }},
+		{name: "missing evidence", mutate: func(i *ManifestInput) { i.Evidence = ReleaseGateEvidence{} }},
 		{name: "missing created at", mutate: func(i *ManifestInput) { i.CreatedAt = core.UnixNanoTime{} }},
 		{name: "empty artifacts", mutate: func(i *ManifestInput) { i.Artifacts = nil }},
 		{name: "duplicate artifact", mutate: func(i *ManifestInput) { i.Artifacts = append(i.Artifacts, i.Artifacts[0]) }},

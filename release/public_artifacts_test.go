@@ -15,7 +15,7 @@ func TestValidatePublicReleaseArtifactsHostileTable(t *testing.T) {
 		name   string
 		accept bool
 	}{
-		{name: "exact four binaries two gates and two legal documents accepted", accept: true},
+		{name: "exact four binaries fast gate final certificate and two legal documents accepted", accept: true},
 		{name: "missing artifact rejected", mutate: func(_ *testing.T, items []Artifact) []Artifact { return items[:len(items)-1] }},
 		{name: "extra artifact rejected", mutate: func(_ *testing.T, items []Artifact) []Artifact { return append(items, items[0]) }},
 		{name: "duplicate platform rejects substituted binary", mutate: func(_ *testing.T, items []Artifact) []Artifact { return duplicatePublicBinaryPlatform(items) }},
@@ -55,11 +55,67 @@ func validPublicReleaseArtifacts(t *testing.T) []Artifact {
 	}
 	artifacts = append(artifacts,
 		validPublicArtifact(t, FastGateEvidenceFileName, KindGateEvidence, core.PlatformUnknown),
-		validPublicArtifact(t, FinalGateEvidenceFileName, KindGateEvidence, core.PlatformUnknown),
+		validPublicArtifact(t, FinalCertificateFileName, KindGateEvidence, core.PlatformUnknown),
 		validPublicArtifact(t, LicenseFileName, KindLegalDocument, core.PlatformUnknown),
 		validPublicArtifact(t, ThirdPartyNoticesName, KindLegalDocument, core.PlatformUnknown),
 	)
 	return artifacts
+}
+
+func TestValidatePublicReleaseManifestRequiresCertificateBinding(t *testing.T) {
+	t.Parallel()
+	base := validManifest(t)
+	artifacts := validPublicReleaseArtifacts(t)
+	for index := range artifacts {
+		if artifacts[index].Name.String() == FinalCertificateFileName {
+			artifacts[index].SHA256 = base.Evidence.FinalCertificate.SHA256
+		}
+	}
+	manifest, err := BuildManifest(ManifestInput{
+		Product: base.Product, Version: base.Version, ReleaseID: base.ReleaseID,
+		Date: base.Date, Commit: base.Commit, Artifacts: artifacts,
+		Evidence: base.Evidence, CreatedAt: base.CreatedAt,
+	})
+	if err != nil {
+		t.Fatalf("BuildManifest() error = %v", err)
+	}
+
+	cases := []struct {
+		mutate func(*Manifest)
+		name   string
+	}{
+		{name: "certified manifest accepted"},
+		{name: "candidate evidence rejected", mutate: func(value *Manifest) {
+			value.Evidence.FinalCertificate = CandidateFinalCertificateEvidence()
+		}},
+		{name: "certificate commit drift rejected", mutate: func(value *Manifest) {
+			value.Evidence.FinalCertificate.SubjectCommit = mustOtherCommit(t)
+		}},
+		{name: "certificate artifact digest drift rejected", mutate: func(value *Manifest) {
+			for index := range value.Artifacts {
+				if value.Artifacts[index].Name.String() == FinalCertificateFileName {
+					value.Artifacts[index].SHA256 = mustSHA256(t, "e")
+				}
+			}
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			candidate := manifest
+			candidate.Artifacts = append([]Artifact(nil), manifest.Artifacts...)
+			if tc.mutate != nil {
+				tc.mutate(&candidate)
+			}
+			err := ValidatePublicReleaseManifest(candidate)
+			if tc.mutate == nil && err != nil {
+				t.Fatalf("ValidatePublicReleaseManifest() error = %v", err)
+			}
+			if tc.mutate != nil && !errors.Is(err, core.ErrReleaseContract) {
+				t.Fatalf("ValidatePublicReleaseManifest() error = %v, want %v", err, core.ErrReleaseContract)
+			}
+		})
+	}
 }
 
 func validPublicArtifact(t *testing.T, rawName string, kind Kind, platform core.Platform) Artifact {

@@ -50,6 +50,7 @@ const (
 	SchemaBugSeatMember
 	SchemaBugSeatInvite
 	SchemaBugSeatAssignment
+	SchemaReleaseSeedGrantAccess
 )
 
 const (
@@ -90,9 +91,10 @@ const (
 	SchemaTokenReleaseUpdateDiagnostic        = "offgrid-release-update-diagnostic-" + ContractVersionToken
 	SchemaTokenReleaseUpdateDiagnosticReceipt = "offgrid-release-update-diagnostic-receipt-" + ContractVersionToken
 	SchemaTokenReleaseGateReport              = "offgrid-release-gate-report-" + ContractVersionToken
+	SchemaTokenReleaseSeedGrantAccess         = "offgrid-release-seed-grant-access-" + ContractVersionToken
 )
 
-func schemaNames() [SchemaBugSeatAssignment + 1]string {
+func schemaNames() [SchemaReleaseSeedGrantAccess + 1]string {
 	return [...]string{
 		SchemaBugUsage:                       SchemaTokenBugUsage,
 		SchemaWitnessUsage:                   SchemaTokenWitnessUsage,
@@ -131,6 +133,7 @@ func schemaNames() [SchemaBugSeatAssignment + 1]string {
 		SchemaBugSeatMember:                  SchemaTokenBugSeatMember,
 		SchemaBugSeatInvite:                  SchemaTokenBugSeatInvite,
 		SchemaBugSeatAssignment:              SchemaTokenBugSeatAssignment,
+		SchemaReleaseSeedGrantAccess:         SchemaTokenReleaseSeedGrantAccess,
 	}
 }
 
