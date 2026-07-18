@@ -1,10 +1,8 @@
 package core
 
 import (
-	"crypto/ed25519"
-	"crypto/rand"
-	"encoding/base64"
-	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 )
 
@@ -17,6 +15,13 @@ const (
 	// 128 bits. HMAC-SHA256 keys, AEAD keys, CSRF secrets, and password peppers
 	// use 32 bytes (256 bits); nothing narrower than 16 bytes is a real secret.
 	SecretByteMinimum = 16
+	// SecretByteStandard is the canonical width for HMAC-SHA256 keys, AEAD keys,
+	// CSRF secrets, and password peppers.
+	SecretByteStandard = 32
+	// SecretByteMaximum bounds caller-controlled allocation while covering every
+	// symmetric secret Foundation owns. Current HMAC, AEAD, CSRF, and pepper
+	// contracts use 32 bytes; 64 bytes preserves room for wider keyed hashes.
+	SecretByteMaximum = 64
 )
 
 // KeygenKind is the closed set of key material the generator can mint. The zero
@@ -35,12 +40,35 @@ const (
 	KeygenKindTokenSecret  = "secret"
 )
 
-func (k KeygenKind) Valid() bool { return k > KeygenKindInvalid && k < keygenKindSentinel }
+func (k KeygenKind) IsValid() bool { return k > KeygenKindInvalid && k < keygenKindSentinel }
 
 func (k KeygenKind) Validate() error {
-	if !k.Valid() {
-		return fmt.Errorf(ErrFmtKeygenKind, ErrFoundationContract)
+	if !k.IsValid() {
+		return fmt.Errorf(ErrFmtKeygenKind, ErrKeygenContract)
 	}
+	return nil
+}
+
+func (k KeygenKind) MarshalJSON() ([]byte, error) {
+	if err := k.Validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(k.String())
+}
+
+func (k *KeygenKind) UnmarshalJSON(data []byte) error {
+	if k == nil {
+		return fmt.Errorf(ErrFmtKeygenKind, ErrKeygenContract)
+	}
+	var token string
+	if err := json.Unmarshal(data, &token); err != nil {
+		return fmt.Errorf(ErrFmtKeygenKind, ErrKeygenContract)
+	}
+	parsed, err := ParseKeygenKind(token)
+	if err != nil {
+		return err
+	}
+	*k = parsed
 	return nil
 }
 
@@ -62,7 +90,7 @@ func ParseKeygenKind(value string) (KeygenKind, error) {
 	case KeygenKindTokenSecret:
 		return KeygenKindSecret, nil
 	default:
-		return KeygenKindInvalid, fmt.Errorf(ErrFmtKeygenKind, ErrFoundationContract)
+		return KeygenKindInvalid, fmt.Errorf(ErrFmtKeygenKind, ErrKeygenContract)
 	}
 }
 
@@ -82,40 +110,21 @@ type GeneratedSigningKey struct {
 // Validate re-parses the private base64 through the single canonical contract
 // and requires its derived public to equal the stated public.
 func (g GeneratedSigningKey) Validate() error {
+	if err := g.PublicKeyHex.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtGeneratedSigningKey, errors.Join(ErrKeygenContract, err))
+	}
 	key, err := ParseEd25519SigningKeyBase64(g.PrivateKeyBase64)
 	if err != nil {
-		return fmt.Errorf(ErrFmtGeneratedSigningKey, err)
+		return fmt.Errorf(ErrFmtGeneratedSigningKey, errors.Join(ErrKeygenContract, err))
 	}
 	public, err := key.PublicKey()
 	if err != nil {
-		return fmt.Errorf(ErrFmtGeneratedSigningKey, err)
+		return fmt.Errorf(ErrFmtGeneratedSigningKey, errors.Join(ErrKeygenContract, err))
 	}
 	if public != g.PublicKeyHex {
-		return fmt.Errorf(ErrFmtGeneratedSigningKey, ErrFoundationContract)
+		return fmt.Errorf(ErrFmtGeneratedSigningKey, ErrKeygenContract)
 	}
 	return nil
-}
-
-// GenerateEd25519SigningKey mints a fresh offline-authority key from the system
-// CSPRNG and returns its validated output contract. The private bytes leave only
-// as the base64 field the caller persists; they are never otherwise exposed.
-func GenerateEd25519SigningKey() (GeneratedSigningKey, error) {
-	public, private, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		return GeneratedSigningKey{}, fmt.Errorf(ErrFmtGeneratedSigningKey, err)
-	}
-	publicHex, err := NewEd25519PublicKeyHex(public)
-	if err != nil {
-		return GeneratedSigningKey{}, fmt.Errorf(ErrFmtGeneratedSigningKey, err)
-	}
-	out := GeneratedSigningKey{
-		PrivateKeyBase64: base64.StdEncoding.EncodeToString(private),
-		PublicKeyHex:     publicHex,
-	}
-	if err := out.Validate(); err != nil {
-		return GeneratedSigningKey{}, err
-	}
-	return out, nil
 }
 
 // GeneratedSecret is the output contract of symmetric-secret generation: the
@@ -130,28 +139,11 @@ type GeneratedSecret struct {
 
 // Validate requires a real secret width and exact fixed-length lowercase hex.
 func (s GeneratedSecret) Validate() error {
-	if s.ByteLen < SecretByteMinimum {
-		return fmt.Errorf(ErrFmtGeneratedSecret, ErrFoundationContract)
+	if s.ByteLen < SecretByteMinimum || s.ByteLen > SecretByteMaximum {
+		return fmt.Errorf(ErrFmtGeneratedSecret, ErrKeygenContract)
 	}
 	if err := validateFixedHex(s.Hex, s.ByteLen); err != nil {
-		return fmt.Errorf(ErrFmtGeneratedSecret, ErrFoundationContract)
+		return fmt.Errorf(ErrFmtGeneratedSecret, ErrKeygenContract)
 	}
 	return nil
-}
-
-// GenerateSecretHex mints byteLen random bytes from the system CSPRNG as
-// lowercase hex. byteLen must be at least SecretByteMinimum.
-func GenerateSecretHex(byteLen int) (GeneratedSecret, error) {
-	if byteLen < SecretByteMinimum {
-		return GeneratedSecret{}, fmt.Errorf(ErrFmtGeneratedSecret, ErrFoundationContract)
-	}
-	raw := make([]byte, byteLen)
-	if _, err := rand.Read(raw); err != nil {
-		return GeneratedSecret{}, fmt.Errorf(ErrFmtGeneratedSecret, err)
-	}
-	out := GeneratedSecret{Hex: hex.EncodeToString(raw), ByteLen: byteLen}
-	if err := out.Validate(); err != nil {
-		return GeneratedSecret{}, err
-	}
-	return out, nil
 }

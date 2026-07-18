@@ -13,6 +13,8 @@ var (
 	ErrCustodyContract          = fmt.Errorf("custody contract violation: %w", ErrFoundationContract)
 	ErrReleaseContract          = fmt.Errorf("release contract violation: %w", ErrFoundationContract)
 	ErrJSONContract             = fmt.Errorf("json contract violation: %w", ErrFoundationContract)
+	ErrKeygenContract           = fmt.Errorf("keygen contract violation: %w", ErrFoundationContract)
+	ErrKeygenEntropy            = errors.New("keygen entropy failure")
 	ErrWitnessPolicyContract    = fmt.Errorf("witness policy contract violation: %w", ErrFoundationContract)
 	ErrUnknownAccountToken      = fmt.Errorf("unknown account token: %w", ErrLicenseContract)
 	ErrInactiveSubscription     = fmt.Errorf("inactive subscription: %w", ErrLicenseContract)

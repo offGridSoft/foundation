@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -58,8 +59,8 @@ func TestGeneratedSigningKeyHostileTable(t *testing.T) {
 			t.Parallel()
 			err := tc.key.Validate()
 			if tc.wantError {
-				if !errors.Is(err, ErrFoundationContract) {
-					t.Fatalf("Validate() error = %v, want %v", err, ErrFoundationContract)
+				if !errors.Is(err, ErrKeygenContract) {
+					t.Fatalf("Validate() error = %v, want %v", err, ErrKeygenContract)
 				}
 				return
 			}
@@ -70,76 +71,32 @@ func TestGeneratedSigningKeyHostileTable(t *testing.T) {
 	}
 }
 
-// TestGenerateEd25519SigningKeyProducesIngressReadyKey proves the generator's
-// output validates, its private half is accepted by the one canonical ingress
-// parser, and the derived public equals the stated public.
-func TestGenerateEd25519SigningKeyProducesIngressReadyKey(t *testing.T) {
-	t.Parallel()
-	key, err := GenerateEd25519SigningKey()
-	if err != nil {
-		t.Fatalf("GenerateEd25519SigningKey() error = %v", err)
-	}
-	if err := key.Validate(); err != nil {
-		t.Fatalf("Validate() error = %v", err)
-	}
-	parsed, err := ParseEd25519SigningKeyBase64(key.PrivateKeyBase64)
-	if err != nil {
-		t.Fatalf("ParseEd25519SigningKeyBase64() error = %v, want ingress-ready key", err)
-	}
-	derived, err := parsed.PublicKey()
-	if err != nil {
-		t.Fatalf("PublicKey() error = %v", err)
-	}
-	if derived != key.PublicKeyHex {
-		t.Fatalf("derived public = %v, want %v", derived, key.PublicKeyHex)
-	}
-}
-
-// TestGenerateEd25519SigningKeyIsUnpredictable proves two mints never collide,
-// i.e. the generator draws real entropy and is not seeded from a constant.
-func TestGenerateEd25519SigningKeyIsUnpredictable(t *testing.T) {
-	t.Parallel()
-	first, err := GenerateEd25519SigningKey()
-	if err != nil {
-		t.Fatalf("GenerateEd25519SigningKey() first error = %v", err)
-	}
-	second, err := GenerateEd25519SigningKey()
-	if err != nil {
-		t.Fatalf("GenerateEd25519SigningKey() second error = %v", err)
-	}
-	if first.PrivateKeyBase64 == second.PrivateKeyBase64 {
-		t.Fatal("two generated keys share a private key; generator is not drawing entropy")
-	}
-	if first.PublicKeyHex == second.PublicKeyHex {
-		t.Fatal("two generated keys share a public key; generator is not drawing entropy")
-	}
-}
-
 func TestGeneratedSecretHostileTable(t *testing.T) {
 	t.Parallel()
-	hex32 := hex.EncodeToString(make([]byte, 32))
-	hex16 := hex.EncodeToString(make([]byte, 16))
+	hexStandard := hex.EncodeToString(make([]byte, SecretByteStandard))
+	hexMinimum := hex.EncodeToString(make([]byte, SecretByteMinimum))
 	cases := []struct {
 		name      string
 		secret    GeneratedSecret
 		wantError bool
 	}{
-		{name: "valid 32-byte secret", secret: GeneratedSecret{Hex: hex32, ByteLen: 32}},
-		{name: "valid 16-byte minimum", secret: GeneratedSecret{Hex: hex16, ByteLen: 16}},
-		{name: "below minimum width", secret: GeneratedSecret{Hex: hex.EncodeToString(make([]byte, 8)), ByteLen: 8}, wantError: true},
-		{name: "hex shorter than declared length", secret: GeneratedSecret{Hex: hex16, ByteLen: 32}, wantError: true},
-		{name: "uppercase hex", secret: GeneratedSecret{Hex: strings.ToUpper(strings.Repeat("ab", 32)), ByteLen: 32}, wantError: true},
-		{name: "non-hex alphabet", secret: GeneratedSecret{Hex: strings.Repeat("zz", 32), ByteLen: 32}, wantError: true},
-		{name: "empty hex", secret: GeneratedSecret{Hex: "", ByteLen: 32}, wantError: true},
-		{name: "odd hex length", secret: GeneratedSecret{Hex: hex32[:len(hex32)-1], ByteLen: 32}, wantError: true},
+		{name: "valid standard secret", secret: GeneratedSecret{Hex: hexStandard, ByteLen: SecretByteStandard}},
+		{name: "valid minimum secret", secret: GeneratedSecret{Hex: hexMinimum, ByteLen: SecretByteMinimum}},
+		{name: "below minimum width", secret: GeneratedSecret{Hex: hex.EncodeToString(make([]byte, SecretByteMinimum-1)), ByteLen: SecretByteMinimum - 1}, wantError: true},
+		{name: "above maximum width", secret: GeneratedSecret{Hex: hex.EncodeToString(make([]byte, SecretByteMaximum+1)), ByteLen: SecretByteMaximum + 1}, wantError: true},
+		{name: "hex shorter than declared length", secret: GeneratedSecret{Hex: hexMinimum, ByteLen: SecretByteStandard}, wantError: true},
+		{name: "uppercase hex", secret: GeneratedSecret{Hex: strings.ToUpper(strings.Repeat("ab", SecretByteStandard)), ByteLen: SecretByteStandard}, wantError: true},
+		{name: "non-hex alphabet", secret: GeneratedSecret{Hex: strings.Repeat("zz", SecretByteStandard), ByteLen: SecretByteStandard}, wantError: true},
+		{name: "empty hex", secret: GeneratedSecret{Hex: "", ByteLen: SecretByteStandard}, wantError: true},
+		{name: "odd hex length", secret: GeneratedSecret{Hex: hexStandard[:len(hexStandard)-1], ByteLen: SecretByteStandard}, wantError: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			err := tc.secret.Validate()
 			if tc.wantError {
-				if !errors.Is(err, ErrFoundationContract) {
-					t.Fatalf("Validate() error = %v, want %v", err, ErrFoundationContract)
+				if !errors.Is(err, ErrKeygenContract) {
+					t.Fatalf("Validate() error = %v, want %v", err, ErrKeygenContract)
 				}
 				return
 			}
@@ -147,30 +104,6 @@ func TestGeneratedSecretHostileTable(t *testing.T) {
 				t.Fatalf("Validate() error = %v", err)
 			}
 		})
-	}
-}
-
-func TestGenerateSecretHexProducesValidSecret(t *testing.T) {
-	t.Parallel()
-	s, err := GenerateSecretHex(32)
-	if err != nil {
-		t.Fatalf("GenerateSecretHex(32) error = %v", err)
-	}
-	if err := s.Validate(); err != nil {
-		t.Fatalf("Validate() error = %v", err)
-	}
-	if s.ByteLen != 32 || len(s.Hex) != 64 {
-		t.Fatalf("GenerateSecretHex(32) = {ByteLen:%d, len(Hex):%d}, want {32, 64}", s.ByteLen, len(s.Hex))
-	}
-	if _, err := GenerateSecretHex(SecretByteMinimum - 1); !errors.Is(err, ErrFoundationContract) {
-		t.Fatalf("GenerateSecretHex(too small) error = %v, want %v", err, ErrFoundationContract)
-	}
-	other, err := GenerateSecretHex(32)
-	if err != nil {
-		t.Fatalf("GenerateSecretHex(32) second error = %v", err)
-	}
-	if s.Hex == other.Hex {
-		t.Fatal("two generated secrets are identical; generator is not drawing entropy")
 	}
 }
 
@@ -193,8 +126,8 @@ func TestKeygenKindHostileTable(t *testing.T) {
 			t.Parallel()
 			got, err := ParseKeygenKind(tc.value)
 			if tc.wantError {
-				if !errors.Is(err, ErrFoundationContract) {
-					t.Fatalf("ParseKeygenKind(%q) error = %v, want %v", tc.value, err, ErrFoundationContract)
+				if !errors.Is(err, ErrKeygenContract) {
+					t.Fatalf("ParseKeygenKind(%q) error = %v, want %v", tc.value, err, ErrKeygenContract)
 				}
 				return
 			}
@@ -210,9 +143,31 @@ func TestKeygenKindHostileTable(t *testing.T) {
 			if got.String() != tc.value {
 				t.Fatalf("String() = %q, want %q", got.String(), tc.value)
 			}
+			wire, err := json.Marshal(got)
+			if err != nil {
+				t.Fatalf("json.Marshal(%v) error = %v, want nil", got, err)
+			}
+			var decoded KeygenKind
+			if err := json.Unmarshal(wire, &decoded); err != nil {
+				t.Fatalf("json.Unmarshal(%s) error = %v, want nil", wire, err)
+			}
+			if decoded != got {
+				t.Fatalf("JSON round trip = %v, want %v", decoded, got)
+			}
 		})
 	}
-	if err := KeygenKindInvalid.Validate(); !errors.Is(err, ErrFoundationContract) {
-		t.Fatalf("KeygenKindInvalid.Validate() = %v, want %v", err, ErrFoundationContract)
+	if err := KeygenKindInvalid.Validate(); !errors.Is(err, ErrKeygenContract) {
+		t.Fatalf("KeygenKindInvalid.Validate() = %v, want %v", err, ErrKeygenContract)
+	}
+	if _, err := json.Marshal(KeygenKindInvalid); !errors.Is(err, ErrKeygenContract) {
+		t.Fatalf("json.Marshal(KeygenKindInvalid) error = %v, want %v", err, ErrKeygenContract)
+	}
+	var decoded KeygenKind
+	if err := json.Unmarshal([]byte(`"unknown"`), &decoded); !errors.Is(err, ErrKeygenContract) {
+		t.Fatalf("json.Unmarshal(unknown KeygenKind) error = %v, want %v", err, ErrKeygenContract)
+	}
+	var nilKind *KeygenKind
+	if err := nilKind.UnmarshalJSON([]byte(`"secret"`)); !errors.Is(err, ErrKeygenContract) {
+		t.Fatalf("nil KeygenKind.UnmarshalJSON() error = %v, want %v", err, ErrKeygenContract)
 	}
 }

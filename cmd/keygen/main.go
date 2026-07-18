@@ -7,17 +7,27 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/offGridSoft/foundation/v2026/core"
+	foundationkeygen "github.com/offGridSoft/foundation/v2026/keygen"
 )
+
+const (
+	privateMaterialFileMode       os.FileMode = 0o600
+	privateMaterialLineTerminator             = "\n"
+)
+
+var errPrivateMaterialFile = errors.New("keygen private material file")
 
 func main() {
 	kind := flag.String("kind", "", "key kind: ed25519 | secret")
 	out := flag.String("out", "", "file path to write the private key / secret (created 0600)")
-	bytesLen := flag.Int("bytes", 32, "secret width in bytes (kind=secret only)")
+	bytesLen := flag.Int("bytes", core.SecretByteStandard, "secret width in bytes (kind=secret only)")
 	flag.Parse()
 
 	if *out == "" {
@@ -44,26 +54,67 @@ func main() {
 }
 
 func writeSigningKey(path string) error {
-	key, err := core.GenerateEd25519SigningKey()
+	key, err := foundationkeygen.GenerateEd25519SigningKey()
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, []byte(key.PrivateKeyBase64+"\n"), 0o600); err != nil {
+	if err := writePrivateMaterial(path, key.PrivateKeyBase64); err != nil {
 		return err
 	}
-	fmt.Printf("ed25519 private key (base64) written to %s (0600) — store it, then delete the file\n", path)
+	fmt.Println("ed25519 private key written to the requested owner-only file — store it, then delete the file")
 	fmt.Printf("public key (hex): %s\n", key.PublicKeyHex.String())
 	return nil
 }
 
 func writeSecret(path string, byteLen int) error {
-	secret, err := core.GenerateSecretHex(byteLen)
+	secret, err := foundationkeygen.GenerateSecretHex(byteLen)
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, []byte(secret.Hex+"\n"), 0o600); err != nil {
+	if err := writePrivateMaterial(path, secret.Hex); err != nil {
 		return err
 	}
-	fmt.Printf("%d-byte secret (hex) written to %s (0600) — store it, then delete the file\n", secret.ByteLen, path)
+	fmt.Printf("%d-byte secret written to the requested owner-only file — store it, then delete the file\n", secret.ByteLen)
 	return nil
+}
+
+// writePrivateMaterial creates exactly one new owner-only file. O_EXCL rejects
+// existing paths and symlinks, so key generation can never overwrite a caller's
+// file or follow a link into an unintended target.
+func writePrivateMaterial(path, material string) error {
+	var result error
+	func() {
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, privateMaterialFileMode) // #nosec G304 -- operator-selected output path; exclusive creation is the security boundary.
+		if err != nil {
+			result = privateMaterialError(err)
+			return
+		}
+		defer func() {
+			if err := f.Close(); err != nil {
+				result = errors.Join(result, privateMaterialError(err))
+			}
+			if result != nil {
+				result = removePrivateMaterial(path, result)
+			}
+		}()
+		if _, err := io.WriteString(f, material+privateMaterialLineTerminator); err != nil {
+			result = privateMaterialError(err)
+			return
+		}
+		if err := f.Sync(); err != nil {
+			result = privateMaterialError(err)
+		}
+	}()
+	return result
+}
+
+func privateMaterialError(err error) error {
+	return fmt.Errorf("%w: %w", errPrivateMaterialFile, err)
+}
+
+func removePrivateMaterial(path string, cause error) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return errors.Join(cause, privateMaterialError(err))
+	}
+	return cause
 }
