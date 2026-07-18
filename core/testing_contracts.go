@@ -53,11 +53,38 @@ func testSerialReasonNames() [testSerialReasonLimit]string {
 	}
 }
 
+func testSerialReasonGoIdentifiers() [testSerialReasonLimit]string {
+	return [...]string{
+		TestSerialReasonProcessEnvironment:      "TestSerialReasonProcessEnvironment",
+		TestSerialReasonProcessWorkingDirectory: "TestSerialReasonProcessWorkingDirectory",
+		TestSerialReasonProcessSignal:           "TestSerialReasonProcessSignal",
+		TestSerialReasonProcessOutput:           "TestSerialReasonProcessOutput",
+		TestSerialReasonProcessLogger:           "TestSerialReasonProcessLogger",
+		TestSerialReasonRuntimeAllocation:       "TestSerialReasonRuntimeAllocation",
+		TestSerialReasonSharedCompiledAssets:    "TestSerialReasonSharedCompiledAssets",
+		TestSerialReasonSharedCompiledPages:     "TestSerialReasonSharedCompiledPages",
+		TestSerialReasonSharedRegistry:          "TestSerialReasonSharedRegistry",
+		TestSerialReasonExternalService:         "TestSerialReasonExternalService",
+		TestSerialReasonOrderedState:            "TestSerialReasonOrderedState",
+		TestSerialReasonPackageSeam:             "TestSerialReasonPackageSeam",
+	}
+}
+
 func (r TestSerialReason) String() string {
 	if !r.IsValid() {
 		return ""
 	}
 	return testSerialReasonNames()[r]
+}
+
+// GoIdentifier returns the compiler-visible constant identifier for this
+// reason. Source analyzers use this closed contract instead of duplicating a
+// naming convention.
+func (r TestSerialReason) GoIdentifier() string {
+	if !r.IsValid() {
+		return ""
+	}
+	return testSerialReasonGoIdentifiers()[r]
 }
 
 func (r TestSerialReason) IsValid() bool {
@@ -82,6 +109,17 @@ func (r TestSerialReason) MarshalJSON() ([]byte, error) {
 func ParseTestSerialReason(token string) (TestSerialReason, error) {
 	for reason := TestSerialReasonProcessEnvironment; reason < testSerialReasonLimit; reason++ {
 		if reason.String() == token {
+			return reason, nil
+		}
+	}
+	return TestSerialReasonInvalid, fmt.Errorf(ErrFmtTestSerialReason, ErrTestSerialContract)
+}
+
+// ParseTestSerialReasonGoIdentifier resolves only Foundation-owned reason
+// constant identifiers. It rejects prefixes, suffixes, and local lookalikes.
+func ParseTestSerialReasonGoIdentifier(identifier string) (TestSerialReason, error) {
+	for reason := TestSerialReasonProcessEnvironment; reason < testSerialReasonLimit; reason++ {
+		if reason.GoIdentifier() == identifier {
 			return reason, nil
 		}
 	}

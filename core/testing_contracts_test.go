@@ -50,7 +50,30 @@ func TestTestSerialReasonHostileTable(t *testing.T) {
 			if got := tc.reason.String(); got != tc.want {
 				t.Fatalf("String() = %q, want %q", got, tc.want)
 			}
+			identifier := tc.reason.GoIdentifier()
+			parsed, parseErr := ParseTestSerialReasonGoIdentifier(identifier)
+			if parseErr != nil {
+				t.Fatalf("ParseTestSerialReasonGoIdentifier(%q) error = %v", identifier, parseErr)
+			}
+			if parsed != tc.reason {
+				t.Fatalf("ParseTestSerialReasonGoIdentifier(%q) = %d, want %d", identifier, parsed, tc.reason)
+			}
 		})
+	}
+}
+
+func TestParseTestSerialReasonGoIdentifierOGSRejectsLookalikes(t *testing.T) {
+	t.Parallel()
+
+	for _, identifier := range []string{
+		"",
+		"TestSerialReasonInvalid",
+		"TestSerialReasonProcessEnvironmentExtra",
+		"LocalTestSerialReasonProcessEnvironment",
+	} {
+		if _, err := ParseTestSerialReasonGoIdentifier(identifier); !errors.Is(err, ErrTestSerialContract) {
+			t.Fatalf("ParseTestSerialReasonGoIdentifier(%q) error = %v, want ErrTestSerialContract", identifier, err)
+		}
 	}
 }
 
