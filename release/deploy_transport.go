@@ -110,9 +110,6 @@ func (r DeployPrepareRequest) Verify(releaseKeys core.SigningKeyring) error {
 	if err := r.Manifest.Verify(releaseKeys); err != nil {
 		return wrapReleaseContract(ErrFmtDeployPrepareRequest, err)
 	}
-	if err := r.Manifest.Body.RequireCertified(); err != nil {
-		return wrapReleaseContract(ErrFmtDeployPrepareRequest, err)
-	}
 	return nil
 }
 
@@ -274,9 +271,6 @@ func (r DeployFinalizeResponse) validateStructure() error {
 		return wrapReleaseContract(ErrFmtDeployFinalizeResponse, err)
 	}
 	if err := r.Manifest.Validate(); err != nil {
-		return wrapReleaseContract(ErrFmtDeployFinalizeResponse, err)
-	}
-	if err := r.Manifest.Body.RequireCertified(); err != nil {
 		return wrapReleaseContract(ErrFmtDeployFinalizeResponse, err)
 	}
 	if err := r.Receipt.Validate(); err != nil {
