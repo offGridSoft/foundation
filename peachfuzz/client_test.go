@@ -127,6 +127,17 @@ func TestSnapshotClientOGSRejectsSubstitutedProject(t *testing.T) {
 	}
 }
 
+func TestOffgridRunStatsPathUsesPublicAPIVersionContract(t *testing.T) {
+	t.Parallel()
+	want := "/" + core.APIVersionToken + "/peachfuzz/stats"
+	if OffgridRunStatsPath != want {
+		t.Fatalf("OffgridRunStatsPath = %q, want %q", OffgridRunStatsPath, want)
+	}
+	if core.APIVersionToken == core.ContractVersionToken {
+		t.Fatalf("public API version %q must remain independent from schema generation %q", core.APIVersionToken, core.ContractVersionToken)
+	}
+}
+
 func validRecordClient(t *testing.T, server *httptest.Server) RecordClient {
 	t.Helper()
 	endpoint, err := core.APIEndpointForBaseURL(server.URL, OffgridRunStatsPath)

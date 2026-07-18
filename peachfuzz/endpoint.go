@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	OffgridRunStatsPath       = "/" + core.ContractVersionToken + "/peachfuzz/stats"
+	OffgridRunStatsPath       = "/" + core.APIVersionToken + "/peachfuzz/stats"
 	GoogleCloudServiceAccount = "peachfuzz@" + core.OffgridGoogleCloudProjectID + workloadidentity.GoogleServiceAccountEmailSuffix
 	QueryProject              = "project"
 )

@@ -15,6 +15,11 @@ const (
 	ContractYear = "2026"
 	// ContractVersionToken is the canonical schema/transport generation token.
 	ContractVersionToken = "v" + ContractYear
+	// APIVersionToken versions public HTTP paths. APIs are versioned by
+	// contract break, never by calendar — deployed clients must not break at
+	// a year boundary, so this token only advances (v2, v3, …) when a wire
+	// contract actually changes incompatibly.
+	APIVersionToken = "v1"
 	// FoundationVersion2026 is this module's compiler-owned source version.
 	FoundationVersion2026 = ContractYear + ".0.0"
 	// FoundationModulePath and the package paths derived from it are the
