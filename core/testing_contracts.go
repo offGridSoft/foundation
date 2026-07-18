@@ -29,11 +29,14 @@ const (
 )
 
 const (
-	GoTestSerialPackageName   = "testserial"
-	GoTestSerialFunction      = "Serial"
-	GoWitnessWaiverDirective  = "witness:waiver"
-	GoLegacySerialDirective   = "serial:"
-	GoTestParallelDefaultRule = "test/parallel/default"
+	GoTestSerialPackageName     = "testserial"
+	GoTestSerialFunction        = "Serial"
+	GoWitnessWaiverDirective    = "witness:waiver"
+	GoWitnessLintShowWaivedFlag = "--show-waived"
+	GoWitnessLintHideWaivedFlag = "--hide-waived"
+	GoWitnessLintFailWaivedFlag = "--fail-waived"
+	GoLegacySerialDirective     = "serial:"
+	GoTestParallelDefaultRule   = "test/parallel/default"
 )
 
 func testSerialReasonNames() [testSerialReasonLimit]string {

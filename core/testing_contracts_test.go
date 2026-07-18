@@ -6,6 +6,29 @@ import (
 	"testing"
 )
 
+func TestWitnessLintWaiverFlagsAreExact(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		got  string
+		want string
+	}{
+		{name: "show", got: GoWitnessLintShowWaivedFlag, want: "--show-waived"},
+		{name: "hide", got: GoWitnessLintHideWaivedFlag, want: "--hide-waived"},
+		{name: "fail", got: GoWitnessLintFailWaivedFlag, want: "--fail-waived"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			if tc.got != tc.want {
+				t.Fatalf("flag = %q, want %q", tc.got, tc.want)
+			}
+		})
+	}
+}
+
 func TestTestSerialReasonHostileTable(t *testing.T) {
 	t.Parallel()
 
