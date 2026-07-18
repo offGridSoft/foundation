@@ -195,6 +195,10 @@ func ParseBugSeatInviteAddress(value string) (BugSeatInviteAddress, error) {
 	return BugSeatInviteAddress{value: value}, nil
 }
 
+func NewBugSeatInviteAddress(value string) (BugSeatInviteAddress, error) {
+	return ParseBugSeatInviteAddress(strings.ToLower(strings.TrimSpace(value)))
+}
+
 func invalidSeatInviteAddressRune(r rune) bool {
 	return unicode.IsSpace(r) || unicode.IsControl(r)
 }

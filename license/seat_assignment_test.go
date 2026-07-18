@@ -99,6 +99,10 @@ func TestBugSeatInviteAddressHostileTable(t *testing.T) {
 	if err != nil || got.String() != want {
 		t.Fatalf("ParseBugSeatInviteAddress(valid) = %v, %v", got, err)
 	}
+	canonical, err := NewBugSeatInviteAddress("  Member@Example.COM  ")
+	if err != nil || canonical.String() != want {
+		t.Fatalf("NewBugSeatInviteAddress() = %v, %v, want %q", canonical, err, want)
+	}
 }
 
 func TestBugSeatScalarJSONRejectsWrongShapesWithoutMutation(t *testing.T) {
