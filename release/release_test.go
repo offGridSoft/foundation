@@ -983,7 +983,7 @@ func TestReleasePlanningJSONHostileTable(t *testing.T) {
 		}},
 		{name: "command kind round trip", run: requireCommandKindJSON(CommandKindRelease, CommandKindTokenRelease)},
 		{name: "command kind unknown token", run: commandKindJSONFails(`"ship"`)},
-		{name: "command status round trip", run: requireCommandStatusJSON(CommandStatusSucceeded, CommandStatusTokenSucceeded)},
+		{name: "command status round trip", run: requireCommandStatusJSON(CommandStatusSucceeded, ReleaseResultTokenSucceeded)},
 		{name: "command status wrong shape", run: commandStatusJSONFails(`7`)},
 		{name: "tree state round trip", run: requireTreeStateJSON(TreeStateClean, TreeStateTokenClean)},
 		{name: "tree state unknown token", run: treeStateJSONFails(`"maybe"`)},

@@ -144,8 +144,8 @@ func TestBugSeatGenerationHostileTable(t *testing.T) {
 func TestBugSeatStatusesAreClosedCompilerOwnedEnums(t *testing.T) {
 	t.Parallel()
 	memberCases := []struct {
-		status BugSeatMemberStatus
 		token  string
+		status BugSeatMemberStatus
 	}{
 		{status: BugSeatMemberStatusActive, token: BugSeatMemberStatusTokenActive},
 		{status: BugSeatMemberStatusRemoved, token: BugSeatMemberStatusTokenRemoved},
@@ -154,8 +154,8 @@ func TestBugSeatStatusesAreClosedCompilerOwnedEnums(t *testing.T) {
 		requireSeatStatusContract(t, test.status, test.token, ParseBugSeatMemberStatus)
 	}
 	inviteCases := []struct {
-		status BugSeatInviteStatus
 		token  string
+		status BugSeatInviteStatus
 	}{
 		{status: BugSeatInviteStatusPending, token: BugSeatInviteStatusTokenPending},
 		{status: BugSeatInviteStatusAccepted, token: BugSeatInviteStatusTokenAccepted},
@@ -166,8 +166,8 @@ func TestBugSeatStatusesAreClosedCompilerOwnedEnums(t *testing.T) {
 		requireSeatStatusContract(t, test.status, test.token, ParseBugSeatInviteStatus)
 	}
 	assignmentCases := []struct {
-		status BugSeatAssignmentStatus
 		token  string
+		status BugSeatAssignmentStatus
 	}{
 		{status: BugSeatAssignmentStatusActive, token: BugSeatAssignmentStatusTokenActive},
 		{status: BugSeatAssignmentStatusRemoved, token: BugSeatAssignmentStatusTokenRemoved},
@@ -186,8 +186,8 @@ func TestBugSeatMemberValidationHostileTable(t *testing.T) {
 	valid := activeSeatMember(t, testMemberAddress, 10)
 	removedAt := seatTime(20)
 	tests := []struct {
-		name   string
 		mutate func(*BugSeatMember)
+		name   string
 	}{
 		{name: "wrong schema", mutate: func(m *BugSeatMember) { m.Schema = core.SchemaBugSeatInvite }},
 		{name: "missing member", mutate: func(m *BugSeatMember) { m.MemberID = BugSeatMemberID{} }},

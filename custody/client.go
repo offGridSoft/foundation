@@ -226,7 +226,10 @@ func (c Client) UploadArtifact(ctx context.Context, input UploadArtifactInput) (
 	requestContext, cancel := context.WithTimeout(ctx, CustodyTransferHTTPBudget)
 	defer cancel()
 	hasher := sha256.New()
-	size := int64(input.Artifact.Size.Uint64())
+	size, err := input.Artifact.Size.Int64()
+	if err != nil {
+		return UploadedObject{}, fmt.Errorf(ErrFmtUploadArtifact, err)
+	}
 	stream := &countingReader{reader: io.TeeReader(io.LimitReader(input.Body, size+1), hasher)}
 	httpResponse, err := c.doUploadPut(requestContext, input, stream, size)
 	if err != nil {
@@ -267,7 +270,11 @@ func drainTransferResponse(httpResponse *http.Response) error {
 }
 
 func uploadedObjectFromResponse(input UploadArtifactInput, httpResponse *http.Response, streamed int64, hasher hash.Hash) (UploadedObject, error) {
-	if streamed != int64(input.Artifact.Size.Uint64()) {
+	expected, err := input.Artifact.Size.Int64()
+	if err != nil {
+		return UploadedObject{}, fmt.Errorf(ErrFmtUploadArtifact, err)
+	}
+	if streamed != expected {
 		return UploadedObject{}, fmt.Errorf(ErrFmtUploadArtifact, core.ErrStorageVerification)
 	}
 	var sum [sha256.Size]byte

@@ -12,9 +12,9 @@ func TestFinalCertificateEvidenceHostileTable(t *testing.T) {
 	valid := validFinalCertificateEvidence(t)
 
 	cases := []struct {
-		value  FinalCertificateEvidence
 		commit core.BuildCommit
 		name   string
+		value  FinalCertificateEvidence
 		want   bool
 	}{
 		{name: "certified exact commit", value: valid, commit: mustCommit(t)},

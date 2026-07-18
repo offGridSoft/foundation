@@ -71,6 +71,18 @@ func TestGeneratedSigningKeyHostileTable(t *testing.T) {
 	}
 }
 
+func TestParseGeneratedSigningKeyDerivesPublicHalf(t *testing.T) {
+	t.Parallel()
+	valid, _ := validSigningKeyFixture(t)
+	parsed, err := ParseGeneratedSigningKey(valid.PrivateKeyBase64)
+	if err != nil {
+		t.Fatalf("ParseGeneratedSigningKey() error = %v", err)
+	}
+	if parsed != valid {
+		t.Fatalf("ParseGeneratedSigningKey() = %#v, want matching generated key", parsed)
+	}
+}
+
 func TestGeneratedSecretHostileTable(t *testing.T) {
 	t.Parallel()
 	hexStandard := hex.EncodeToString(make([]byte, SecretByteStandard))
@@ -117,7 +129,7 @@ func TestKeygenKindHostileTable(t *testing.T) {
 	}{
 		{name: "ed25519", value: KeygenKindTokenEd25519, want: KeygenKindEd25519},
 		{name: "secret", value: KeygenKindTokenSecret, want: KeygenKindSecret},
-		{name: "garble custody", value: KeygenKindTokenGarbleCustody, want: KeygenKindGarbleCustody},
+		{name: "garble custody", value: KeygenKindTokenGarble, want: KeygenKindGarbleCustody},
 		{name: "empty", value: "", wantError: true},
 		{name: "uppercase", value: "ED25519", wantError: true},
 		{name: "unknown kind", value: "rsa", wantError: true},

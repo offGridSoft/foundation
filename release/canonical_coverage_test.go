@@ -28,8 +28,6 @@ func TestSignedBodyCanonicalProjectionCoversEveryTaggedField(t *testing.T) {
 		{name: "release plan", body: validReleasePlan(t)},
 		{name: "release root", body: validWitnessReleaseRootLayout(t)},
 		{name: "command run", body: validCommandRun(t)},
-		{name: "seed grant", body: validSeedGrant(t)},
-		{name: "seed grant access", body: validSeedGrantAccessBody(t)},
 		{name: "update check response", body: validUpdateTestChain(t).response.Authority.Body},
 		{name: "update diagnostic receipt", body: validUpdateDiagnosticReceiptBody(t)},
 	} {

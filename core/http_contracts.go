@@ -12,8 +12,11 @@ import (
 
 const (
 	HTTPHeaderContentType               = "Content-Type"
+	HTTPHeaderAccept                    = "Accept"
+	HTTPHeaderAuthorization             = "Authorization"
 	HTTPHeaderRetryAfter                = "Retry-After"
 	HTTPContentTypeJSON                 = "application/json"
+	HTTPAuthorizationBearerPrefix       = "Bearer "
 	URLSchemeHTTP                       = "http"
 	URLSchemeHTTPS                      = "https"
 	HostLocalhost                       = "localhost"

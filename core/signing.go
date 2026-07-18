@@ -46,10 +46,8 @@ const (
 	SigningDomainReleasePlan                    = SigningDomain(SchemaReleasePlan)
 	SigningDomainReleaseRootLayout              = SigningDomain(SchemaReleaseRootLayout)
 	SigningDomainReleaseCommandRun              = SigningDomain(SchemaReleaseCommandRun)
-	SigningDomainReleaseSeedGrant               = SigningDomain(SchemaReleaseSeedGrant)
 	SigningDomainReleaseUpdateCheckResponse     = SigningDomain(SchemaReleaseUpdateCheckResponse)
 	SigningDomainReleaseUpdateDiagnosticReceipt = SigningDomain(SchemaReleaseUpdateDiagnosticReceipt)
-	SigningDomainReleaseSeedGrantAccess         = SigningDomain(SchemaReleaseSeedGrantAccess)
 	SigningDomainWitnessCustodyDownloadGrant    = SigningDomain(SchemaCustodyDownloadGrant)
 )
 
@@ -71,10 +69,8 @@ const (
 	SigningDomainTokenReleasePlan                    = "release-plan-" + ContractYear
 	SigningDomainTokenReleaseRootLayout              = "release-root-layout-" + ContractYear
 	SigningDomainTokenReleaseCommandRun              = "release-command-run-" + ContractYear
-	SigningDomainTokenReleaseSeedGrant               = "release-seed-grant-" + ContractYear
 	SigningDomainTokenReleaseUpdateCheckResponse     = "release-update-check-response-" + ContractYear
 	SigningDomainTokenReleaseUpdateDiagnosticReceipt = "release-update-diagnostic-receipt-" + ContractYear
-	SigningDomainTokenReleaseSeedGrantAccess         = "release-seed-grant-access-" + ContractYear
 	SigningDomainTokenWitnessCustodyDownloadGrant    = "witness-custody-download-grant-" + ContractYear
 	ErrFmtSigningDomain                              = "core.SigningDomain: %w"
 )
@@ -98,10 +94,8 @@ func signingDomainNames() [SchemaCustodyDownloadGrant + 1]string {
 		SigningDomainReleasePlan:                    SigningDomainTokenReleasePlan,
 		SigningDomainReleaseRootLayout:              SigningDomainTokenReleaseRootLayout,
 		SigningDomainReleaseCommandRun:              SigningDomainTokenReleaseCommandRun,
-		SigningDomainReleaseSeedGrant:               SigningDomainTokenReleaseSeedGrant,
 		SigningDomainReleaseUpdateCheckResponse:     SigningDomainTokenReleaseUpdateCheckResponse,
 		SigningDomainReleaseUpdateDiagnosticReceipt: SigningDomainTokenReleaseUpdateDiagnosticReceipt,
-		SigningDomainReleaseSeedGrantAccess:         SigningDomainTokenReleaseSeedGrantAccess,
 		SigningDomainWitnessCustodyDownloadGrant:    SigningDomainTokenWitnessCustodyDownloadGrant,
 	}
 }

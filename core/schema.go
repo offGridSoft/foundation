@@ -36,7 +36,6 @@ const (
 	SchemaReleasePlan
 	SchemaReleaseRootLayout
 	SchemaReleaseCommandRun
-	SchemaReleaseSeedGrant
 	SchemaReleaseDeployPrepareRequest
 	SchemaReleaseDeployPrepareResponse
 	SchemaReleaseDeployFinalizeRequest
@@ -50,10 +49,11 @@ const (
 	SchemaBugSeatMember
 	SchemaBugSeatInvite
 	SchemaBugSeatAssignment
-	SchemaReleaseSeedGrantAccess
 	SchemaWitnessCheckInTimeCommitment
 	SchemaCustodyDownloadRequest
 	SchemaCustodyDownloadGrant
+	SchemaReleaseDataRequest
+	SchemaReleaseDataResponse
 )
 
 const (
@@ -84,7 +84,6 @@ const (
 	SchemaTokenReleasePlan                    = "offgrid-release-plan-" + ContractVersionToken
 	SchemaTokenReleaseRootLayout              = "offgrid-release-root-layout-" + ContractVersionToken
 	SchemaTokenReleaseCommandRun              = "offgrid-release-command-run-" + ContractVersionToken
-	SchemaTokenReleaseSeedGrant               = "offgrid-release-seed-grant-" + ContractVersionToken
 	SchemaTokenReleaseDeployPrepareRequest    = "offgrid-release-deploy-prepare-request-" + ContractVersionToken
 	SchemaTokenReleaseDeployPrepareResponse   = "offgrid-release-deploy-prepare-response-" + ContractVersionToken
 	SchemaTokenReleaseDeployFinalizeRequest   = "offgrid-release-deploy-finalize-request-" + ContractVersionToken
@@ -95,12 +94,13 @@ const (
 	SchemaTokenReleaseUpdateDiagnostic        = "offgrid-release-update-diagnostic-" + ContractVersionToken
 	SchemaTokenReleaseUpdateDiagnosticReceipt = "offgrid-release-update-diagnostic-receipt-" + ContractVersionToken
 	SchemaTokenReleaseGateReport              = "offgrid-release-gate-report-" + ContractVersionToken
-	SchemaTokenReleaseSeedGrantAccess         = "offgrid-release-seed-grant-access-" + ContractVersionToken
 	SchemaTokenCustodyDownloadRequest         = ProductTokenWitness + "-custody-download-request-" + ContractVersionToken
 	SchemaTokenCustodyDownloadGrant           = ProductTokenWitness + "-custody-download-grant-" + ContractVersionToken
+	SchemaTokenReleaseDataRequest             = "offgrid-release-data-request-" + ContractVersionToken
+	SchemaTokenReleaseDataResponse            = "offgrid-release-data-response-" + ContractVersionToken
 )
 
-func schemaNames() [SchemaCustodyDownloadGrant + 1]string {
+func schemaNames() [SchemaReleaseDataResponse + 1]string {
 	return [...]string{
 		SchemaBugUsage:                       SchemaTokenBugUsage,
 		SchemaWitnessUsage:                   SchemaTokenWitnessUsage,
@@ -125,7 +125,6 @@ func schemaNames() [SchemaCustodyDownloadGrant + 1]string {
 		SchemaReleasePlan:                    SchemaTokenReleasePlan,
 		SchemaReleaseRootLayout:              SchemaTokenReleaseRootLayout,
 		SchemaReleaseCommandRun:              SchemaTokenReleaseCommandRun,
-		SchemaReleaseSeedGrant:               SchemaTokenReleaseSeedGrant,
 		SchemaReleaseDeployPrepareRequest:    SchemaTokenReleaseDeployPrepareRequest,
 		SchemaReleaseDeployPrepareResponse:   SchemaTokenReleaseDeployPrepareResponse,
 		SchemaReleaseDeployFinalizeRequest:   SchemaTokenReleaseDeployFinalizeRequest,
@@ -139,10 +138,11 @@ func schemaNames() [SchemaCustodyDownloadGrant + 1]string {
 		SchemaBugSeatMember:                  SchemaTokenBugSeatMember,
 		SchemaBugSeatInvite:                  SchemaTokenBugSeatInvite,
 		SchemaBugSeatAssignment:              SchemaTokenBugSeatAssignment,
-		SchemaReleaseSeedGrantAccess:         SchemaTokenReleaseSeedGrantAccess,
 		SchemaWitnessCheckInTimeCommitment:   SchemaTokenWitnessCheckInTimeCommitment,
 		SchemaCustodyDownloadRequest:         SchemaTokenCustodyDownloadRequest,
 		SchemaCustodyDownloadGrant:           SchemaTokenCustodyDownloadGrant,
+		SchemaReleaseDataRequest:             SchemaTokenReleaseDataRequest,
+		SchemaReleaseDataResponse:            SchemaTokenReleaseDataResponse,
 	}
 }
 

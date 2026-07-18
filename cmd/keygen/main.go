@@ -1,7 +1,7 @@
 // Command keygen mints one key in the exact canonical form Foundation's ingress
 // accepts: an Ed25519 offline-authority signing key (-kind ed25519), a
 // symmetric random secret (-kind secret, for HMAC / AEAD / CSRF / pepper), or
-// a release-obfuscation custody seed (-kind garble-custody). Key material is
+// a release-obfuscation custody root (-kind garble). Key material is
 // written only to a caller-named file (0600); an ed25519 key's public hex prints
 // to stdout. It never writes secret material to the terminal and holds no key
 // material after exit.
@@ -26,7 +26,8 @@ const (
 var errPrivateMaterialFile = errors.New("keygen private material file")
 
 func main() {
-	kind := flag.String("kind", "", "key kind: ed25519 | secret | garble-custody")
+	kindUsage := fmt.Sprintf("key kind: %s | %s | %s", core.KeygenKindTokenEd25519, core.KeygenKindTokenSecret, core.KeygenKindTokenGarble)
+	kind := flag.String("kind", "", kindUsage)
 	out := flag.String("out", "", "file path to write the private key / secret (created 0600)")
 	bytesLen := flag.Int("bytes", core.SecretByteStandard, "secret width in bytes (kind=secret only)")
 	flag.Parse()
@@ -37,7 +38,7 @@ func main() {
 	}
 	parsedKind, err := core.ParseKeygenKind(*kind)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "keygen: -kind must be %q, %q, or %q\n", core.KeygenKindTokenEd25519, core.KeygenKindTokenSecret, core.KeygenKindTokenGarbleCustody)
+		fmt.Fprintf(os.Stderr, "keygen: -kind must be %q, %q, or %q\n", core.KeygenKindTokenEd25519, core.KeygenKindTokenSecret, core.KeygenKindTokenGarble)
 		os.Exit(2)
 	}
 

@@ -425,7 +425,10 @@ func verifyDownloadStream(httpResponse *http.Response, target DownloadTarget, ds
 		_, _ = io.Copy(io.Discard, io.LimitReader(httpResponse.Body, CustodyTransferResponseMaxBytes))
 		return CustodyHTTPError{StatusCode: httpResponse.StatusCode, Cause: core.ErrCustodyContract}
 	}
-	size := int64(target.Size.Uint64())
+	size, err := target.Size.Int64()
+	if err != nil {
+		return fmt.Errorf(ErrFmtDownloadArtifact, err)
+	}
 	hasher := sha256.New()
 	copied, err := io.Copy(io.MultiWriter(dst, hasher), io.LimitReader(httpResponse.Body, size+1))
 	if err != nil {

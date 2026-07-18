@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/offGridSoft/foundation/v2026/core"
-	"github.com/offGridSoft/foundation/v2026/release"
 )
 
 func TestGenerateEd25519SigningKeyProducesDistinctValidatedContracts(t *testing.T) {
@@ -52,7 +51,7 @@ func TestGenerateGarbleCustodySeedProducesDistinctValidatedContracts(t *testing.
 	if err != nil {
 		t.Fatalf("first.MarshalText() error = %v", err)
 	}
-	if _, err := release.ParseGarbleCustodySeed(string(encoded)); err != nil {
+	if _, err := core.ParseGarbleCustodySeed(string(encoded)); err != nil {
 		t.Fatalf("ParseGarbleCustodySeed(MarshalText()) error = %v", err)
 	}
 }

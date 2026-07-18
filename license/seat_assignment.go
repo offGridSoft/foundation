@@ -241,11 +241,11 @@ func (s *BugSeatAssignmentStatus) UnmarshalJSON(data []byte) error {
 }
 
 type BugSeatMember struct {
+	DeactivatedAt  *core.UnixNanoTime    `json:"deactivated_at,omitempty"`
 	MemberID       BugSeatMemberID       `json:"member_id"`
 	AccountSubject BugSeatAccountSubject `json:"account_subject"`
 	InviteAddress  BugSeatInviteAddress  `json:"invite_address"`
 	ActivatedAt    core.UnixNanoTime     `json:"activated_at"`
-	DeactivatedAt  *core.UnixNanoTime    `json:"deactivated_at,omitempty"`
 	Generation     BugSeatGeneration     `json:"generation"`
 	Schema         core.SchemaID         `json:"schema"`
 	Status         BugSeatMemberStatus   `json:"status"`
@@ -295,6 +295,8 @@ func validateSeatMemberState(member BugSeatMember) error {
 }
 
 type BugSeatInvite struct {
+	ResolvedAt       *core.UnixNanoTime   `json:"resolved_at,omitempty"`
+	AcceptedMemberID *BugSeatMemberID     `json:"accepted_member_id,omitempty"`
 	InviteID         BugSeatInviteID      `json:"invite_id"`
 	SeatID           BugSeatID            `json:"seat_id"`
 	OwnerMemberID    BugSeatMemberID      `json:"owner_member_id"`
@@ -302,8 +304,6 @@ type BugSeatInvite struct {
 	TokenDigest      core.SHA256Hex       `json:"token_digest"`
 	CreatedAt        core.UnixNanoTime    `json:"created_at"`
 	ExpiresAt        core.UnixNanoTime    `json:"expires_at"`
-	ResolvedAt       *core.UnixNanoTime   `json:"resolved_at,omitempty"`
-	AcceptedMemberID *BugSeatMemberID     `json:"accepted_member_id,omitempty"`
 	Generation       BugSeatGeneration    `json:"generation"`
 	Schema           core.SchemaID        `json:"schema"`
 	Status           BugSeatInviteStatus  `json:"status"`
@@ -387,12 +387,12 @@ func validSeatResolution(invite BugSeatInvite, accepted bool) bool {
 }
 
 type BugSeatAssignment struct {
+	EndedAt       *core.UnixNanoTime      `json:"ended_at,omitempty"`
 	AssignmentID  BugSeatAssignmentID     `json:"assignment_id"`
 	SeatID        BugSeatID               `json:"seat_id"`
 	OwnerMemberID BugSeatMemberID         `json:"owner_member_id"`
 	MemberID      BugSeatMemberID         `json:"member_id"`
 	AssignedAt    core.UnixNanoTime       `json:"assigned_at"`
-	EndedAt       *core.UnixNanoTime      `json:"ended_at,omitempty"`
 	Generation    BugSeatGeneration       `json:"generation"`
 	Schema        core.SchemaID           `json:"schema"`
 	Status        BugSeatAssignmentStatus `json:"status"`

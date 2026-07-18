@@ -85,14 +85,14 @@ const (
 )
 
 const (
-	CommandStatusTokenSucceeded = "succeeded"
-	CommandStatusTokenFailed    = "failed"
+	ReleaseResultTokenSucceeded = "succeeded"
+	ReleaseResultTokenFailed    = "failed"
 )
 
 func commandStatusNames() [CommandStatusFailed + 1]string {
 	return [...]string{
-		CommandStatusSucceeded: CommandStatusTokenSucceeded,
-		CommandStatusFailed:    CommandStatusTokenFailed,
+		CommandStatusSucceeded: ReleaseResultTokenSucceeded,
+		CommandStatusFailed:    ReleaseResultTokenFailed,
 	}
 }
 

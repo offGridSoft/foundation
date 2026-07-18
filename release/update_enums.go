@@ -128,7 +128,7 @@ const (
 )
 
 func selfTestStatusNames() [SelfTestStatusFailed + 1]string {
-	return [...]string{SelfTestStatusPassed: "passed", SelfTestStatusFailed: "failed"}
+	return [...]string{SelfTestStatusPassed: "passed", SelfTestStatusFailed: ReleaseResultTokenFailed}
 }
 
 func (s SelfTestStatus) String() string {
@@ -283,8 +283,8 @@ const (
 func rollbackOutcomeNames() [RollbackOutcomeFailed + 1]string {
 	return [...]string{
 		RollbackOutcomeNotRequired: "not_required",
-		RollbackOutcomeSucceeded:   "succeeded",
-		RollbackOutcomeFailed:      "failed",
+		RollbackOutcomeSucceeded:   ReleaseResultTokenSucceeded,
+		RollbackOutcomeFailed:      ReleaseResultTokenFailed,
 	}
 }
 

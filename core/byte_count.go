@@ -1,6 +1,9 @@
 package core
 
-import "fmt"
+import (
+	"fmt"
+	"math"
+)
 
 const ErrFmtByteCount = "core.ByteCount: %w"
 
@@ -14,6 +17,17 @@ func NewByteCount(value uint64) ByteCount {
 
 func (c ByteCount) Uint64() uint64 {
 	return c.value
+}
+
+// Int64 returns the checked signed representation required by streaming APIs.
+func (c ByteCount) Int64() (int64, error) {
+	if err := c.Validate(); err != nil {
+		return 0, err
+	}
+	if c.value > math.MaxInt64 {
+		return 0, fmt.Errorf(ErrFmtByteCount, ErrFoundationContract)
+	}
+	return int64(c.value), nil
 }
 
 func (c ByteCount) Validate() error {

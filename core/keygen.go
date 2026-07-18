@@ -37,9 +37,9 @@ const (
 )
 
 const (
-	KeygenKindTokenEd25519       = "ed25519"
-	KeygenKindTokenSecret        = "secret"
-	KeygenKindTokenGarbleCustody = "garble-custody"
+	KeygenKindTokenEd25519 = "ed25519"
+	KeygenKindTokenSecret  = "secret"
+	KeygenKindTokenGarble  = "garble"
 )
 
 func (k KeygenKind) IsValid() bool { return k > KeygenKindInvalid && k < keygenKindSentinel }
@@ -81,7 +81,7 @@ func (k KeygenKind) String() string {
 	case KeygenKindSecret:
 		return KeygenKindTokenSecret
 	case KeygenKindGarbleCustody:
-		return KeygenKindTokenGarbleCustody
+		return KeygenKindTokenGarble
 	default:
 		return ""
 	}
@@ -93,7 +93,7 @@ func ParseKeygenKind(value string) (KeygenKind, error) {
 		return KeygenKindEd25519, nil
 	case KeygenKindTokenSecret:
 		return KeygenKindSecret, nil
-	case KeygenKindTokenGarbleCustody:
+	case KeygenKindTokenGarble:
 		return KeygenKindGarbleCustody, nil
 	default:
 		return KeygenKindInvalid, fmt.Errorf(ErrFmtKeygenKind, ErrKeygenContract)
@@ -109,8 +109,27 @@ func ParseKeygenKind(value string) (KeygenKind, error) {
 // public, so no caller can emit a key the ingress would reject or whose public
 // half disagrees with its private.
 type GeneratedSigningKey struct {
-	PrivateKeyBase64 string
-	PublicKeyHex     Ed25519PublicKeyHex
+	PrivateKeyBase64 string              `json:"private_key_base64"`
+	PublicKeyHex     Ed25519PublicKeyHex `json:"public_key_hex"`
+}
+
+// ParseGeneratedSigningKey derives the public half from the canonical private
+// key representation. Secret stores therefore persist one value while every
+// consumer receives a complete, self-validating keypair contract.
+func ParseGeneratedSigningKey(privateKeyBase64 string) (GeneratedSigningKey, error) {
+	key, err := ParseEd25519SigningKeyBase64(privateKeyBase64)
+	if err != nil {
+		return GeneratedSigningKey{}, fmt.Errorf(ErrFmtGeneratedSigningKey, errors.Join(ErrKeygenContract, err))
+	}
+	publicKey, err := key.PublicKey()
+	if err != nil {
+		return GeneratedSigningKey{}, fmt.Errorf(ErrFmtGeneratedSigningKey, errors.Join(ErrKeygenContract, err))
+	}
+	generated := GeneratedSigningKey{PrivateKeyBase64: privateKeyBase64, PublicKeyHex: publicKey}
+	if err := generated.Validate(); err != nil {
+		return GeneratedSigningKey{}, err
+	}
+	return generated, nil
 }
 
 // Validate re-parses the private base64 through the single canonical contract

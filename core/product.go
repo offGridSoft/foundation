@@ -19,11 +19,13 @@ const (
 	FoundationVersion2026 = ContractYear + ".0.0"
 	// FoundationModulePath and the package paths derived from it are the
 	// compiler-owned Go import identities used by every consuming generator.
-	FoundationModulePath         = "github.com/offGridSoft/foundation/" + ContractVersionToken
-	FoundationCorePackagePath    = FoundationModulePath + "/core"
-	FoundationCustodyPackagePath = FoundationModulePath + "/custody"
-	FoundationLicensePackagePath = FoundationModulePath + "/license"
-	FoundationReleasePackagePath = FoundationModulePath + "/release"
+	FoundationModulePath                  = "github.com/offGridSoft/foundation/" + ContractVersionToken
+	FoundationCorePackagePath             = FoundationModulePath + "/core"
+	FoundationCustodyPackagePath          = FoundationModulePath + "/custody"
+	FoundationLicensePackagePath          = FoundationModulePath + "/license"
+	FoundationPeachfuzzPackagePath        = FoundationModulePath + "/peachfuzz"
+	FoundationReleasePackagePath          = FoundationModulePath + "/release"
+	FoundationWorkloadIdentityPackagePath = FoundationModulePath + "/workloadidentity"
 )
 
 func ParseProductVersion(value string) (ProductVersion, error) {

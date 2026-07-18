@@ -12,7 +12,6 @@ import (
 	"fmt"
 
 	"github.com/offGridSoft/foundation/v2026/core"
-	"github.com/offGridSoft/foundation/v2026/release"
 )
 
 // GenerateEd25519SigningKey mints a fresh signing key from the system CSPRNG
@@ -41,15 +40,15 @@ func GenerateEd25519SigningKey() (core.GeneratedSigningKey, error) {
 // seed. Release-specific Garble seeds are derived from this value and a typed
 // release identity; callers persist only the custody seed in their secret
 // manager and never invent an encoding outside Foundation.
-func GenerateGarbleCustodySeed() (release.GarbleCustodySeed, error) {
-	raw := make([]byte, release.GarbleCustodySeedBytes)
+func GenerateGarbleCustodySeed() (core.GarbleCustodySeed, error) {
+	raw := make([]byte, core.GarbleCustodySeedBytes)
 	defer clear(raw)
 	if _, err := rand.Read(raw); err != nil {
-		return release.GarbleCustodySeed{}, fmt.Errorf(core.ErrFmtGeneratedSecret, errors.Join(core.ErrKeygenEntropy, err))
+		return core.GarbleCustodySeed{}, fmt.Errorf(core.ErrFmtGeneratedSecret, errors.Join(core.ErrKeygenEntropy, err))
 	}
-	seed, err := release.NewGarbleCustodySeed(raw)
+	seed, err := core.NewGarbleCustodySeed(raw)
 	if err != nil {
-		return release.GarbleCustodySeed{}, fmt.Errorf(core.ErrFmtGeneratedSecret, errors.Join(core.ErrKeygenContract, err))
+		return core.GarbleCustodySeed{}, fmt.Errorf(core.ErrFmtGeneratedSecret, errors.Join(core.ErrKeygenContract, err))
 	}
 	return seed, nil
 }
