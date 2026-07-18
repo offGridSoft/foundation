@@ -7,14 +7,40 @@ import (
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
-var _ core.CanonicalBody = BugCheckInTimeCommitmentBody{}
+var (
+	_ core.CanonicalBody = CheckInTimeCommitmentBody[BugCheckInGrant]{}
+	_ core.CanonicalBody = CheckInTimeCommitmentBody[WitnessCheckInGrant]{}
+)
 
-// BugCheckInTimeCommitmentBody is the narrow server-time authority persisted
-// by Bug after a granted online check-in. Its independent signature binds the
-// observed time to the exact device, lease progression, and response nonce.
-// Local clocks remain availability inputs and are never promoted into this
-// authority.
-type BugCheckInTimeCommitmentBody struct {
+// CheckInTimeCommitmentGrant is the compiler-owned binding between a product
+// check-in grant and its signed server-time commitment. Each grant type pins
+// the exact commitment schema its product signs under; because the signing
+// domain is resolved from that schema, a commitment instantiated for one
+// product can never validate — and therefore never verify — under another
+// product's grant type.
+type CheckInTimeCommitmentGrant interface {
+	core.Validatable
+	TimeCommitmentSchema() core.SchemaID
+	LeaseIdentity() CheckInLeaseIdentity
+}
+
+// CheckInLeaseIdentity is the durable lease identity a time commitment binds
+// to: the exact device, lease, and generation the server observed. It is a
+// projection from a validated grant, never an independently trusted input.
+type CheckInLeaseIdentity struct {
+	DeviceFingerprint core.DeviceFingerprint
+	LeaseID           core.LeaseID
+	Generation        LeaseGeneration
+}
+
+// CheckInTimeCommitmentBody is the narrow server-time authority persisted by
+// a product after a granted online check-in. Its independent signature binds
+// the observed time to the exact device, lease progression, and response
+// nonce. Local clocks remain availability inputs and are never promoted into
+// this authority. The grant type parameter pins the product schema and the
+// grant MatchesGrant binds against; wire bytes are identical across products
+// except for the product-distinct schema value.
+type CheckInTimeCommitmentBody[G CheckInTimeCommitmentGrant] struct {
 	DeviceFingerprint core.DeviceFingerprint `json:"device_fingerprint"`
 	LeaseID           core.LeaseID           `json:"lease_id"`
 	RequestNonce      CheckInNonce           `json:"request_nonce"`
@@ -23,8 +49,9 @@ type BugCheckInTimeCommitmentBody struct {
 	Schema            core.SchemaID          `json:"schema"`
 }
 
-func (b BugCheckInTimeCommitmentBody) Validate() error {
-	if b.Schema != core.SchemaBugCheckInTimeCommitment {
+func (b CheckInTimeCommitmentBody[G]) Validate() error {
+	var grant G
+	if b.Schema != grant.TimeCommitmentSchema() {
 		return checkInTimeCommitmentError(core.ErrLicenseContract)
 	}
 	if err := b.DeviceFingerprint.Validate(); err != nil {
@@ -45,7 +72,7 @@ func (b BugCheckInTimeCommitmentBody) Validate() error {
 	return nil
 }
 
-func (b BugCheckInTimeCommitmentBody) Canonical(dst []byte) ([]byte, error) {
+func (b CheckInTimeCommitmentBody[G]) Canonical(dst []byte) ([]byte, error) {
 	if err := b.Validate(); err != nil {
 		return nil, err
 	}
@@ -63,13 +90,13 @@ func (b BugCheckInTimeCommitmentBody) Canonical(dst []byte) ([]byte, error) {
 	return append(dst, '}'), nil
 }
 
-func (b BugCheckInTimeCommitmentBody) SigningSchema() core.SchemaID { return b.Schema }
+func (b CheckInTimeCommitmentBody[G]) SigningSchema() core.SchemaID { return b.Schema }
 
-func (b BugCheckInTimeCommitmentBody) MarshalJSON() ([]byte, error) {
+func (b CheckInTimeCommitmentBody[G]) MarshalJSON() ([]byte, error) {
 	return b.Canonical(nil)
 }
 
-func (b BugCheckInTimeCommitmentBody) MatchesGrant(grant BugCheckInGrant, nonce CheckInNonce) error {
+func (b CheckInTimeCommitmentBody[G]) MatchesGrant(grant G, nonce CheckInNonce) error {
 	if err := b.matchesStoredGrant(grant); err != nil {
 		return err
 	}
@@ -87,18 +114,18 @@ func (b BugCheckInTimeCommitmentBody) MatchesGrant(grant BugCheckInGrant, nonce 
 // consumed. The signed commitment still retains that nonce as audit evidence;
 // resolve-time validation deliberately does not pretend to compare it against
 // an unavailable pending request.
-func (b BugCheckInTimeCommitmentBody) MatchesStoredGrant(grant BugCheckInGrant) error {
+func (b CheckInTimeCommitmentBody[G]) MatchesStoredGrant(grant G) error {
 	return b.matchesStoredGrant(grant)
 }
 
-func (b BugCheckInTimeCommitmentBody) matchesStoredGrant(grant BugCheckInGrant) error {
+func (b CheckInTimeCommitmentBody[G]) matchesStoredGrant(grant G) error {
 	if err := b.Validate(); err != nil {
 		return err
 	}
 	if err := grant.Validate(); err != nil {
 		return checkInTimeCommitmentError(err)
 	}
-	lease := grant.Lease.Body
+	lease := grant.LeaseIdentity()
 	if b.DeviceFingerprint.String() != lease.DeviceFingerprint.String() ||
 		b.LeaseID.String() != lease.LeaseID.String() ||
 		b.LeaseGeneration != lease.Generation {

@@ -19,6 +19,9 @@ func TestSignedBodyCanonicalProjectionCoversEveryTaggedField(t *testing.T) {
 	grant, _, _ := signedBugGrant(t)
 	bugResponse := testGrantedBugResponse(t, grant).Authority.Body
 	bugResponse.UpdateNotice = testUpdateNotice(t, core.ProductBug)
+	witnessGrant, _, _ := signedWitnessGrant(t)
+	witnessResponse := testGrantedWitnessResponse(t, witnessGrant).Authority.Body
+	witnessResponse.UpdateNotice = testUpdateNotice(t, core.ProductWitness)
 	for _, tc := range []struct {
 		body core.CanonicalBody
 		name string
@@ -30,27 +33,14 @@ func TestSignedBodyCanonicalProjectionCoversEveryTaggedField(t *testing.T) {
 		{name: "writer revocation", body: testBugWriterRevocation(t)},
 		{name: "bug check-in time commitment", body: bugResponse.TimeCommitment.Body},
 		{name: "bug response", body: bugResponse},
-		{name: "witness response", body: refusedWitnessResponseBody(t)},
+		{name: "witness check-in time commitment", body: witnessResponse.TimeCommitment.Body},
+		{name: "witness response", body: witnessResponse},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			requireCanonicalJSONFieldCoverage(t, tc.body)
 		})
 	}
-}
-
-func refusedWitnessResponseBody(t *testing.T) WitnessCheckInResponseBody {
-	t.Helper()
-	body := WitnessCheckInResponseBody{
-		Schema:       core.SchemaWitnessCheckInResponse,
-		RequestNonce: testCheckInNonce(t),
-		Decision:     CheckInDecision{Refusal: RefusalPaymentRequired, Remediation: RemediationUpdatePayment},
-		UpdateNotice: testUpdateNotice(t, core.ProductWitness),
-	}
-	if err := body.Validate(); err != nil {
-		t.Fatalf("WitnessCheckInResponseBody.Validate() error = %v", err)
-	}
-	return body
 }
 
 func testUpdateNotice(t *testing.T, product core.Product) *core.UpdateNotice {

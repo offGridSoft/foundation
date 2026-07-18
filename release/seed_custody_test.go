@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -153,6 +154,13 @@ func TestEffectiveSeedBindsReleaseAndDoesNotAliasCustodyBytes(t *testing.T) {
 	}
 	if firstSeed == secondSeed {
 		t.Fatalf("EffectiveSeed() first = %q, second = %q, want distinct release-bound seeds", firstSeed.String(), secondSeed.String())
+	}
+	if strings.Contains(firstSeed.String(), "=") || len(firstSeed.String()) != GarbleSeedEncodedBytes {
+		t.Fatalf("EffectiveSeed() = %q, want Garble's exact %d-byte unpadded base64 contract", firstSeed.String(), GarbleSeedEncodedBytes)
+	}
+	decoded, err := base64.RawStdEncoding.DecodeString(firstSeed.String())
+	if err != nil || len(decoded) != GarbleSeedBytes {
+		t.Fatalf("RawStdEncoding.DecodeString(EffectiveSeed()) bytes = %d, error = %v, want %d bytes and nil", len(decoded), err, GarbleSeedBytes)
 	}
 	copyBytes := first.Seed.Bytes()
 	copyBytes[0] ^= 0xff

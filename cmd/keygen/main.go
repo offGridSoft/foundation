@@ -1,9 +1,10 @@
 // Command keygen mints one key in the exact canonical form Foundation's ingress
-// accepts: an Ed25519 offline-authority signing key (-kind ed25519) or a
-// symmetric random secret (-kind secret, for HMAC / AEAD / CSRF / pepper). Key
-// material is written only to a caller-named file (0600); an ed25519 key's
-// public hex prints to stdout. It never writes secret material to the terminal
-// and holds no key material after exit.
+// accepts: an Ed25519 offline-authority signing key (-kind ed25519), a
+// symmetric random secret (-kind secret, for HMAC / AEAD / CSRF / pepper), or
+// a release-obfuscation custody seed (-kind garble-custody). Key material is
+// written only to a caller-named file (0600); an ed25519 key's public hex prints
+// to stdout. It never writes secret material to the terminal and holds no key
+// material after exit.
 package main
 
 import (
@@ -25,7 +26,7 @@ const (
 var errPrivateMaterialFile = errors.New("keygen private material file")
 
 func main() {
-	kind := flag.String("kind", "", "key kind: ed25519 | secret")
+	kind := flag.String("kind", "", "key kind: ed25519 | secret | garble-custody")
 	out := flag.String("out", "", "file path to write the private key / secret (created 0600)")
 	bytesLen := flag.Int("bytes", core.SecretByteStandard, "secret width in bytes (kind=secret only)")
 	flag.Parse()
@@ -36,7 +37,7 @@ func main() {
 	}
 	parsedKind, err := core.ParseKeygenKind(*kind)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "keygen: -kind must be %q or %q\n", core.KeygenKindTokenEd25519, core.KeygenKindTokenSecret)
+		fmt.Fprintf(os.Stderr, "keygen: -kind must be %q, %q, or %q\n", core.KeygenKindTokenEd25519, core.KeygenKindTokenSecret, core.KeygenKindTokenGarbleCustody)
 		os.Exit(2)
 	}
 
@@ -46,11 +47,30 @@ func main() {
 		genErr = writeSigningKey(*out)
 	case core.KeygenKindSecret:
 		genErr = writeSecret(*out, *bytesLen)
+	case core.KeygenKindGarbleCustody:
+		genErr = writeGarbleCustodySeed(*out)
 	}
 	if genErr != nil {
 		fmt.Fprintf(os.Stderr, "keygen: %v\n", genErr)
 		os.Exit(1)
 	}
+}
+
+func writeGarbleCustodySeed(path string) error {
+	seed, err := foundationkeygen.GenerateGarbleCustodySeed()
+	if err != nil {
+		return err
+	}
+	material, err := seed.MarshalText()
+	if err != nil {
+		return err
+	}
+	defer clear(material)
+	if err := writePrivateMaterial(path, string(material)); err != nil {
+		return err
+	}
+	fmt.Println("garble custody seed written to the requested owner-only file — store it, then delete the file")
+	return nil
 }
 
 func writeSigningKey(path string) error {

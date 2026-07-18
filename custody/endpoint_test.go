@@ -17,6 +17,7 @@ func TestWitnessCustodyEndpointContractsTable(t *testing.T) {
 		{name: "root", got: OffgridWitnessCustodyRootPath, want: wantRoot},
 		{name: "open", got: OffgridWitnessCustodyOpenPath, want: wantRoot + "/open"},
 		{name: "finalize", got: OffgridWitnessCustodyFinalizePath, want: wantRoot + "/finalize"},
+		{name: "download", got: OffgridWitnessCustodyDownloadPath, want: wantRoot + "/download"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -37,6 +37,7 @@ const (
 	SigningDomainBugWriterRevocation            = SigningDomain(SchemaBugWriterRevocation)
 	SigningDomainWitnessSubscriptionLease       = SigningDomain(SchemaWitnessSubscription)
 	SigningDomainWitnessCheckInResponse         = SigningDomain(SchemaWitnessCheckInResponse)
+	SigningDomainWitnessCheckInTimeCommitment   = SigningDomain(SchemaWitnessCheckInTimeCommitment)
 	SigningDomainWitnessCustodyReceipt          = SigningDomain(SchemaCustodyReceipt)
 	SigningDomainReleaseManifest                = SigningDomain(SchemaReleaseManifest)
 	SigningDomainReleaseUploadReceipt           = SigningDomain(SchemaReleaseUploadReceipt)
@@ -49,6 +50,7 @@ const (
 	SigningDomainReleaseUpdateCheckResponse     = SigningDomain(SchemaReleaseUpdateCheckResponse)
 	SigningDomainReleaseUpdateDiagnosticReceipt = SigningDomain(SchemaReleaseUpdateDiagnosticReceipt)
 	SigningDomainReleaseSeedGrantAccess         = SigningDomain(SchemaReleaseSeedGrantAccess)
+	SigningDomainWitnessCustodyDownloadGrant    = SigningDomain(SchemaCustodyDownloadGrant)
 )
 
 const (
@@ -60,6 +62,7 @@ const (
 	SigningDomainTokenBugWriterRevocation            = "bug-writer-revocation-" + ContractYear
 	SigningDomainTokenWitnessSubscriptionLease       = "witness-subscription-lease-" + ContractYear
 	SigningDomainTokenWitnessCheckInResponse         = "witness-check-in-response-" + ContractYear
+	SigningDomainTokenWitnessCheckInTimeCommitment   = "witness-check-in-time-commitment-" + ContractYear
 	SigningDomainTokenWitnessCustodyReceipt          = "witness-custody-receipt-" + ContractYear
 	SigningDomainTokenReleaseManifest                = "release-manifest-" + ContractYear
 	SigningDomainTokenReleaseUploadReceipt           = "release-upload-receipt-" + ContractYear
@@ -72,11 +75,12 @@ const (
 	SigningDomainTokenReleaseUpdateCheckResponse     = "release-update-check-response-" + ContractYear
 	SigningDomainTokenReleaseUpdateDiagnosticReceipt = "release-update-diagnostic-receipt-" + ContractYear
 	SigningDomainTokenReleaseSeedGrantAccess         = "release-seed-grant-access-" + ContractYear
+	SigningDomainTokenWitnessCustodyDownloadGrant    = "witness-custody-download-grant-" + ContractYear
 	ErrFmtSigningDomain                              = "core.SigningDomain: %w"
 )
 
-func signingDomainNames() [SchemaReleaseSeedGrantAccess + 1]string {
-	return [SchemaReleaseSeedGrantAccess + 1]string{
+func signingDomainNames() [SchemaCustodyDownloadGrant + 1]string {
+	return [SchemaCustodyDownloadGrant + 1]string{
 		SigningDomainBugCheckInResponse:             SigningDomainTokenBugCheckInResponse,
 		SigningDomainBugCheckInTimeCommitment:       SigningDomainTokenBugCheckInTimeCommitment,
 		SigningDomainBugSeatLease:                   SigningDomainTokenBugSeatLease,
@@ -85,6 +89,7 @@ func signingDomainNames() [SchemaReleaseSeedGrantAccess + 1]string {
 		SigningDomainBugWriterRevocation:            SigningDomainTokenBugWriterRevocation,
 		SigningDomainWitnessSubscriptionLease:       SigningDomainTokenWitnessSubscriptionLease,
 		SigningDomainWitnessCheckInResponse:         SigningDomainTokenWitnessCheckInResponse,
+		SigningDomainWitnessCheckInTimeCommitment:   SigningDomainTokenWitnessCheckInTimeCommitment,
 		SigningDomainWitnessCustodyReceipt:          SigningDomainTokenWitnessCustodyReceipt,
 		SigningDomainReleaseManifest:                SigningDomainTokenReleaseManifest,
 		SigningDomainReleaseUploadReceipt:           SigningDomainTokenReleaseUploadReceipt,
@@ -97,6 +102,7 @@ func signingDomainNames() [SchemaReleaseSeedGrantAccess + 1]string {
 		SigningDomainReleaseUpdateCheckResponse:     SigningDomainTokenReleaseUpdateCheckResponse,
 		SigningDomainReleaseUpdateDiagnosticReceipt: SigningDomainTokenReleaseUpdateDiagnosticReceipt,
 		SigningDomainReleaseSeedGrantAccess:         SigningDomainTokenReleaseSeedGrantAccess,
+		SigningDomainWitnessCustodyDownloadGrant:    SigningDomainTokenWitnessCustodyDownloadGrant,
 	}
 }
 

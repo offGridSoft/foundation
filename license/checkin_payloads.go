@@ -257,6 +257,9 @@ func ParseAccountToken(value string) (AccountToken, error) {
 	if err := core.ValidateOpaqueToken(value, core.OpaqueTokenDefaultMaxRunes); err != nil {
 		return AccountToken{}, fmt.Errorf(ErrFmtCheckInPayload, core.ErrLicenseContract)
 	}
+	if !strings.HasPrefix(value, AccountTokenPrefix) || len([]rune(value)) < AccountTokenMinRunes {
+		return AccountToken{}, fmt.Errorf(ErrFmtCheckInPayload, core.ErrLicenseContract)
+	}
 	if strings.ContainsFunc(value, unicode.IsSpace) {
 		return AccountToken{}, fmt.Errorf(ErrFmtCheckInPayload, core.ErrLicenseContract)
 	}

@@ -117,6 +117,7 @@ func TestKeygenKindHostileTable(t *testing.T) {
 	}{
 		{name: "ed25519", value: KeygenKindTokenEd25519, want: KeygenKindEd25519},
 		{name: "secret", value: KeygenKindTokenSecret, want: KeygenKindSecret},
+		{name: "garble custody", value: KeygenKindTokenGarbleCustody, want: KeygenKindGarbleCustody},
 		{name: "empty", value: "", wantError: true},
 		{name: "uppercase", value: "ED25519", wantError: true},
 		{name: "unknown kind", value: "rsa", wantError: true},

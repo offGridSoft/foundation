@@ -1,10 +1,12 @@
 package keygen
 
 import (
+	"bytes"
 	"errors"
 	"testing"
 
 	"github.com/offGridSoft/foundation/v2026/core"
+	"github.com/offGridSoft/foundation/v2026/release"
 )
 
 func TestGenerateEd25519SigningKeyProducesDistinctValidatedContracts(t *testing.T) {
@@ -26,6 +28,32 @@ func TestGenerateEd25519SigningKeyProducesDistinctValidatedContracts(t *testing.
 	}
 	if first.PublicKeyHex == second.PublicKeyHex {
 		t.Fatal("public key equality = true, want false for independent CSPRNG mints")
+	}
+}
+
+func TestGenerateGarbleCustodySeedProducesDistinctValidatedContracts(t *testing.T) {
+	t.Parallel()
+
+	first, err := GenerateGarbleCustodySeed()
+	if err != nil {
+		t.Fatalf("GenerateGarbleCustodySeed() first error = %v", err)
+	}
+	second, err := GenerateGarbleCustodySeed()
+	if err != nil {
+		t.Fatalf("GenerateGarbleCustodySeed() second error = %v", err)
+	}
+	if err := first.Validate(); err != nil {
+		t.Fatalf("first.Validate() error = %v", err)
+	}
+	if bytes.Equal(first.Bytes(), second.Bytes()) {
+		t.Fatal("custody seed equality = true, want false for independent CSPRNG mints")
+	}
+	encoded, err := first.MarshalText()
+	if err != nil {
+		t.Fatalf("first.MarshalText() error = %v", err)
+	}
+	if _, err := release.ParseGarbleCustodySeed(string(encoded)); err != nil {
+		t.Fatalf("ParseGarbleCustodySeed(MarshalText()) error = %v", err)
 	}
 }
 

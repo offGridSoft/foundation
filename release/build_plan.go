@@ -12,7 +12,7 @@ import (
 
 const (
 	GarbleSeedBytes                         = 8
-	GarbleSeedMaxInputBytes                 = 4096
+	GarbleSeedEncodedBytes                  = 11
 	GarbleSeedRandom                        = "random"
 	GarbleSeedFlagPrefix                    = "-seed="
 	GarbleArgLiterals                       = "-literals"
@@ -72,14 +72,14 @@ func ParseRequiredGarbleSeed(value string) (GarbleSeed, error) {
 }
 
 func parseConcreteGarbleSeed(value string) (GarbleSeed, error) {
-	if len(value) > GarbleSeedMaxInputBytes {
+	if len(value) != GarbleSeedEncodedBytes {
 		return GarbleSeed{}, fmt.Errorf(ErrFmtGarbleSeed, core.ErrReleaseContract)
 	}
-	raw, err := base64.StdEncoding.DecodeString(value)
-	if err != nil || len(raw) != GarbleSeedBytes {
+	raw, err := base64.RawStdEncoding.DecodeString(value)
+	if err != nil || len(raw) != GarbleSeedBytes || base64.RawStdEncoding.EncodeToString(raw) != value {
 		return GarbleSeed{}, fmt.Errorf(ErrFmtGarbleSeed, core.ErrReleaseContract)
 	}
-	return GarbleSeed{value: base64.StdEncoding.EncodeToString(raw)}, nil
+	return GarbleSeed{value: value}, nil
 }
 
 func (s GarbleSeed) String() string {

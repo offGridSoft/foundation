@@ -167,6 +167,33 @@ func FuzzReceiptBoundary(f *testing.F) {
 	})
 }
 
+func FuzzDownloadGrantBoundary(f *testing.F) {
+	seed, err := json.Marshal(validDownloadGrantBody(f))
+	if err != nil {
+		f.Fatal(err)
+	}
+	f.Add(seed)
+	f.Add([]byte(nil))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		decoded, err := core.DecodeStrictJSON[DownloadGrantBody](data)
+		if err != nil {
+			return
+		}
+		canonical, err := decoded.Canonical(nil)
+		if err != nil {
+			t.Fatalf("accepted DownloadGrantBody canonicalization = %v, want nil", err)
+		}
+		roundTrip, err := core.DecodeStrictJSON[DownloadGrantBody](canonical)
+		if err != nil {
+			t.Fatalf("canonical DownloadGrantBody decode = %v, want nil", err)
+		}
+		again, err := roundTrip.Canonical(nil)
+		if err != nil || !bytes.Equal(canonical, again) {
+			t.Fatalf("canonical DownloadGrantBody instability: error = %v", err)
+		}
+	})
+}
+
 func FuzzRFC3161TimestampProofBoundary(f *testing.F) {
 	seed, err := json.Marshal(mustTimestampProof(f))
 	if err != nil {

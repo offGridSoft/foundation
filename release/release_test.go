@@ -806,7 +806,7 @@ func (s testReleaseSigner) SignRelease([]byte) (core.Ed25519SignatureHex, error)
 
 func TestGarbleSeedHostileTable(t *testing.T) {
 	t.Parallel()
-	const exactSeed = "AQIDBAUGBwg="
+	const exactSeed = "AQIDBAUGBwg"
 	const longSeed = "AQIDBAUGBwgJCg=="
 	for _, tc := range []struct {
 		wantError error
@@ -821,11 +821,12 @@ func TestGarbleSeedHostileTable(t *testing.T) {
 		{name: "concrete seed with surrounding whitespace normalizes", value: " " + exactSeed + "\n", want: exactSeed, required: true},
 		{name: "exact base64 seed accepted", value: exactSeed, want: exactSeed, required: true},
 		{name: "long decoded seed rejected instead of truncated", value: longSeed, required: true, wantError: core.ErrReleaseContract},
+		{name: "padded compatibility seed rejected", value: exactSeed + "=", required: true, wantError: core.ErrReleaseContract},
 		{name: "required rejects empty random", value: "", required: true, wantError: core.ErrReleaseContract},
 		{name: "required rejects whitespace random", value: "\n\t", required: true, wantError: core.ErrReleaseContract},
 		{name: "short decoded seed rejected", value: "AQIDBA==", wantError: core.ErrReleaseContract},
 		{name: "malformed base64 rejected", value: "not-base64", wantError: core.ErrReleaseContract},
-		{name: "oversize attacker seed rejected", value: strings.Repeat("A", GarbleSeedMaxInputBytes+1), wantError: core.ErrReleaseContract},
+		{name: "oversize attacker seed rejected", value: strings.Repeat("A", GarbleSeedEncodedBytes+1), wantError: core.ErrReleaseContract},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -1976,7 +1977,7 @@ func tamperedReleaseRootPath(t *testing.T, finalSegment string) BuildOutputPath 
 
 func mustGarbleSeed(t *testing.T) GarbleSeed {
 	t.Helper()
-	seed, err := ParseRequiredGarbleSeed("AQIDBAUGBwg=")
+	seed, err := ParseRequiredGarbleSeed("AQIDBAUGBwg")
 	if err != nil {
 		t.Fatal(err)
 	}

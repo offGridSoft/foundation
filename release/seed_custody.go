@@ -61,6 +61,16 @@ func (s GarbleCustodySeed) Bytes() []byte {
 	return out
 }
 
+// MarshalText emits the one canonical Secret Manager representation accepted
+// by ParseGarbleCustodySeed. It exists so persistence adapters never duplicate
+// the seed's base64 protocol.
+func (s GarbleCustodySeed) MarshalText() ([]byte, error) {
+	if err := s.Validate(); err != nil {
+		return nil, err
+	}
+	return []byte(base64.StdEncoding.EncodeToString(s.value[:])), nil
+}
+
 func (s GarbleCustodySeed) SHA256() core.SHA256Hex {
 	sum := sha256.Sum256(s.value[:])
 	return core.NewSHA256Hex(sum)
@@ -86,7 +96,7 @@ func (s GarbleCustodySeed) EffectiveSeed(releaseID ReleaseID) (GarbleSeed, error
 	_, _ = hash.Write([]byte(releaseID.String()))
 	_, _ = hash.Write([]byte{core.SignedMessageSep})
 	_, _ = hash.Write(s.value[:])
-	effective := base64.StdEncoding.EncodeToString(hash.Sum(nil)[:GarbleSeedBytes])
+	effective := base64.RawStdEncoding.EncodeToString(hash.Sum(nil)[:GarbleSeedBytes])
 	return ParseRequiredGarbleSeed(effective)
 }
 

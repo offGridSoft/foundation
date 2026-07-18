@@ -81,11 +81,11 @@ func TestPlatformRejectsUnknownAndOrdinal(t *testing.T) {
 
 func TestAccountTokenWireContract(t *testing.T) {
 	t.Parallel()
-	token, err := ParseAccountToken("acct_123456789")
+	token, err := ParseAccountToken("acct_1234567890abcdef0abcdef")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if token.String() != "acct_123456789" {
+	if token.String() != "acct_1234567890abcdef0abcdef" {
 		t.Fatalf("AccountToken.String = %s", token)
 	}
 	data, err := token.MarshalJSON()
@@ -99,7 +99,14 @@ func TestAccountTokenWireContract(t *testing.T) {
 	if roundTrip != token {
 		t.Fatalf("AccountToken roundTrip = %s, want %s", roundTrip, token)
 	}
-	for _, raw := range []string{"", " acct", "acct 123", "acct\n123", strings.Repeat("a", core.OpaqueTokenDefaultMaxRunes+1)} {
+	for _, raw := range []string{
+		"", " acct", "acct 123", "acct\n123",
+		strings.Repeat("a", core.OpaqueTokenDefaultMaxRunes+1),
+		"1234567890abcdef1234",              // no acct_ prefix at valid length
+		DeveloperKeyPrefix + "1234567890ab", // foreign product prefix
+		"acct_123",                          // prefixed but below the rune floor
+		"ACCT_1234567890abcdef",             // case-tampered prefix
+	} {
 		if _, err := ParseAccountToken(raw); !errors.Is(err, core.ErrLicenseContract) {
 			t.Fatalf("ParseAccountToken(%q) error = %v, want ErrLicenseContract", raw, err)
 		}
@@ -456,7 +463,7 @@ func goodBugCheckIn(t *testing.T) BugCheckIn {
 
 func goodWitnessCheckIn(t *testing.T) WitnessCheckIn {
 	t.Helper()
-	token, err := ParseAccountToken("acct_123456789")
+	token, err := ParseAccountToken("acct_1234567890abcdef0abcdef")
 	if err != nil {
 		t.Fatal(err)
 	}

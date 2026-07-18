@@ -899,7 +899,7 @@ func signBugCheckInResponse(t *testing.T, body BugCheckInResponseBody) BugCheckI
 	keyID, _, privateKey := testServerSigningKey(t)
 	if body.Grant != nil && body.TimeCommitment == nil {
 		lease := body.Grant.Lease.Body
-		commitment := signTestBody(t, keyID, privateKey, BugCheckInTimeCommitmentBody{
+		commitment := signTestBody(t, keyID, privateKey, CheckInTimeCommitmentBody[BugCheckInGrant]{
 			Schema:            core.SchemaBugCheckInTimeCommitment,
 			DeviceFingerprint: lease.DeviceFingerprint,
 			LeaseID:           lease.LeaseID,
@@ -915,6 +915,18 @@ func signBugCheckInResponse(t *testing.T, body BugCheckInResponseBody) BugCheckI
 func signWitnessCheckInResponse(t *testing.T, body WitnessCheckInResponseBody) WitnessCheckInResponse {
 	t.Helper()
 	keyID, _, privateKey := testServerSigningKey(t)
+	if body.Grant != nil && body.TimeCommitment == nil {
+		lease := body.Grant.Lease.Body
+		commitment := signTestBody(t, keyID, privateKey, CheckInTimeCommitmentBody[WitnessCheckInGrant]{
+			Schema:            core.SchemaWitnessCheckInTimeCommitment,
+			DeviceFingerprint: lease.DeviceFingerprint,
+			LeaseID:           lease.LeaseID,
+			LeaseGeneration:   lease.Generation,
+			RequestNonce:      body.RequestNonce,
+			ServerObservedAt:  core.UnixNanoTimeFromInt64(1_800_000_000_000_000_000),
+		})
+		body.TimeCommitment = &commitment
+	}
 	return WitnessCheckInResponse{Authority: signTestBody(t, keyID, privateKey, body)}
 }
 
@@ -1037,7 +1049,7 @@ func testBugCheckIn(t *testing.T) BugCheckIn {
 
 func testWitnessCheckIn(t *testing.T) WitnessCheckIn {
 	t.Helper()
-	token, err := ParseAccountToken("acct_123456789")
+	token, err := ParseAccountToken("acct_1234567890abcdef")
 	if err != nil {
 		t.Fatal(err)
 	}

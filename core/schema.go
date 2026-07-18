@@ -51,6 +51,9 @@ const (
 	SchemaBugSeatInvite
 	SchemaBugSeatAssignment
 	SchemaReleaseSeedGrantAccess
+	SchemaWitnessCheckInTimeCommitment
+	SchemaCustodyDownloadRequest
+	SchemaCustodyDownloadGrant
 )
 
 const (
@@ -68,6 +71,7 @@ const (
 	SchemaTokenBugWriterRevocation            = ProductTokenBug + "-writer-revocation-" + ContractVersionToken
 	SchemaTokenWitnessCheckIn                 = ProductTokenWitness + "-subscription-check-in-" + ContractVersionToken
 	SchemaTokenWitnessCheckInResponse         = ProductTokenWitness + "-subscription-check-in-response-" + ContractVersionToken
+	SchemaTokenWitnessCheckInTimeCommitment   = ProductTokenWitness + "-subscription-check-in-time-commitment-" + ContractVersionToken
 	SchemaTokenWitnessSubscription            = ProductTokenWitness + "-subscription-lease-" + ContractVersionToken
 	SchemaTokenCustodySessionOpenRequest      = ProductTokenWitness + "-custody-session-open-" + ContractVersionToken
 	SchemaTokenCustodySessionOpenResponse     = ProductTokenWitness + "-custody-session-targets-" + ContractVersionToken
@@ -92,9 +96,11 @@ const (
 	SchemaTokenReleaseUpdateDiagnosticReceipt = "offgrid-release-update-diagnostic-receipt-" + ContractVersionToken
 	SchemaTokenReleaseGateReport              = "offgrid-release-gate-report-" + ContractVersionToken
 	SchemaTokenReleaseSeedGrantAccess         = "offgrid-release-seed-grant-access-" + ContractVersionToken
+	SchemaTokenCustodyDownloadRequest         = ProductTokenWitness + "-custody-download-request-" + ContractVersionToken
+	SchemaTokenCustodyDownloadGrant           = ProductTokenWitness + "-custody-download-grant-" + ContractVersionToken
 )
 
-func schemaNames() [SchemaReleaseSeedGrantAccess + 1]string {
+func schemaNames() [SchemaCustodyDownloadGrant + 1]string {
 	return [...]string{
 		SchemaBugUsage:                       SchemaTokenBugUsage,
 		SchemaWitnessUsage:                   SchemaTokenWitnessUsage,
@@ -134,6 +140,9 @@ func schemaNames() [SchemaReleaseSeedGrantAccess + 1]string {
 		SchemaBugSeatInvite:                  SchemaTokenBugSeatInvite,
 		SchemaBugSeatAssignment:              SchemaTokenBugSeatAssignment,
 		SchemaReleaseSeedGrantAccess:         SchemaTokenReleaseSeedGrantAccess,
+		SchemaWitnessCheckInTimeCommitment:   SchemaTokenWitnessCheckInTimeCommitment,
+		SchemaCustodyDownloadRequest:         SchemaTokenCustodyDownloadRequest,
+		SchemaCustodyDownloadGrant:           SchemaTokenCustodyDownloadGrant,
 	}
 }
 

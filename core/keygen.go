@@ -32,12 +32,14 @@ const (
 	KeygenKindInvalid KeygenKind = iota
 	KeygenKindEd25519
 	KeygenKindSecret
+	KeygenKindGarbleCustody
 	keygenKindSentinel
 )
 
 const (
-	KeygenKindTokenEd25519 = "ed25519"
-	KeygenKindTokenSecret  = "secret"
+	KeygenKindTokenEd25519       = "ed25519"
+	KeygenKindTokenSecret        = "secret"
+	KeygenKindTokenGarbleCustody = "garble-custody"
 )
 
 func (k KeygenKind) IsValid() bool { return k > KeygenKindInvalid && k < keygenKindSentinel }
@@ -78,6 +80,8 @@ func (k KeygenKind) String() string {
 		return KeygenKindTokenEd25519
 	case KeygenKindSecret:
 		return KeygenKindTokenSecret
+	case KeygenKindGarbleCustody:
+		return KeygenKindTokenGarbleCustody
 	default:
 		return ""
 	}
@@ -89,6 +93,8 @@ func ParseKeygenKind(value string) (KeygenKind, error) {
 		return KeygenKindEd25519, nil
 	case KeygenKindTokenSecret:
 		return KeygenKindSecret, nil
+	case KeygenKindTokenGarbleCustody:
+		return KeygenKindGarbleCustody, nil
 	default:
 		return KeygenKindInvalid, fmt.Errorf(ErrFmtKeygenKind, ErrKeygenContract)
 	}

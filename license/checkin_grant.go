@@ -51,6 +51,19 @@ func (g BugCheckInGrant) Verify(keyring core.SigningKeyring) error {
 	return nil
 }
 
+func (BugCheckInGrant) TimeCommitmentSchema() core.SchemaID {
+	return core.SchemaBugCheckInTimeCommitment
+}
+
+func (g BugCheckInGrant) LeaseIdentity() CheckInLeaseIdentity {
+	lease := g.Lease.Body
+	return CheckInLeaseIdentity{
+		DeviceFingerprint: lease.DeviceFingerprint,
+		LeaseID:           lease.LeaseID,
+		Generation:        lease.Generation,
+	}
+}
+
 type WitnessCheckInGrant struct {
 	Lease core.Signed[SubscriptionLeaseBody] `json:"lease"`
 }
@@ -70,6 +83,19 @@ func (g WitnessCheckInGrant) Verify(keyring core.SigningKeyring) error {
 		return checkInGrantError(err)
 	}
 	return nil
+}
+
+func (WitnessCheckInGrant) TimeCommitmentSchema() core.SchemaID {
+	return core.SchemaWitnessCheckInTimeCommitment
+}
+
+func (g WitnessCheckInGrant) LeaseIdentity() CheckInLeaseIdentity {
+	lease := g.Lease.Body
+	return CheckInLeaseIdentity{
+		DeviceFingerprint: lease.DeviceFingerprint,
+		LeaseID:           lease.LeaseID,
+		Generation:        lease.Generation,
+	}
 }
 
 func checkInGrantError(err error) error {

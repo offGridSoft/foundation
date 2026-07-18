@@ -52,13 +52,13 @@ func (d CheckInDecision) Validate() error {
 }
 
 type BugCheckInResponseBody struct {
-	Grant             *BugCheckInGrant                           `json:"grant,omitempty"`
-	UpdateNotice      *core.UpdateNotice                         `json:"update_notice,omitempty"`
-	TimeCommitment    *core.Signed[BugCheckInTimeCommitmentBody] `json:"time_commitment,omitempty"`
-	WriterRevocations BugWriterRevocationDelivery                `json:"writer_revocations"`
-	Schema            core.SchemaID                              `json:"schema"`
-	RequestNonce      CheckInNonce                               `json:"request_nonce"`
-	Decision          CheckInDecision                            `json:"decision"`
+	Grant             *BugCheckInGrant                                         `json:"grant,omitempty"`
+	UpdateNotice      *core.UpdateNotice                                       `json:"update_notice,omitempty"`
+	TimeCommitment    *core.Signed[CheckInTimeCommitmentBody[BugCheckInGrant]] `json:"time_commitment,omitempty"`
+	WriterRevocations BugWriterRevocationDelivery                              `json:"writer_revocations"`
+	Schema            core.SchemaID                                            `json:"schema"`
+	RequestNonce      CheckInNonce                                             `json:"request_nonce"`
+	Decision          CheckInDecision                                          `json:"decision"`
 }
 
 func (b BugCheckInResponseBody) Validate() error {
@@ -81,22 +81,12 @@ func (b BugCheckInResponseBody) Validate() error {
 }
 
 func (b BugCheckInResponseBody) validateGrantAuthority() error {
-	if !b.Decision.Granted {
-		if b.Grant != nil || b.TimeCommitment != nil {
-			return checkInResponseError(core.ErrLicenseContract)
-		}
-		return nil
-	}
-	if b.Grant == nil || b.TimeCommitment == nil {
-		return checkInResponseError(core.ErrLicenseContract)
-	}
-	if err := b.Grant.Validate(); err != nil {
-		return checkInResponseError(err)
-	}
-	if err := b.TimeCommitment.Validate(); err != nil {
-		return checkInResponseError(err)
-	}
-	return checkInResponseErrorOptional(b.TimeCommitment.Body.MatchesGrant(*b.Grant, b.RequestNonce))
+	return checkInGrantAuthority[BugCheckInGrant]{
+		grant:      b.Grant,
+		commitment: b.TimeCommitment,
+		nonce:      b.RequestNonce,
+		granted:    b.Decision.Granted,
+	}.validate()
 }
 
 func (b BugCheckInResponseBody) Canonical(dst []byte) ([]byte, error) {
@@ -282,11 +272,12 @@ func earliestWriterRevocation(left, right core.Signed[BugWriterRevocationBody]) 
 }
 
 type WitnessCheckInResponseBody struct {
-	Grant        *WitnessCheckInGrant `json:"grant,omitempty"`
-	UpdateNotice *core.UpdateNotice   `json:"update_notice,omitempty"`
-	Schema       core.SchemaID        `json:"schema"`
-	RequestNonce CheckInNonce         `json:"request_nonce"`
-	Decision     CheckInDecision      `json:"decision"`
+	Grant          *WitnessCheckInGrant                                         `json:"grant,omitempty"`
+	UpdateNotice   *core.UpdateNotice                                           `json:"update_notice,omitempty"`
+	TimeCommitment *core.Signed[CheckInTimeCommitmentBody[WitnessCheckInGrant]] `json:"time_commitment,omitempty"`
+	Schema         core.SchemaID                                                `json:"schema"`
+	RequestNonce   CheckInNonce                                                 `json:"request_nonce"`
+	Decision       CheckInDecision                                              `json:"decision"`
 }
 
 func (b WitnessCheckInResponseBody) Validate() error {
@@ -299,15 +290,19 @@ func (b WitnessCheckInResponseBody) Validate() error {
 	if err := b.Decision.Validate(); err != nil {
 		return err
 	}
-	if b.Decision.Granted != (b.Grant != nil) {
-		return checkInResponseError(core.ErrLicenseContract)
-	}
-	if b.Grant != nil {
-		if err := b.Grant.Validate(); err != nil {
-			return checkInResponseError(err)
-		}
+	if err := b.validateGrantAuthority(); err != nil {
+		return err
 	}
 	return validateUpdateNotice(b.UpdateNotice, core.ProductWitness)
+}
+
+func (b WitnessCheckInResponseBody) validateGrantAuthority() error {
+	return checkInGrantAuthority[WitnessCheckInGrant]{
+		grant:      b.Grant,
+		commitment: b.TimeCommitment,
+		nonce:      b.RequestNonce,
+		granted:    b.Decision.Granted,
+	}.validate()
 }
 
 func (b WitnessCheckInResponseBody) Canonical(dst []byte) ([]byte, error) {
@@ -320,6 +315,9 @@ func (b WitnessCheckInResponseBody) Canonical(dst []byte) ([]byte, error) {
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldRequestNonce, b.RequestNonce)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldDecision, b.Decision)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldGrant, b.Grant)
+	if b.TimeCommitment != nil {
+		dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldTimeCommitment, b.TimeCommitment)
+	}
 	if b.UpdateNotice != nil {
 		dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldUpdateNotice, b.UpdateNotice)
 	}
@@ -349,9 +347,16 @@ func (r WitnessCheckInResponse) Verify(keyring core.SigningKeyring) error {
 	if err := r.Authority.Verify(keyring); err != nil {
 		return checkInResponseError(err)
 	}
-	if r.Authority.Body.Grant != nil {
-		if err := r.Authority.Body.Grant.Verify(keyring); err != nil {
+	body := r.Authority.Body
+	if body.Grant != nil {
+		if err := body.Grant.Verify(keyring); err != nil {
 			return checkInResponseError(err)
+		}
+		if err := body.TimeCommitment.Verify(keyring); err != nil {
+			return checkInResponseError(err)
+		}
+		if body.TimeCommitment.KeyID.String() != r.Authority.KeyID.String() {
+			return checkInResponseError(core.ErrLicenseContract)
 		}
 	}
 	return nil
@@ -362,6 +367,37 @@ func (r WitnessCheckInResponse) VerifyRequestNonce(nonce CheckInNonce) error {
 		return checkInResponseError(core.ErrCheckInNonce)
 	}
 	return nil
+}
+
+// checkInGrantAuthority is the single home of the granted/refused authority
+// rule shared by every product check-in response: a granted decision requires
+// exactly one grant plus one time commitment matching the response nonce; a
+// refusal forbids both. Validation only — it never participates in canonical
+// encoding, so wire bytes are untouched.
+type checkInGrantAuthority[G CheckInTimeCommitmentGrant] struct {
+	grant      *G
+	commitment *core.Signed[CheckInTimeCommitmentBody[G]]
+	nonce      CheckInNonce
+	granted    bool
+}
+
+func (a checkInGrantAuthority[G]) validate() error {
+	if !a.granted {
+		if a.grant != nil || a.commitment != nil {
+			return checkInResponseError(core.ErrLicenseContract)
+		}
+		return nil
+	}
+	if a.grant == nil || a.commitment == nil {
+		return checkInResponseError(core.ErrLicenseContract)
+	}
+	if err := (*a.grant).Validate(); err != nil {
+		return checkInResponseError(err)
+	}
+	if err := a.commitment.Validate(); err != nil {
+		return checkInResponseError(err)
+	}
+	return checkInResponseErrorOptional(a.commitment.Body.MatchesGrant(*a.grant, a.nonce))
 }
 
 func checkInResponseError(err error) error {

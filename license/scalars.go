@@ -15,6 +15,8 @@ const (
 	DeveloperKeyMaxRunes     = 128
 	DeveloperKeyPreviewRunes = 12
 	DeviceLabelMaxRunes      = 80
+	AccountTokenPrefix       = "acct_"
+	AccountTokenMinRunes     = 20
 )
 
 type DeveloperKey struct {

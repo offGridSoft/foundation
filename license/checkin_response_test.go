@@ -125,29 +125,29 @@ func TestBugCheckInTimeCommitmentHostileBoundary(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
+		mutate func(*CheckInTimeCommitmentBody[BugCheckInGrant])
 		name   string
-		mutate func(*BugCheckInTimeCommitmentBody)
 	}{
-		{name: "zero schema", mutate: func(body *BugCheckInTimeCommitmentBody) { body.Schema = core.SchemaUnknown }},
-		{name: "wrong schema", mutate: func(body *BugCheckInTimeCommitmentBody) { body.Schema = core.SchemaBugCheckInResponse }},
-		{name: "foreign device", mutate: func(body *BugCheckInTimeCommitmentBody) { body.DeviceFingerprint = otherDevice }},
-		{name: "foreign lease", mutate: func(body *BugCheckInTimeCommitmentBody) { body.LeaseID = otherLeaseID }},
-		{name: "zero generation", mutate: func(body *BugCheckInTimeCommitmentBody) { body.LeaseGeneration = 0 }},
-		{name: "future generation", mutate: func(body *BugCheckInTimeCommitmentBody) { body.LeaseGeneration++ }},
-		{name: "foreign nonce", mutate: func(body *BugCheckInTimeCommitmentBody) { body.RequestNonce = otherNonce }},
-		{name: "unset server time", mutate: func(body *BugCheckInTimeCommitmentBody) { body.ServerObservedAt = core.UnixNanoTime{} }},
+		{name: "zero schema", mutate: func(body *CheckInTimeCommitmentBody[BugCheckInGrant]) { body.Schema = core.SchemaUnknown }},
+		{name: "wrong schema", mutate: func(body *CheckInTimeCommitmentBody[BugCheckInGrant]) { body.Schema = core.SchemaBugCheckInResponse }},
+		{name: "foreign device", mutate: func(body *CheckInTimeCommitmentBody[BugCheckInGrant]) { body.DeviceFingerprint = otherDevice }},
+		{name: "foreign lease", mutate: func(body *CheckInTimeCommitmentBody[BugCheckInGrant]) { body.LeaseID = otherLeaseID }},
+		{name: "zero generation", mutate: func(body *CheckInTimeCommitmentBody[BugCheckInGrant]) { body.LeaseGeneration = 0 }},
+		{name: "future generation", mutate: func(body *CheckInTimeCommitmentBody[BugCheckInGrant]) { body.LeaseGeneration++ }},
+		{name: "foreign nonce", mutate: func(body *CheckInTimeCommitmentBody[BugCheckInGrant]) { body.RequestNonce = otherNonce }},
+		{name: "unset server time", mutate: func(body *CheckInTimeCommitmentBody[BugCheckInGrant]) { body.ServerObservedAt = core.UnixNanoTime{} }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			candidate := commitment
 			tc.mutate(&candidate)
 			if err := candidate.MatchesGrant(*grant, valid.Authority.Body.RequestNonce); !errors.Is(err, core.ErrLicenseContract) {
-				t.Fatalf("BugCheckInTimeCommitmentBody.MatchesGrant() error = %v, want %v", err, core.ErrLicenseContract)
+				t.Fatalf("CheckInTimeCommitmentBody[BugCheckInGrant].MatchesGrant() error = %v, want %v", err, core.ErrLicenseContract)
 			}
 		})
 	}
 	if err := commitment.MatchesStoredGrant(*grant); err != nil {
-		t.Fatalf("BugCheckInTimeCommitmentBody.MatchesStoredGrant() error = %v, want nil", err)
+		t.Fatalf("CheckInTimeCommitmentBody[BugCheckInGrant].MatchesStoredGrant() error = %v, want nil", err)
 	}
 	nonceOnly := commitment
 	nonceOnly.RequestNonce = otherNonce
@@ -196,6 +196,108 @@ func TestBugCheckInTimeCommitmentHostileBoundary(t *testing.T) {
 	}}
 	if err := mixed.Verify(mixedKeyring); !errors.Is(err, core.ErrLicenseContract) {
 		t.Fatalf("BugCheckInResponse.Verify(mixed signing keys) error = %v, want %v", err, core.ErrLicenseContract)
+	}
+}
+
+func TestWitnessCheckInTimeCommitmentHostileBoundary(t *testing.T) {
+	t.Parallel()
+
+	grant, keyID, publicKey := signedWitnessGrant(t)
+	valid := testGrantedWitnessResponse(t, grant)
+	commitment := valid.Authority.Body.TimeCommitment.Body
+	otherLeaseID, err := core.ParseLeaseID("lease-2026-other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherNonce, err := ParseCheckInNonce("0202020202020202020202020202020202020202020202020202020202020202")
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherDevice, err := core.ParseDeviceFingerprint(core.DeviceFingerprintPrefixSHA256 + strings.Repeat("b", 64))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		mutate func(*CheckInTimeCommitmentBody[WitnessCheckInGrant])
+		name   string
+	}{
+		{name: "zero schema", mutate: func(body *CheckInTimeCommitmentBody[WitnessCheckInGrant]) { body.Schema = core.SchemaUnknown }},
+		{name: "wrong schema", mutate: func(body *CheckInTimeCommitmentBody[WitnessCheckInGrant]) {
+			body.Schema = core.SchemaBugCheckInTimeCommitment
+		}},
+		{name: "foreign device", mutate: func(body *CheckInTimeCommitmentBody[WitnessCheckInGrant]) { body.DeviceFingerprint = otherDevice }},
+		{name: "foreign lease", mutate: func(body *CheckInTimeCommitmentBody[WitnessCheckInGrant]) { body.LeaseID = otherLeaseID }},
+		{name: "zero generation", mutate: func(body *CheckInTimeCommitmentBody[WitnessCheckInGrant]) { body.LeaseGeneration = 0 }},
+		{name: "future generation", mutate: func(body *CheckInTimeCommitmentBody[WitnessCheckInGrant]) { body.LeaseGeneration++ }},
+		{name: "foreign nonce", mutate: func(body *CheckInTimeCommitmentBody[WitnessCheckInGrant]) { body.RequestNonce = otherNonce }},
+		{name: "unset server time", mutate: func(body *CheckInTimeCommitmentBody[WitnessCheckInGrant]) {
+			body.ServerObservedAt = core.UnixNanoTime{}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			candidate := commitment
+			tc.mutate(&candidate)
+			if err := candidate.MatchesGrant(*grant, valid.Authority.Body.RequestNonce); !errors.Is(err, core.ErrLicenseContract) {
+				t.Fatalf("CheckInTimeCommitmentBody[WitnessCheckInGrant].MatchesGrant() error = %v, want %v", err, core.ErrLicenseContract)
+			}
+		})
+	}
+	if err := commitment.MatchesStoredGrant(*grant); err != nil {
+		t.Fatalf("CheckInTimeCommitmentBody[WitnessCheckInGrant].MatchesStoredGrant() error = %v, want nil", err)
+	}
+	nonceOnly := commitment
+	nonceOnly.RequestNonce = otherNonce
+	if err := nonceOnly.MatchesStoredGrant(*grant); err != nil {
+		t.Fatalf("MatchesStoredGrant(nonce-only drift) error = %v, want nil: stored resolution has no pending nonce", err)
+	}
+
+	missing := valid
+	missing.Authority.Body.TimeCommitment = nil
+	if err := missing.Validate(); !errors.Is(err, core.ErrLicenseContract) {
+		t.Fatalf("WitnessCheckInResponse.Validate(missing commitment) error = %v, want %v", err, core.ErrLicenseContract)
+	}
+	refused := signWitnessCheckInResponse(t, WitnessCheckInResponseBody{
+		Schema:       core.SchemaWitnessCheckInResponse,
+		RequestNonce: testCheckInNonce(t),
+		Decision:     CheckInDecision{Refusal: RefusalPaymentRequired, Remediation: RemediationUpdatePayment},
+	})
+	refused.Authority.Body.TimeCommitment = valid.Authority.Body.TimeCommitment
+	if err := refused.Validate(); !errors.Is(err, core.ErrLicenseContract) {
+		t.Fatalf("WitnessCheckInResponse.Validate(refusal commitment) error = %v, want %v", err, core.ErrLicenseContract)
+	}
+
+	_, _, privateKey := testServerSigningKey(t)
+	tampered := valid
+	tampered.Authority.Body.TimeCommitment.Body.ServerObservedAt = commitment.ServerObservedAt.Add(time.Nanosecond)
+	tampered.Authority = signTestBody(t, keyID, privateKey, tampered.Authority.Body)
+	keyring := core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
+	if err := tampered.Verify(keyring); !errors.Is(err, core.ErrLicenseContract) {
+		t.Fatalf("WitnessCheckInResponse.Verify(tampered time) error = %v, want %v", err, core.ErrLicenseContract)
+	}
+
+	foreignKeyID, err := core.ParseSigningKeyID("server-key-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seed := make([]byte, ed25519.SeedSize)
+	seed[len(seed)-1] = 43
+	foreignPrivate := ed25519.NewKeyFromSeed(seed)
+	foreignPublic, err := core.NewEd25519PublicKeyHex(foreignPrivate.Public().(ed25519.PublicKey))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mixed := valid
+	foreignCommitment := signTestBody(t, foreignKeyID, foreignPrivate, commitment)
+	mixed.Authority.Body.TimeCommitment = &foreignCommitment
+	mixed.Authority = signTestBody(t, keyID, privateKey, mixed.Authority.Body)
+	mixedKeyring := core.SigningKeyring{Keys: []core.SigningPublicKey{
+		{ID: keyID, PublicKey: publicKey},
+		{ID: foreignKeyID, PublicKey: foreignPublic},
+	}}
+	if err := mixed.Verify(mixedKeyring); !errors.Is(err, core.ErrLicenseContract) {
+		t.Fatalf("WitnessCheckInResponse.Verify(mixed signing keys) error = %v, want %v", err, core.ErrLicenseContract)
 	}
 }
 

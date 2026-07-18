@@ -233,7 +233,7 @@ func benchmarkSHA256(b *testing.B, digit string) core.SHA256Hex {
 
 func benchmarkSeed(b *testing.B) GarbleSeed {
 	b.Helper()
-	seed, err := ParseRequiredGarbleSeed("AQIDBAUGBwg=")
+	seed, err := ParseRequiredGarbleSeed("AQIDBAUGBwg")
 	if err != nil {
 		b.Fatal(err)
 	}
