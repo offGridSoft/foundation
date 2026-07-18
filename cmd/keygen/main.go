@@ -18,10 +18,7 @@ import (
 	foundationkeygen "github.com/offGridSoft/foundation/v2026/keygen"
 )
 
-const (
-	privateMaterialFileMode       os.FileMode = 0o600
-	privateMaterialLineTerminator             = "\n"
-)
+const privateMaterialFileMode os.FileMode = 0o600
 
 var errPrivateMaterialFile = errors.New("keygen private material file")
 
@@ -118,7 +115,7 @@ func writePrivateMaterial(path, material string) error {
 				result = removePrivateMaterial(path, result)
 			}
 		}()
-		if _, err := io.WriteString(f, material+privateMaterialLineTerminator); err != nil {
+		if _, err := io.WriteString(f, material); err != nil {
 			result = privateMaterialError(err)
 			return
 		}

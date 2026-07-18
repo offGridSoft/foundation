@@ -29,8 +29,11 @@ func TestWritePrivateMaterialHostileFilesystemBoundaries(t *testing.T) {
 		if err != nil {
 			t.Fatalf("os.ReadFile() error = %v", err)
 		}
-		if got, want := string(data), "private\n"; got != want {
+		if got, want := string(data), "private"; got != want {
 			t.Fatalf("content = %q, want %q", got, want)
+		}
+		if got, want := len(data), len("private"); got != want {
+			t.Fatalf("content bytes = %d, want exact canonical bytes %d", got, want)
 		}
 	})
 
