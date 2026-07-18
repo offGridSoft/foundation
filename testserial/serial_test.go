@@ -7,6 +7,8 @@ import (
 )
 
 func TestSerialOGSAcceptsEveryCompilerOwnedReason(t *testing.T) {
+	t.Parallel()
+
 	reasons := []core.TestSerialReason{
 		core.TestSerialReasonProcessEnvironment,
 		core.TestSerialReasonProcessWorkingDirectory,

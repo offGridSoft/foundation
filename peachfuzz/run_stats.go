@@ -10,17 +10,16 @@ import (
 )
 
 const (
-	RunStatsSchemaToken = core.FoundationVersion2026
-	NanosPerCoreSecond  = int64(time.Second)
-	NanosPerCoreMinute  = 60 * NanosPerCoreSecond
-	NanosPerCoreHour    = 60 * NanosPerCoreMinute
-	NanosPerCoreDay     = 24 * NanosPerCoreHour
-	NanosPerCoreYear    = 365*NanosPerCoreDay + 6*NanosPerCoreHour
-	CoreYearsFormat     = "%.2f core-years"
-	CoreDaysFormat      = "%.1f core-days"
-	CoreHoursFormat     = "%.1f core-hours"
-	CoreMinutesFormat   = "%.1f core-minutes"
-	CoreSecondsFormat   = "%.1f core-seconds"
+	NanosPerCoreSecond = int64(time.Second)
+	NanosPerCoreMinute = 60 * NanosPerCoreSecond
+	NanosPerCoreHour   = 60 * NanosPerCoreMinute
+	NanosPerCoreDay    = 24 * NanosPerCoreHour
+	NanosPerCoreYear   = 365*NanosPerCoreDay + 6*NanosPerCoreHour
+	CoreYearsFormat    = "%.2f core-years"
+	CoreDaysFormat     = "%.1f core-days"
+	CoreHoursFormat    = "%.1f core-hours"
+	CoreMinutesFormat  = "%.1f core-minutes"
+	CoreSecondsFormat  = "%.1f core-seconds"
 )
 
 type RunStatsSchema uint8
@@ -32,13 +31,15 @@ const (
 
 func (s RunStatsSchema) String() string {
 	if s == RunStatsSchema2026 {
-		return RunStatsSchemaToken
+		return core.FoundationVersion2026
 	}
 	return ""
 }
 
+func (s RunStatsSchema) IsValid() bool { return s == RunStatsSchema2026 }
+
 func (s RunStatsSchema) Validate() error {
-	if s != RunStatsSchema2026 {
+	if !s.IsValid() {
 		return fmt.Errorf(ErrFmtRunStats, ErrContract)
 	}
 	return nil
@@ -53,7 +54,7 @@ func (s RunStatsSchema) MarshalJSON() ([]byte, error) {
 
 func (s *RunStatsSchema) UnmarshalJSON(data []byte) error {
 	var token string
-	if err := json.Unmarshal(data, &token); err != nil || token != RunStatsSchemaToken {
+	if err := json.Unmarshal(data, &token); err != nil || token != core.FoundationVersion2026 {
 		return fmt.Errorf(ErrFmtRunStats, ErrContract)
 	}
 	*s = RunStatsSchema2026
@@ -88,15 +89,15 @@ const (
 )
 
 func (o RunOutcome) String() string {
-	if !o.Valid() {
+	if !o.IsValid() {
 		return ""
 	}
 	return [...]string{"", RunOutcomeTokenCompleted, RunOutcomeTokenCandidateFound, RunOutcomeTokenSeedFailure, RunOutcomeTokenBuildFailed, RunOutcomeTokenOrdinaryTestFailed, RunOutcomeTokenTimedOut, RunOutcomeTokenInterrupted, RunOutcomeTokenInfrastructureError, RunOutcomeTokenUnsupported}[o]
 }
 
-func (o RunOutcome) Valid() bool { return o > RunOutcomeUnknown && o <= RunOutcomeUnsupported }
+func (o RunOutcome) IsValid() bool { return o > RunOutcomeUnknown && o <= RunOutcomeUnsupported }
 func (o RunOutcome) Validate() error {
-	if !o.Valid() {
+	if !o.IsValid() {
 		return fmt.Errorf(ErrFmtOutcome, ErrContract)
 	}
 	return nil
@@ -253,8 +254,13 @@ func (d RecordDisposition) String() string {
 	}
 	return ""
 }
+
+func (d RecordDisposition) IsValid() bool {
+	return d > RecordDispositionUnknown && d <= RecordDispositionDuplicate
+}
+
 func (d RecordDisposition) Validate() error {
-	if d <= RecordDispositionUnknown || d > RecordDispositionDuplicate {
+	if !d.IsValid() {
 		return fmt.Errorf(ErrFmtDisposition, ErrContract)
 	}
 	return nil

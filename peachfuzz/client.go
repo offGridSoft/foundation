@@ -44,7 +44,10 @@ func (c RecordClient) Record(ctx context.Context, stats RunStats) (RunStatsRecei
 	if err != nil {
 		return RunStatsReceipt{}, fmt.Errorf(ErrFmtRecordClient, errors.Join(ErrContract, err))
 	}
-	receipt, err := executeAuthenticated[RunStatsReceipt](ctx, c.HTTP, c.Identity, http.MethodPost, c.Endpoint.String(), body)
+	receipt, err := executeAuthenticated[RunStatsReceipt](authenticatedRequest{
+		Context: ctx, Client: c.HTTP, Identity: c.Identity,
+		Method: http.MethodPost, Endpoint: c.Endpoint.String(), Body: body,
+	})
 	if err != nil {
 		return RunStatsReceipt{}, err
 	}
@@ -87,16 +90,25 @@ func (c SnapshotClient) Snapshot(ctx context.Context, project ProjectID) (Projec
 	return snapshot, nil
 }
 
-func executeAuthenticated[T core.APIBody](ctx context.Context, client *http.Client, identity workloadidentity.TokenSource, method, endpoint string, body []byte) (T, error) {
+type authenticatedRequest struct {
+	Context  context.Context
+	Client   *http.Client
+	Identity workloadidentity.TokenSource
+	Method   string
+	Endpoint string
+	Body     []byte
+}
+
+func executeAuthenticated[T core.APIBody](input authenticatedRequest) (T, error) {
 	var zero T
-	if ctx == nil {
+	if input.Context == nil {
 		return zero, fmt.Errorf(ErrFmtRecordClient, errors.Join(ErrContract, core.ErrNilContext))
 	}
-	token, err := identity.Token(ctx)
+	token, err := input.Identity.Token(input.Context)
 	if err != nil {
 		return zero, HTTPError{Cause: err}
 	}
-	request, err := newRequest(ctx, method, endpoint, body)
+	request, err := newRequest(input.Context, input.Method, input.Endpoint, input.Body)
 	if err != nil {
 		return zero, HTTPError{Cause: err}
 	}
@@ -105,7 +117,7 @@ func executeAuthenticated[T core.APIBody](ctx context.Context, client *http.Clie
 		return zero, HTTPError{Cause: err}
 	}
 	request.Header.Set(core.HTTPHeaderAuthorization, bearer)
-	return executeRequest[T](client, request)
+	return executeRequest[T](input.Client, request)
 }
 
 func executePublic[T core.APIBody](ctx context.Context, client *http.Client, method, endpoint string, body []byte) (T, error) {

@@ -2,7 +2,6 @@ package core
 
 import (
 	"fmt"
-	// witness:waiver doctrine/purity/io -- net/netip performs deterministic in-memory address parsing and matching; it opens no network or operating-system resource.
 	"net/netip"
 )
 
