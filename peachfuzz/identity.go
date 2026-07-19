@@ -20,6 +20,11 @@ const (
 	RunIDContractName             = "RunID"
 	MachineIDContractName         = "MachineID"
 	CommitSHAContractName         = "CommitSHA"
+	GoMetaPackageAll              = "all"
+	GoMetaPackageStandardLibrary  = "std"
+	GoMetaPackageCommands         = "cmd"
+	GoMetaPackageTools            = "tool"
+	GoPackagePatternEllipsis      = "..."
 )
 
 type ProjectID struct{ value string }
@@ -42,7 +47,7 @@ func ParseProjectID(value string) (ProjectID, error) {
 }
 
 func ParsePackageImportPath(value string) (PackageImportPath, error) {
-	if len(value) == 0 || len(value) > PackageImportPathMaxBytes {
+	if len(value) == 0 || len(value) > PackageImportPathMaxBytes || reservedGoPackageArgument(value) {
 		return PackageImportPath{}, identityError(PackageImportPathContractName)
 	}
 	for segment := range strings.SplitSeq(value, "/") {
@@ -51,6 +56,15 @@ func ParsePackageImportPath(value string) (PackageImportPath, error) {
 		}
 	}
 	return PackageImportPath{value: value}, nil
+}
+
+func reservedGoPackageArgument(value string) bool {
+	switch value {
+	case GoMetaPackageAll, GoMetaPackageStandardLibrary, GoMetaPackageCommands, GoMetaPackageTools:
+		return true
+	default:
+		return strings.Contains(value, GoPackagePatternEllipsis)
+	}
 }
 
 func ParseFuzzTargetName(value string) (FuzzTargetName, error) {
