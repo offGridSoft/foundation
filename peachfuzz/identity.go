@@ -119,16 +119,19 @@ func fixedLowerHex(value string, length int) bool {
 }
 
 func validImportSegment(value string) bool {
-	if value == "" || value == "." || value == ".." {
+	if value == "" || value == "." || value == ".." || value[0] == '-' {
 		return false
 	}
 	for index := range len(value) {
-		b := value[index]
-		if !identifierByte(b) && b != '.' && b != '-' && b != '~' && b != '+' {
+		if !validImportSegmentByte(value[index]) {
 			return false
 		}
 	}
 	return true
+}
+
+func validImportSegmentByte(value byte) bool {
+	return identifierByte(value) || value == '.' || value == '-' || value == '~' || value == '+'
 }
 
 func identifierByte(value byte) bool {

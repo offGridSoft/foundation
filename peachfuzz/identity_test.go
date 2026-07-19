@@ -48,6 +48,8 @@ func TestPackageImportPathOGSBoundaryTable(t *testing.T) {
 		{name: "empty segment", value: "example.com//run", wantErr: true},
 		{name: "dot segment", value: "example.com/./run", wantErr: true},
 		{name: "parent segment", value: "example.com/../run", wantErr: true},
+		{name: "leading option root", value: "-run/example.com", wantErr: true},
+		{name: "leading option nested", value: "example.com/-run", wantErr: true},
 		{name: "space", value: "example.com/peach fuzz", wantErr: true},
 		{name: "control byte", value: "example.com/peach\nfuzz", wantErr: true},
 		{name: "over cap", value: strings.Repeat("a", PackageImportPathMaxBytes+1), wantErr: true},
