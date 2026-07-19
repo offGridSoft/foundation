@@ -26,7 +26,7 @@ const (
 	GoDoctrinePath                               = GovernanceDirectory + "/go_doctrine.md"
 	TestingProtocolPath                          = GovernanceDirectory + "/testing_protocol.md"
 	GoDoctrineSHA256Hex                          = "acba02627001f224f1f96b811f211ad66d879bf9c7483f8ec64f4ea7e3890380"
-	TestingProtocolSHA256Hex                     = "33d6557051bbaff79a2720ddcd059d1f6464665896dc3f9088a943305cf57ab2"
+	TestingProtocolSHA256Hex                     = "24f321578e144e72a7720a58215d23d1491d81ee83d68dd6518c4fc4d8ca0ec0"
 	GovernanceDocumentDefaultMaxBytes      int64 = 512 * 1024
 )
 

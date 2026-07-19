@@ -1242,13 +1242,50 @@ Fuzz phase policy:
 - timeout or minimization quirks must be classified as harness behavior, not
   target-code failure, when no target failure was produced
 
-Fuzz invariant:
+Every fuzz callback must own an oracle that can reject a semantically wrong
+result. "Did not panic" is a runtime safety property, not sufficient evidence
+for a parser, verifier, writer, classifier, or fold. Mutated input must reach
+the oracle inside the fuzz callback; a sibling seed table does not substitute
+for it.
+
+Required shapes include at least one independent invariant appropriate to the
+boundary:
+
+- accepted parse -> `Validate()` succeeds -> marshal/parse round trip preserves
+  the typed value
+- rejected parse -> stable typed error identity and a zero/non-mutated receiver
+- signed input -> accepted if and only if the independently pinned fields and
+  signature match
+- writer -> bounded output, canonical second write, and decode/validate parity
+- fold/replay -> arithmetic, sequence, chain-link, or final-state invariants
+- differential parser -> two independent representations or implementations
+  agree
 
 ```go
 f.Fuzz(func(t *testing.T, data []byte) {
-	_, _ = Parse(data) // must not panic
+	got, err := Parse(data)
+	if err != nil {
+		if !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("Parse() error = %v, want %v", err, ErrInvalidInput)
+		}
+		return
+	}
+	if err := got.Validate(); err != nil {
+		t.Fatalf("Parse() accepted invalid value: %v", err)
+	}
+	encoded, err := got.MarshalBinary()
+	if err != nil {
+		t.Fatalf("MarshalBinary() error = %v", err)
+	}
+	roundTrip, err := Parse(encoded)
+	if err != nil || roundTrip != got {
+		t.Fatalf("round trip = (%v, %v), want (%v, nil)", roundTrip, err, got)
+	}
 })
 ```
+
+Delete fuzz targets for tiny closed input spaces already exhausted by hostile
+tables. They consume continuous-fuzz budget without creating new evidence.
 
 ## Streaming And Ledger Proofs
 

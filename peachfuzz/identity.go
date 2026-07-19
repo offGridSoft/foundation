@@ -7,13 +7,19 @@ import (
 )
 
 const (
-	ProjectIDMaxBytes         = 64
-	PackageImportPathMaxBytes = 512
-	FuzzTargetNameMaxBytes    = 128
-	RunIDTextBytes            = 32
-	MachineIDTextBytes        = 32
-	CommitSHATextBytes        = 40
-	FuzzTargetPrefix          = "Fuzz"
+	ProjectIDMaxBytes             = 64
+	PackageImportPathMaxBytes     = 512
+	FuzzTargetNameMaxBytes        = 128
+	RunIDTextBytes                = 32
+	MachineIDTextBytes            = 32
+	CommitSHATextBytes            = 40
+	FuzzTargetPrefix              = "Fuzz"
+	ProjectIDContractName         = "ProjectID"
+	PackageImportPathContractName = "PackageImportPath"
+	FuzzTargetNameContractName    = "FuzzTargetName"
+	RunIDContractName             = "RunID"
+	MachineIDContractName         = "MachineID"
+	CommitSHAContractName         = "CommitSHA"
 )
 
 type ProjectID struct{ value string }
@@ -25,11 +31,11 @@ type CommitSHA struct{ value string }
 
 func ParseProjectID(value string) (ProjectID, error) {
 	if len(value) == 0 || len(value) > ProjectIDMaxBytes || !lowerLetter(value[0]) || value[len(value)-1] == '-' {
-		return ProjectID{}, identityError("ProjectID")
+		return ProjectID{}, identityError(ProjectIDContractName)
 	}
 	for index := 1; index < len(value); index++ {
 		if !lowerLetter(value[index]) && !decimal(value[index]) && value[index] != '-' {
-			return ProjectID{}, identityError("ProjectID")
+			return ProjectID{}, identityError(ProjectIDContractName)
 		}
 	}
 	return ProjectID{value: value}, nil
@@ -37,11 +43,11 @@ func ParseProjectID(value string) (ProjectID, error) {
 
 func ParsePackageImportPath(value string) (PackageImportPath, error) {
 	if len(value) == 0 || len(value) > PackageImportPathMaxBytes {
-		return PackageImportPath{}, identityError("PackageImportPath")
+		return PackageImportPath{}, identityError(PackageImportPathContractName)
 	}
 	for segment := range strings.SplitSeq(value, "/") {
 		if !validImportSegment(segment) {
-			return PackageImportPath{}, identityError("PackageImportPath")
+			return PackageImportPath{}, identityError(PackageImportPathContractName)
 		}
 	}
 	return PackageImportPath{value: value}, nil
@@ -49,15 +55,15 @@ func ParsePackageImportPath(value string) (PackageImportPath, error) {
 
 func ParseFuzzTargetName(value string) (FuzzTargetName, error) {
 	if len(value) <= len(FuzzTargetPrefix) || len(value) > FuzzTargetNameMaxBytes || !strings.HasPrefix(value, FuzzTargetPrefix) {
-		return FuzzTargetName{}, identityError("FuzzTargetName")
+		return FuzzTargetName{}, identityError(FuzzTargetNameContractName)
 	}
 	suffix := value[len(FuzzTargetPrefix):]
 	if suffix != "" && lowerLetter(suffix[0]) {
-		return FuzzTargetName{}, identityError("FuzzTargetName")
+		return FuzzTargetName{}, identityError(FuzzTargetNameContractName)
 	}
 	for index := range len(suffix) {
 		if !identifierByte(suffix[index]) {
-			return FuzzTargetName{}, identityError("FuzzTargetName")
+			return FuzzTargetName{}, identityError(FuzzTargetNameContractName)
 		}
 	}
 	return FuzzTargetName{value: value}, nil
@@ -65,21 +71,21 @@ func ParseFuzzTargetName(value string) (FuzzTargetName, error) {
 
 func ParseRunID(value string) (RunID, error) {
 	if !fixedLowerHex(value, RunIDTextBytes) {
-		return RunID{}, identityError("RunID")
+		return RunID{}, identityError(RunIDContractName)
 	}
 	return RunID{value: value}, nil
 }
 
 func ParseMachineID(value string) (MachineID, error) {
 	if !fixedLowerHex(value, MachineIDTextBytes) {
-		return MachineID{}, identityError("MachineID")
+		return MachineID{}, identityError(MachineIDContractName)
 	}
 	return MachineID{value: value}, nil
 }
 
 func ParseCommitSHA(value string) (CommitSHA, error) {
 	if !fixedLowerHex(value, CommitSHATextBytes) {
-		return CommitSHA{}, identityError("CommitSHA")
+		return CommitSHA{}, identityError(CommitSHAContractName)
 	}
 	return CommitSHA{value: value}, nil
 }
