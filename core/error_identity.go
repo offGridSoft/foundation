@@ -13,6 +13,7 @@ var (
 	ErrCustodyContract          = fmt.Errorf("custody contract violation: %w", ErrFoundationContract)
 	ErrReleaseContract          = fmt.Errorf("release contract violation: %w", ErrFoundationContract)
 	ErrJSONContract             = fmt.Errorf("json contract violation: %w", ErrFoundationContract)
+	ErrDeliveryContract         = fmt.Errorf("coalescing delivery contract violation: %w", ErrFoundationContract)
 	ErrKeygenContract           = fmt.Errorf("keygen contract violation: %w", ErrFoundationContract)
 	ErrKeygenEntropy            = errors.New("keygen entropy failure")
 	ErrWitnessPolicyContract    = fmt.Errorf("witness policy contract violation: %w", ErrFoundationContract)
@@ -65,6 +66,7 @@ const (
 	ErrFmtUploadHeader        = "core.UploadHeader: %w"
 	ErrFmtBackoffAttempts     = "core.BackoffPolicy.MaxAttempts: %w"
 	ErrFmtBackoffWindow       = "core.BackoffPolicy.Window: %w"
+	ErrFmtCoalescingDelivery  = "core.CoalescingDelivery: %w"
 	ErrFmtUnixNanoTime        = "core.UnixNanoTime: %w"
 	ErrFmtNanosecondsDuration = "core.NanosecondsDuration: %w"
 	ErrFmtMoneyPennies        = "core.MoneyPennies: %w"

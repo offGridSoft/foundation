@@ -10,6 +10,7 @@ type coreContractInventory struct {
 	RetentionPolicy    protocolFact[WitnessRetentionPolicy]
 	RetentionWindow    protocolFact[WitnessRetentionWindow]
 	RetentionDecision  internalFlow[WitnessRetentionDecisionInput]
+	CoalescingDelivery internalFlow[CoalescingDelivery[deliveryFixture]]
 	UpdateNotice       protocolFact[UpdateNotice]
 }
 
