@@ -248,7 +248,7 @@ func gateLease(now core.UnixNanoTime) SeatLeaseBody {
 }
 
 func mustGateSeatOffer() Offer {
-	offer, err := OfferForSeatPlan(SeatPlanStandard)
+	offer, err := OfferForSeatPlan(SeatPlanStandard, core.NewMoneyPennies(testPaidOfferPennies))
 	if err != nil {
 		panic(err)
 	}

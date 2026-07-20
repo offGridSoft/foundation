@@ -8,6 +8,8 @@ import (
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
+const testPaidOfferPennies = uint64(1)
+
 func TestOfferCatalogHostileTable(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -18,13 +20,13 @@ func TestOfferCatalogHostileTable(t *testing.T) {
 		wantPeriod  BillingPeriod
 		wantCode    OfferCode
 	}{
-		{name: "bug standard is fifty dollars monthly", offer: mustSeatOfferForTest(t, SeatPlanStandard), wantProduct: core.ProductBug, wantPeriod: BillingPeriodMonthly, wantPrice: BugStandardPricePennies, wantCode: OfferBugStandard},
-		{name: "bug enterprise is monthly", offer: mustSeatOfferForTest(t, SeatPlanEnterprise), wantProduct: core.ProductBug, wantPeriod: BillingPeriodMonthly, wantPrice: BugEnterpriseMonthlyPennies, wantCode: OfferBugEnterprise},
-		{name: "bug enterprise offline is prepaid one to five years", offer: mustSeatOfferForTest(t, SeatPlanEnterpriseOffline), wantProduct: core.ProductBug, wantPeriod: BillingPeriodPrepaidYears, wantPrice: BugEnterpriseOfflinePennies, wantCode: OfferBugEnterpriseOffline},
+		{name: "bug standard is monthly", offer: mustSeatOfferForTest(t, SeatPlanStandard), wantProduct: core.ProductBug, wantPeriod: BillingPeriodMonthly, wantPrice: testPaidOfferPennies, wantCode: OfferBugStandard},
+		{name: "bug enterprise is monthly", offer: mustSeatOfferForTest(t, SeatPlanEnterprise), wantProduct: core.ProductBug, wantPeriod: BillingPeriodMonthly, wantPrice: testPaidOfferPennies, wantCode: OfferBugEnterprise},
+		{name: "bug enterprise offline is prepaid one to five years", offer: mustSeatOfferForTest(t, SeatPlanEnterpriseOffline), wantProduct: core.ProductBug, wantPeriod: BillingPeriodPrepaidYears, wantPrice: testPaidOfferPennies, wantCode: OfferBugEnterpriseOffline},
 		{name: "bug oss keeps a separate zero-price identity", offer: mustSeatOfferForTest(t, SeatPlanOSS), wantProduct: core.ProductBug, wantPeriod: BillingPeriodMonthly, wantPrice: 0, wantCode: OfferBugOSS},
-		{name: "witness bronze is monthly", offer: mustSubscriptionOfferForTest(t, SubscriptionPlanBronze), wantProduct: core.ProductWitness, wantPeriod: BillingPeriodMonthly, wantPrice: WitnessBronzePricePennies, wantCode: OfferWitnessBronze},
-		{name: "witness silver is monthly", offer: mustSubscriptionOfferForTest(t, SubscriptionPlanSilver), wantProduct: core.ProductWitness, wantPeriod: BillingPeriodMonthly, wantPrice: WitnessSilverPricePennies, wantCode: OfferWitnessSilver},
-		{name: "witness gold is monthly", offer: mustSubscriptionOfferForTest(t, SubscriptionPlanGold), wantProduct: core.ProductWitness, wantPeriod: BillingPeriodMonthly, wantPrice: WitnessGoldStartingPricePennies, wantCode: OfferWitnessGold},
+		{name: "witness bronze is monthly", offer: mustSubscriptionOfferForTest(t, SubscriptionPlanBronze), wantProduct: core.ProductWitness, wantPeriod: BillingPeriodMonthly, wantPrice: testPaidOfferPennies, wantCode: OfferWitnessBronze},
+		{name: "witness silver is monthly", offer: mustSubscriptionOfferForTest(t, SubscriptionPlanSilver), wantProduct: core.ProductWitness, wantPeriod: BillingPeriodMonthly, wantPrice: testPaidOfferPennies, wantCode: OfferWitnessSilver},
+		{name: "witness gold is monthly", offer: mustSubscriptionOfferForTest(t, SubscriptionPlanGold), wantProduct: core.ProductWitness, wantPeriod: BillingPeriodMonthly, wantPrice: testPaidOfferPennies, wantCode: OfferWitnessGold},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -55,6 +57,11 @@ func TestOfferRejectsPolicyDriftHostileTable(t *testing.T) {
 	}{
 		{name: "unknown offer code rejected", mutate: func(_ *testing.T, o *Offer) { o.Code = offerCodeInvalid }},
 		{name: "wrong product rejected", mutate: func(_ *testing.T, o *Offer) { o.Product = core.ProductWitness }},
+		{name: "paid offer rejects zero price", mutate: func(_ *testing.T, o *Offer) { o.PricePennies = core.NewMoneyPennies(0) }},
+		{name: "oss offer rejects nonzero price", mutate: func(t *testing.T, o *Offer) {
+			*o = mustSeatOfferForTest(t, SeatPlanOSS)
+			o.PricePennies = core.NewMoneyPennies(testPaidOfferPennies)
+		}},
 		{name: "invalid billing period rejected", mutate: func(_ *testing.T, o *Offer) { o.BillingPeriod = billingPeriodInvalid }},
 		{name: "negative write grace rejected", mutate: func(_ *testing.T, o *Offer) { o.WriteGrace = core.NanosecondsDurationFromInt64(-1) }},
 		{name: "check-in after check-in by rejected", mutate: func(_ *testing.T, o *Offer) { o.CheckInAfter = core.NewNanosecondsDuration(36 * 24 * time.Hour) }},
@@ -365,13 +372,17 @@ func TestBuildLeaseWindowRejectsBadTermsHostileTable(t *testing.T) {
 
 func mustSeatOfferForTest(t *testing.T, plan SeatPlan) Offer {
 	t.Helper()
-	offer, err := OfferForSeatPlan(plan)
+	price := core.NewMoneyPennies(testPaidOfferPennies)
+	if plan == SeatPlanOSS {
+		price = core.NewMoneyPennies(0)
+	}
+	offer, err := OfferForSeatPlan(plan, price)
 	return mustOffer(t, offer, err)
 }
 
 func mustSubscriptionOfferForTest(t *testing.T, plan SubscriptionPlan) Offer {
 	t.Helper()
-	offer, err := OfferForSubscriptionPlan(plan)
+	offer, err := OfferForSubscriptionPlan(plan, core.NewMoneyPennies(testPaidOfferPennies))
 	return mustOffer(t, offer, err)
 }
 

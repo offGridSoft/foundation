@@ -3,59 +3,17 @@ package peachfuzz
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/offGridSoft/foundation/v2026/core"
-	"github.com/offGridSoft/foundation/v2026/workloadidentity"
 )
 
-type RecordClient struct {
-	Identity workloadidentity.TokenSource
-	HTTP     *http.Client
-	Endpoint core.APIEndpoint
-}
-
-func (c RecordClient) Validate() error {
-	if c.HTTP == nil || c.Identity == nil {
-		return fmt.Errorf(ErrFmtRecordClient, ErrContract)
-	}
-	checks := []error{c.Endpoint.Validate(), c.Identity.Validate()}
-	for _, err := range checks {
-		if err != nil {
-			return fmt.Errorf(ErrFmtRecordClient, errors.Join(ErrContract, err))
-		}
-	}
-	return nil
-}
-
-func (c RecordClient) Record(ctx context.Context, stats RunStats) (RunStatsReceipt, error) {
-	if err := c.Validate(); err != nil {
-		return RunStatsReceipt{}, err
-	}
-	if err := stats.Validate(); err != nil {
-		return RunStatsReceipt{}, err
-	}
-	body, err := json.Marshal(stats)
-	if err != nil {
-		return RunStatsReceipt{}, fmt.Errorf(ErrFmtRecordClient, errors.Join(ErrContract, err))
-	}
-	receipt, err := executeAuthenticated[RunStatsReceipt](authenticatedRequest{
-		Context: ctx, Client: c.HTTP, Identity: c.Identity,
-		Method: http.MethodPost, Endpoint: c.Endpoint.String(), Body: body,
-	})
-	if err != nil {
-		return RunStatsReceipt{}, err
-	}
-	if receipt.RunID != stats.RunID {
-		return RunStatsReceipt{}, fmt.Errorf(ErrFmtRecordClient, ErrContract)
-	}
-	return receipt, nil
-}
+const HTTPClientTimeout = 15 * time.Second
 
 type SnapshotClient struct {
 	HTTP     *http.Client
@@ -63,7 +21,7 @@ type SnapshotClient struct {
 }
 
 func (c SnapshotClient) Validate() error {
-	if c.HTTP == nil {
+	if c.HTTP == nil || c.HTTP.Timeout != HTTPClientTimeout {
 		return fmt.Errorf(ErrFmtSnapshotClient, ErrContract)
 	}
 	if err := c.Endpoint.Validate(); err != nil {
@@ -88,36 +46,6 @@ func (c SnapshotClient) Snapshot(ctx context.Context, project ProjectID) (Projec
 		return ProjectSnapshot{}, fmt.Errorf(ErrFmtSnapshotClient, ErrContract)
 	}
 	return snapshot, nil
-}
-
-type authenticatedRequest struct {
-	Context  context.Context
-	Client   *http.Client
-	Identity workloadidentity.TokenSource
-	Method   string
-	Endpoint string
-	Body     []byte
-}
-
-func executeAuthenticated[T core.APIBody](input authenticatedRequest) (T, error) {
-	var zero T
-	if input.Context == nil {
-		return zero, fmt.Errorf(ErrFmtRecordClient, errors.Join(ErrContract, core.ErrNilContext))
-	}
-	token, err := input.Identity.Token(input.Context)
-	if err != nil {
-		return zero, HTTPError{Cause: err}
-	}
-	request, err := newRequest(input.Context, input.Method, input.Endpoint, input.Body)
-	if err != nil {
-		return zero, HTTPError{Cause: err}
-	}
-	bearer, err := token.BearerValue()
-	if err != nil {
-		return zero, HTTPError{Cause: err}
-	}
-	request.Header.Set(core.HTTPHeaderAuthorization, bearer)
-	return executeRequest[T](input.Client, request)
 }
 
 func executePublic[T core.APIBody](ctx context.Context, client *http.Client, method, endpoint string, body []byte) (T, error) {
@@ -171,7 +99,7 @@ func decodeResponse[T core.APIBody](response *http.Response) (T, error) {
 	}
 	envelope, err := core.DecodeStrictJSON[core.APIEnvelope[T]](body)
 	if err != nil {
-		return zero, HTTPError{StatusCode: response.StatusCode, Cause: ErrContract}
+		return zero, HTTPError{StatusCode: response.StatusCode, Cause: errors.Join(ErrContract, err)}
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return zero, failureFrom(response.StatusCode, envelope)
@@ -209,6 +137,5 @@ func (e HTTPError) Unwrap() error {
 }
 
 var (
-	_ core.Validatable = RecordClient{}
 	_ core.Validatable = SnapshotClient{}
 )

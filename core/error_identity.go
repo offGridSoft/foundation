@@ -33,6 +33,7 @@ var (
 	ErrAccessContract           = fmt.Errorf("access contract violation: %w", ErrFoundationContract)
 	ErrIPNetworkContract        = fmt.Errorf("ip network contract violation: %w", ErrFoundationContract)
 	ErrTestSerialContract       = fmt.Errorf("test serial contract violation: %w", ErrFoundationContract)
+	ErrDoctrineContract         = fmt.Errorf("doctrine contract violation: %w", ErrFoundationContract)
 	ErrNilContext               = fmt.Errorf("nil context: %w", ErrFoundationContract)
 )
 
@@ -50,6 +51,8 @@ const (
 	ErrFmtHTTPSURL            = "core.HTTPSURL: %w"
 	ErrFmtIPNetwork           = "core.IPNetwork: %w"
 	ErrFmtTestSerialReason    = "core.TestSerialReason: %w"
+	ErrFmtDoctrineLayer       = "core.DoctrinePackageLayer: %w"
+	ErrFmtDoctrineCapability  = "core.DoctrinePackageCapability: %w"
 	ErrFmtAPIEndpoint         = "core.APIEndpoint: %w"
 	ErrFmtUniqueToken         = "core.UniqueToken: %w"
 	ErrFmtArtifactSet         = "core.ArtifactSet: %w"

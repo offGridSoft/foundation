@@ -1020,7 +1020,11 @@ func testSeatLeaseBody(t *testing.T) SeatLeaseBody {
 
 func mustTestSeatOffer(t *testing.T, plan SeatPlan) Offer {
 	t.Helper()
-	offer, err := OfferForSeatPlan(plan)
+	price := core.NewMoneyPennies(testPaidOfferPennies)
+	if plan == SeatPlanOSS {
+		price = core.NewMoneyPennies(0)
+	}
+	offer, err := OfferForSeatPlan(plan, price)
 	if err != nil {
 		t.Fatal(err)
 	}

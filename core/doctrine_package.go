@@ -1,0 +1,3 @@
+package core
+
+const doctrinePackageLayer DoctrinePackageLayer = DoctrinePackageLayerCore

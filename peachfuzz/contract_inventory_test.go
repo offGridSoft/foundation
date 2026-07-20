@@ -12,6 +12,5 @@ var (
 	_ foundationcore.Validatable = RunOutcomeUnknown
 	_ foundationcore.Validatable = RunStatsSchemaUnknown
 	_ foundationcore.Validatable = RunStats{}
-	_ foundationcore.APIBody     = RunStatsReceipt{}
 	_ foundationcore.APIBody     = ProjectSnapshot{}
 )

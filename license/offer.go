@@ -9,12 +9,6 @@ import (
 )
 
 const (
-	BugStandardPricePennies         = 5000
-	BugEnterpriseMonthlyPennies     = 10000
-	BugEnterpriseOfflinePennies     = 10000
-	WitnessBronzePricePennies       = 350000
-	WitnessSilverPricePennies       = 1250000
-	WitnessGoldStartingPricePennies = 4000000
 	BugEnterpriseMinPrepaidYears    = 1
 	BugEnterpriseMaxPrepaidYears    = 5
 	BillingPeriodMonthlyMaxDuration = 31 * 24 * time.Hour
@@ -217,44 +211,44 @@ func (o Offer) Validate() error {
 	return validateOfferPrepaidYears(o)
 }
 
-func OfferForSeatPlan(plan SeatPlan) (Offer, error) {
+func OfferForSeatPlan(plan SeatPlan, price core.MoneyPennies) (Offer, error) {
 	switch plan {
 	case SeatPlanStandard:
-		return bugStandardOffer(), nil
+		return bugStandardOffer(price), nil
 	case SeatPlanEnterprise:
-		return bugEnterpriseOffer(), nil
+		return bugEnterpriseOffer(price), nil
 	case SeatPlanEnterpriseOffline:
-		return bugEnterpriseOfflineOffer(), nil
+		return bugEnterpriseOfflineOffer(price), nil
 	case SeatPlanOSS:
-		return bugOSSOffer(), nil
+		return bugOSSOffer(price), nil
 	default:
 		return Offer{}, fmt.Errorf(ErrFmtOffer, core.ErrLicenseContract)
 	}
 }
 
-func OfferForSubscriptionPlan(plan SubscriptionPlan) (Offer, error) {
+func OfferForSubscriptionPlan(plan SubscriptionPlan, price core.MoneyPennies) (Offer, error) {
 	switch plan {
 	case SubscriptionPlanBronze:
-		return witnessOffer(OfferWitnessBronze, WitnessBronzePricePennies), nil
+		return witnessOffer(OfferWitnessBronze, price), nil
 	case SubscriptionPlanSilver:
-		return witnessOffer(OfferWitnessSilver, WitnessSilverPricePennies), nil
+		return witnessOffer(OfferWitnessSilver, price), nil
 	case SubscriptionPlanGold:
-		return witnessOffer(OfferWitnessGold, WitnessGoldStartingPricePennies), nil
+		return witnessOffer(OfferWitnessGold, price), nil
 	default:
 		return Offer{}, fmt.Errorf(ErrFmtOffer, core.ErrLicenseContract)
 	}
 }
 
-func bugStandardOffer() Offer {
-	return connectedOffer(OfferBugStandard, core.ProductBug, BugStandardPricePennies)
+func bugStandardOffer(price core.MoneyPennies) Offer {
+	return connectedOffer(OfferBugStandard, core.ProductBug, price)
 }
 
-func bugEnterpriseOffer() Offer {
-	return connectedOffer(OfferBugEnterprise, core.ProductBug, BugEnterpriseMonthlyPennies)
+func bugEnterpriseOffer(price core.MoneyPennies) Offer {
+	return connectedOffer(OfferBugEnterprise, core.ProductBug, price)
 }
 
-func bugEnterpriseOfflineOffer() Offer {
-	offer := connectedOffer(OfferBugEnterpriseOffline, core.ProductBug, BugEnterpriseOfflinePennies)
+func bugEnterpriseOfflineOffer(price core.MoneyPennies) Offer {
+	offer := connectedOffer(OfferBugEnterpriseOffline, core.ProductBug, price)
 	offer.BillingPeriod = BillingPeriodPrepaidYears
 	offer.LeaseDuration = core.NewNanosecondsDuration(BugOfflineCheckInByDuration)
 	offer.CheckInAfter = core.NewNanosecondsDuration(BugOfflineCheckInAfterDuration)
@@ -265,19 +259,19 @@ func bugEnterpriseOfflineOffer() Offer {
 	return offer
 }
 
-func bugOSSOffer() Offer {
-	return connectedOffer(OfferBugOSS, core.ProductBug, 0)
+func bugOSSOffer(price core.MoneyPennies) Offer {
+	return connectedOffer(OfferBugOSS, core.ProductBug, price)
 }
 
-func witnessOffer(code OfferCode, price uint64) Offer {
+func witnessOffer(code OfferCode, price core.MoneyPennies) Offer {
 	return connectedOffer(code, core.ProductWitness, price)
 }
 
-func connectedOffer(code OfferCode, product core.Product, price uint64) Offer {
+func connectedOffer(code OfferCode, product core.Product, price core.MoneyPennies) Offer {
 	return Offer{
 		Code:          code,
 		Product:       product,
-		PricePennies:  core.NewMoneyPennies(price),
+		PricePennies:  price,
 		BillingPeriod: BillingPeriodMonthly,
 		LeaseDuration: core.NewNanosecondsDuration(ConnectedCheckInByDuration),
 		CheckInAfter:  core.NewNanosecondsDuration(ConnectedCheckInAfterDuration),
@@ -297,6 +291,13 @@ func validateOfferIdentity(o Offer) error {
 		return err
 	}
 	if !offerProductMatches(o.Code, o.Product) {
+		return fmt.Errorf(ErrFmtOffer, core.ErrLicenseContract)
+	}
+	if o.Code == OfferBugOSS {
+		if !o.PricePennies.IsZero() {
+			return fmt.Errorf(ErrFmtOffer, core.ErrLicenseContract)
+		}
+	} else if !o.PricePennies.IsPositive() {
 		return fmt.Errorf(ErrFmtOffer, core.ErrLicenseContract)
 	}
 	return nil

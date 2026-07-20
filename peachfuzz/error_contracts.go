@@ -17,9 +17,6 @@ const (
 	ErrFmtOutcome         = "peachfuzz.RunOutcome: %w"
 	ErrFmtRunStats        = "peachfuzz.RunStats: %w"
 	ErrFmtProjectSnapshot = "peachfuzz.ProjectSnapshot: %w"
-	ErrFmtReceipt         = "peachfuzz.RunStatsReceipt: %w"
-	ErrFmtDisposition     = "peachfuzz.RecordDisposition: %w"
-	ErrFmtRecordClient    = "peachfuzz.RecordClient: %w"
 	ErrFmtSnapshotClient  = "peachfuzz.SnapshotClient: %w"
 	ErrFmtHTTP            = "peachfuzz.HTTP: %w"
 )

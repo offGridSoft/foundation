@@ -73,25 +73,6 @@ func TestProjectSnapshotOGSBoundaryTable(t *testing.T) {
 	}
 }
 
-func TestRunStatsReceiptOGSBoundaryTable(t *testing.T) {
-	t.Parallel()
-	stats := validRunStats(t)
-	valid := RunStatsReceipt{RunID: stats.RunID, Disposition: RecordDispositionRecorded}
-	if err := valid.Validate(); err != nil {
-		t.Fatalf("RunStatsReceipt.Validate() error = %v", err)
-	}
-	invalidID := valid
-	invalidID.RunID = RunID{}
-	if err := invalidID.Validate(); !errors.Is(err, ErrContract) {
-		t.Fatalf("invalid RunID error = %v, want %v", err, ErrContract)
-	}
-	invalidDisposition := valid
-	invalidDisposition.Disposition = RecordDispositionUnknown
-	if err := invalidDisposition.Validate(); !errors.Is(err, ErrContract) {
-		t.Fatalf("invalid disposition error = %v, want %v", err, ErrContract)
-	}
-}
-
 func TestHumanizeEffortOGSUnitLadder(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

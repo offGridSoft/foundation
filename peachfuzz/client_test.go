@@ -1,88 +1,15 @@
 package peachfuzz
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
+	"time"
 
 	"github.com/offGridSoft/foundation/v2026/core"
-	"github.com/offGridSoft/foundation/v2026/workloadidentity"
 )
-
-const clientTestToken = "header.payload.signature"
-
-type staticTokenSource struct{ token workloadidentity.Token }
-
-func (s staticTokenSource) Validate() error { return s.token.Validate() }
-
-func (s staticTokenSource) Token(context.Context) (workloadidentity.Token, error) {
-	return s.token, nil
-}
-
-func TestClientRecordOGSExactTypedBoundary(t *testing.T) {
-	t.Parallel()
-	stats := validRunStats(t)
-	receipt := RunStatsReceipt{RunID: stats.RunID, Disposition: RecordDispositionRecorded}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		if request.Method != http.MethodPost {
-			t.Errorf("method = %q, want %q", request.Method, http.MethodPost)
-		}
-		if got := request.Header.Get(core.HTTPHeaderContentType); got != core.HTTPContentTypeJSON {
-			t.Errorf("content type = %q, want %q", got, core.HTTPContentTypeJSON)
-		}
-		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
-		writeClientEnvelope(t, w, receipt)
-	}))
-	t.Cleanup(server.Close)
-
-	got, err := validRecordClient(t, server).Record(t.Context(), stats)
-	if err != nil {
-		t.Fatalf("RecordClient.Record() error = %v", err)
-	}
-	if got != receipt {
-		t.Fatalf("RecordClient.Record() = %#v, want %#v", got, receipt)
-	}
-}
-
-func TestClientRecordOGSRejectsSubstitutedRunIdentity(t *testing.T) {
-	t.Parallel()
-	stats := validRunStats(t)
-	otherID, err := ParseRunID(strings.Repeat("d", RunIDTextBytes))
-	if err != nil {
-		t.Fatal(err)
-	}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
-		writeClientEnvelope(t, w, RunStatsReceipt{RunID: otherID, Disposition: RecordDispositionRecorded})
-	}))
-	t.Cleanup(server.Close)
-
-	_, err = validRecordClient(t, server).Record(t.Context(), stats)
-	if !errors.Is(err, ErrContract) {
-		t.Fatalf("RecordClient.Record() error = %v, want %v", err, ErrContract)
-	}
-}
-
-func TestClientRecordOGSRejectsTrailingProtocolValue(t *testing.T) {
-	t.Parallel()
-	stats := validRunStats(t)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
-		writeClientEnvelope(t, w, RunStatsReceipt{RunID: stats.RunID, Disposition: RecordDispositionRecorded})
-		_, _ = w.Write([]byte("{}"))
-	}))
-	t.Cleanup(server.Close)
-
-	_, err := validRecordClient(t, server).Record(t.Context(), stats)
-	var transportError HTTPError
-	if !errors.As(err, &transportError) || !errors.Is(err, ErrUnavailable) {
-		t.Fatalf("RecordClient.Record() error = %v, want typed unavailable HTTPError", err)
-	}
-}
 
 func TestSnapshotClientOGSPublicBoundary(t *testing.T) {
 	t.Parallel()
@@ -127,6 +54,50 @@ func TestSnapshotClientOGSRejectsSubstitutedProject(t *testing.T) {
 	}
 }
 
+func TestSnapshotClientOGSTimeoutContractTable(t *testing.T) {
+	t.Parallel()
+	endpoint, err := core.APIEndpointForBaseURL("https://api.offgridsoftware.ca", OffgridRunStatsPath)
+	if err != nil {
+		t.Fatalf("APIEndpointForBaseURL() error = %v", err)
+	}
+	for _, tc := range []struct {
+		name    string
+		timeout time.Duration
+		valid   bool
+	}{
+		{name: "exact contract", timeout: HTTPClientTimeout, valid: true},
+		{name: "unbounded", timeout: 0},
+		{name: "drifted shorter", timeout: HTTPClientTimeout - time.Second},
+		{name: "drifted longer", timeout: HTTPClientTimeout + time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			client := SnapshotClient{HTTP: &http.Client{Timeout: tc.timeout}, Endpoint: endpoint}
+			err := client.Validate()
+			if tc.valid && err != nil {
+				t.Fatalf("SnapshotClient.Validate() error = %v", err)
+			}
+			if !tc.valid && !errors.Is(err, ErrContract) {
+				t.Fatalf("SnapshotClient.Validate() error = %v, want %v", err, ErrContract)
+			}
+		})
+	}
+}
+
+func TestSnapshotClientOGSPreservesStrictDecodeIdentity(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
+		_, _ = w.Write([]byte(`{"unexpected":true}`))
+	}))
+	t.Cleanup(server.Close)
+	_, err := validSnapshotClient(t, server).Snapshot(t.Context(), validProjectSnapshot(t).Project)
+	var httpErr HTTPError
+	if !errors.As(err, &httpErr) || !errors.Is(err, core.ErrJSONContract) || !errors.Is(err, ErrContract) {
+		t.Fatalf("SnapshotClient.Snapshot() error = %v, want HTTPError wrapping ErrJSONContract and ErrContract", err)
+	}
+}
+
 func TestOffgridRunStatsPathUsesPublicAPIVersionContract(t *testing.T) {
 	t.Parallel()
 	want := "/" + core.APIVersionToken + "/peachfuzz/stats"
@@ -138,26 +109,15 @@ func TestOffgridRunStatsPathUsesPublicAPIVersionContract(t *testing.T) {
 	}
 }
 
-func validRecordClient(t *testing.T, server *httptest.Server) RecordClient {
-	t.Helper()
-	endpoint, err := core.APIEndpointForBaseURL(server.URL, OffgridRunStatsPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	token, err := workloadidentity.ParseToken(clientTestToken)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return RecordClient{HTTP: server.Client(), Endpoint: endpoint, Identity: staticTokenSource{token: token}}
-}
-
 func validSnapshotClient(t *testing.T, server *httptest.Server) SnapshotClient {
 	t.Helper()
 	endpoint, err := core.APIEndpointForBaseURL(server.URL, OffgridRunStatsPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return SnapshotClient{HTTP: server.Client(), Endpoint: endpoint}
+	client := server.Client()
+	client.Timeout = HTTPClientTimeout
+	return SnapshotClient{HTTP: client, Endpoint: endpoint}
 }
 
 func writeClientEnvelope[T core.APIBody](t *testing.T, w http.ResponseWriter, body T) {
