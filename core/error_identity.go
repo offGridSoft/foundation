@@ -44,6 +44,7 @@ func wrapFoundationContract(format string) error {
 const (
 	ErrFmtProductVersion      = "core.ProductVersion: %w"
 	ErrFmtProduct             = "core.Product: %w"
+	ErrFmtCodeLanguage        = "core.CodeLanguage: %w"
 	ErrFmtPlatform            = "core.Platform: %w"
 	ErrFmtBuildCommit         = "core.BuildCommit: %w"
 	ErrFmtFileNameToken       = "core.FileNameToken: %w"
