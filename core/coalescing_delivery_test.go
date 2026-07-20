@@ -1,11 +1,55 @@
 package core
 
 import (
+	"encoding/json"
 	"errors"
 	"math"
 	"testing"
 	"time"
 )
+
+func TestDeliveryPhaseJSONBoundaryTable(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name    string
+		encoded string
+		want    DeliveryPhase
+		wantErr bool
+	}{
+		{name: "pending", encoded: `"pending"`, want: DeliveryPhasePending},
+		{name: "in flight", encoded: `"in_flight"`, want: DeliveryPhaseInFlight},
+		{name: "acknowledged", encoded: `"acknowledged"`, want: DeliveryPhaseAcknowledged},
+		{name: "unknown token", encoded: `"other"`, wantErr: true},
+		{name: "numeric wire value", encoded: `1`, wantErr: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var got DeliveryPhase
+			gotErr := json.Unmarshal([]byte(testCase.encoded), &got)
+			if testCase.wantErr {
+				if !errors.Is(gotErr, ErrDeliveryContract) {
+					t.Fatalf("UnmarshalJSON() error = %v, want delivery contract identity", gotErr)
+				}
+				return
+			}
+			if gotErr != nil {
+				t.Fatalf("UnmarshalJSON() error = %v, want nil", gotErr)
+			}
+			if got != testCase.want || got.String() == "" || !got.IsValid() {
+				t.Fatalf("phase = %v, want %v", got, testCase.want)
+			}
+			encoded, err := json.Marshal(got)
+			if err != nil {
+				t.Fatalf("MarshalJSON() error = %v, want nil", err)
+			}
+			if string(encoded) != testCase.encoded {
+				t.Fatalf("MarshalJSON() = %s, want %s", encoded, testCase.encoded)
+			}
+		})
+	}
+}
 
 type deliveryFixture struct{ Valid bool }
 
@@ -29,8 +73,8 @@ func TestCoalescingDeliveryTransitionTable(t *testing.T) {
 		t.Fatalf("Begin() error = %v, want nil", err)
 	}
 	cases := []struct {
-		name    string
 		run     func() error
+		name    string
 		wantErr bool
 	}{
 		{name: "pending begins when available", run: func() error { _, gotErr := valid.Begin(now); return gotErr }},
@@ -105,12 +149,12 @@ func TestCoalescingDeliveryRetryBackoffTable(t *testing.T) {
 	now := NewUnixNanoTime(time.Unix(10, 0))
 	policy := BackoffPolicy{Base: time.Second, Max: 4 * time.Second, MaxAttempts: 3}
 	cases := []struct {
+		wantErr      error
 		name         string
 		attempts     uint64
 		jitter       float64
 		wantDelay    time.Duration
 		wantAttempts uint64
-		wantErr      error
 	}{
 		{name: "first failure schedules full base delay", attempts: 0, jitter: 1, wantDelay: time.Second, wantAttempts: 1},
 		{name: "second failure doubles full delay", attempts: 1, jitter: 1, wantDelay: 2 * time.Second, wantAttempts: 2},
@@ -133,6 +177,9 @@ func TestCoalescingDeliveryRetryBackoffTable(t *testing.T) {
 			pending.Attempts = testCase.attempts
 			inFlight, err := pending.Begin(now)
 			if err != nil {
+				if errors.Is(err, testCase.wantErr) {
+					return
+				}
 				t.Fatalf("Begin() error = %v, want nil", err)
 			}
 			got, gotErr := inFlight.Retry(inFlight.Generation, now, policy, testCase.jitter)

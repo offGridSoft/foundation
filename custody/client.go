@@ -11,6 +11,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -173,12 +174,7 @@ func bindReceiptToFinalize(request FinalizeRequest, receipt ReceiptBody) error {
 }
 
 func uploadedObjectExists(objects []UploadedObject, want UploadedObject) bool {
-	for _, object := range objects {
-		if object == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(objects, want)
 }
 
 // UploadArtifactInput carries one artifact stream to its signed upload

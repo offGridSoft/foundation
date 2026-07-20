@@ -15,11 +15,24 @@ const (
 	NanosPerCoreHour   = 60 * NanosPerCoreMinute
 	NanosPerCoreDay    = 24 * NanosPerCoreHour
 	NanosPerCoreYear   = 365*NanosPerCoreDay + 6*NanosPerCoreHour
-	CoreYearsFormat    = "%.2f core-years"
-	CoreDaysFormat     = "%.1f core-days"
-	CoreHoursFormat    = "%.1f core-hours"
-	CoreMinutesFormat  = "%.1f core-minutes"
-	CoreSecondsFormat  = "%.1f core-seconds"
+	CoreYearsFormat    = "%d.%02d core-years"
+	CoreDaysFormat     = "%d.%01d core-days"
+	CoreHoursFormat    = "%d.%01d core-hours"
+	CoreMinutesFormat  = "%d.%01d core-minutes"
+	CoreSecondsFormat  = "%d.%01d core-seconds"
+	CoreYearsScale     = int64(100)
+	CoreSubYearScale   = int64(10)
+)
+
+type effortDisplayUnit uint8
+
+const (
+	effortDisplayUnitUnknown effortDisplayUnit = iota
+	effortDisplayUnitYears
+	effortDisplayUnitDays
+	effortDisplayUnitHours
+	effortDisplayUnitMinutes
+	effortDisplayUnitSeconds
 )
 
 type RunStatsSchema uint8
@@ -220,15 +233,42 @@ func HumanizeEffort(effort core.NanosecondsDuration) (string, error) {
 	nanos := effort.Nanoseconds()
 	switch {
 	case nanos >= NanosPerCoreYear:
-		return fmt.Sprintf(CoreYearsFormat, float64(nanos)/float64(NanosPerCoreYear)), nil
+		return formatTruncatedEffort(nanos, effortDisplayUnitYears)
 	case nanos >= NanosPerCoreDay:
-		return fmt.Sprintf(CoreDaysFormat, float64(nanos)/float64(NanosPerCoreDay)), nil
+		return formatTruncatedEffort(nanos, effortDisplayUnitDays)
 	case nanos >= NanosPerCoreHour:
-		return fmt.Sprintf(CoreHoursFormat, float64(nanos)/float64(NanosPerCoreHour)), nil
+		return formatTruncatedEffort(nanos, effortDisplayUnitHours)
 	case nanos >= NanosPerCoreMinute:
-		return fmt.Sprintf(CoreMinutesFormat, float64(nanos)/float64(NanosPerCoreMinute)), nil
+		return formatTruncatedEffort(nanos, effortDisplayUnitMinutes)
 	default:
-		return fmt.Sprintf(CoreSecondsFormat, float64(nanos)/float64(NanosPerCoreSecond)), nil
+		return formatTruncatedEffort(nanos, effortDisplayUnitSeconds)
+	}
+}
+
+func formatTruncatedEffort(nanos int64, unit effortDisplayUnit) (string, error) {
+	divisor, scale, format, err := unit.contract()
+	if err != nil {
+		return "", err
+	}
+	whole := nanos / divisor
+	fraction := (nanos % divisor) * scale / divisor
+	return fmt.Sprintf(format, whole, fraction), nil
+}
+
+func (u effortDisplayUnit) contract() (int64, int64, string, error) {
+	switch u {
+	case effortDisplayUnitYears:
+		return NanosPerCoreYear, CoreYearsScale, CoreYearsFormat, nil
+	case effortDisplayUnitDays:
+		return NanosPerCoreDay, CoreSubYearScale, CoreDaysFormat, nil
+	case effortDisplayUnitHours:
+		return NanosPerCoreHour, CoreSubYearScale, CoreHoursFormat, nil
+	case effortDisplayUnitMinutes:
+		return NanosPerCoreMinute, CoreSubYearScale, CoreMinutesFormat, nil
+	case effortDisplayUnitSeconds:
+		return NanosPerCoreSecond, CoreSubYearScale, CoreSecondsFormat, nil
+	default:
+		return 0, 0, "", fmt.Errorf(ErrFmtProjectSnapshot, ErrContract)
 	}
 }
 

@@ -30,7 +30,6 @@ func TestRunStatsValidateOGSBoundaryTable(t *testing.T) {
 		{name: "wrong schema", mutate: func(s *RunStats) { s.Schema = RunStatsSchemaUnknown }},
 	}
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			candidate := valid
@@ -119,6 +118,32 @@ func TestHumanizeEffortOGSUnitLadder(t *testing.T) {
 	}
 	if _, err := HumanizeEffort(foundationcore.NanosecondsDurationFromInt64(-1)); !errors.Is(err, ErrContract) {
 		t.Fatalf("negative HumanizeEffort() error = %v, want %v", err, ErrContract)
+	}
+}
+
+func TestHumanizeEffortTruncatesEveryPublicTrustValue(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		want  string
+		nanos int64
+	}{
+		{name: "years never round to next hundredth", nanos: 2*NanosPerCoreYear - 1, want: "1.99 core-years"},
+		{name: "days never round to next tenth", nanos: 11*NanosPerCoreDay - 1, want: "10.9 core-days"},
+		{name: "hours never round to next tenth", nanos: 13*NanosPerCoreHour - 1, want: "12.9 core-hours"},
+		{name: "minutes never round to next tenth", nanos: 31*NanosPerCoreMinute - 1, want: "30.9 core-minutes"},
+		{name: "seconds never round to next tenth", nanos: 31*NanosPerCoreSecond - 1, want: "30.9 core-seconds"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := HumanizeEffort(foundationcore.NanosecondsDurationFromInt64(tc.nanos))
+			if err != nil {
+				t.Fatalf("HumanizeEffort() error = %v, want nil", err)
+			}
+			if got != tc.want {
+				t.Fatalf("HumanizeEffort() = %q, want truncation %q", got, tc.want)
+			}
+		})
 	}
 }
 

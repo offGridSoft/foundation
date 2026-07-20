@@ -67,6 +67,7 @@ const (
 	ErrFmtBackoffAttempts     = "core.BackoffPolicy.MaxAttempts: %w"
 	ErrFmtBackoffWindow       = "core.BackoffPolicy.Window: %w"
 	ErrFmtCoalescingDelivery  = "core.CoalescingDelivery: %w"
+	ErrFmtDeliveryPhase       = "core.DeliveryPhase: %w"
 	ErrFmtUnixNanoTime        = "core.UnixNanoTime: %w"
 	ErrFmtNanosecondsDuration = "core.NanosecondsDuration: %w"
 	ErrFmtMoneyPennies        = "core.MoneyPennies: %w"

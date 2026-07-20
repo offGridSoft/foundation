@@ -205,7 +205,7 @@ func ClassifyHTTPStatus(status int) HTTPOutcome {
 type BackoffPolicy struct {
 	Base        time.Duration
 	Max         time.Duration
-	MaxAttempts int
+	MaxAttempts uint64
 }
 
 func (p BackoffPolicy) Validate() error {
@@ -218,18 +218,18 @@ func (p BackoffPolicy) Validate() error {
 	return nil
 }
 
-func (p BackoffPolicy) Delay(attempt int, jitterFrac float64) (time.Duration, error) {
+func (p BackoffPolicy) Delay(attempt uint64, jitterFrac float64) (time.Duration, error) {
 	if err := p.Validate(); err != nil {
 		return 0, err
 	}
-	if attempt < 0 || attempt >= p.MaxAttempts {
+	if attempt >= p.MaxAttempts {
 		return 0, fmt.Errorf(ErrFmtBackoffAttempts, ErrFoundationContract)
 	}
 	if !(jitterFrac >= 0 && jitterFrac <= 1) {
 		return 0, fmt.Errorf(ErrFmtBackoffWindow, ErrFoundationContract)
 	}
 	ceiling := p.Base
-	for i := 0; i < attempt && ceiling < p.Max; i++ {
+	for i := uint64(0); i < attempt && ceiling < p.Max; i++ {
 		ceiling *= 2
 	}
 	if ceiling > p.Max {

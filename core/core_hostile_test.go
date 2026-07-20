@@ -870,10 +870,9 @@ func TestBackoffPolicyValidateHostileTable(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		name     string
-		attempt  int
+		attempt  uint64
 		fraction float64
 	}{
-		{name: "negative attempt", attempt: -1, fraction: 1},
 		{name: "attempt at maximum", attempt: valid.MaxAttempts, fraction: 1},
 		{name: "negative jitter", fraction: -0.1},
 		{name: "jitter above one", fraction: 1.1},

@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 )
@@ -15,8 +16,65 @@ const (
 	DeliveryPhaseAcknowledged
 )
 
-func (p DeliveryPhase) Valid() bool {
-	return p >= DeliveryPhasePending && p <= DeliveryPhaseAcknowledged
+const (
+	deliveryPhaseTokenPending      = "pending"
+	deliveryPhaseTokenInFlight     = "in_flight"
+	deliveryPhaseTokenAcknowledged = "acknowledged"
+)
+
+func deliveryPhaseNames() [DeliveryPhaseAcknowledged + 1]string {
+	return [...]string{
+		DeliveryPhasePending:      deliveryPhaseTokenPending,
+		DeliveryPhaseInFlight:     deliveryPhaseTokenInFlight,
+		DeliveryPhaseAcknowledged: deliveryPhaseTokenAcknowledged,
+	}
+}
+
+func (p DeliveryPhase) IsValid() bool {
+	return p > DeliveryPhaseUnknown && int(p) < len(deliveryPhaseNames()) && deliveryPhaseNames()[p] != ""
+}
+
+func (p DeliveryPhase) String() string {
+	if !p.IsValid() {
+		return ""
+	}
+	return deliveryPhaseNames()[p]
+}
+
+func (p DeliveryPhase) Validate() error {
+	if !p.IsValid() {
+		return fmt.Errorf(ErrFmtDeliveryPhase, ErrDeliveryContract)
+	}
+	return nil
+}
+
+func ParseDeliveryPhase(value string) (DeliveryPhase, error) {
+	for phase := DeliveryPhasePending; int(phase) < len(deliveryPhaseNames()); phase++ {
+		if deliveryPhaseNames()[phase] == value {
+			return phase, nil
+		}
+	}
+	return DeliveryPhaseUnknown, fmt.Errorf(ErrFmtDeliveryPhase, ErrDeliveryContract)
+}
+
+func (p DeliveryPhase) MarshalJSON() ([]byte, error) {
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(p.String())
+}
+
+func (p *DeliveryPhase) UnmarshalJSON(data []byte) error {
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return fmt.Errorf(ErrFmtDeliveryPhase, ErrDeliveryContract)
+	}
+	parsed, err := ParseDeliveryPhase(value)
+	if err != nil {
+		return err
+	}
+	*p = parsed
+	return nil
 }
 
 func coalescingDeliveryError(cause error) error {
@@ -39,8 +97,11 @@ func NewCoalescingDelivery[T Validatable](value T, now UnixNanoTime) (Coalescing
 }
 
 func (d CoalescingDelivery[T]) Validate() error {
-	if d.Generation == 0 || !d.Phase.Valid() {
+	if d.Generation == 0 || d.Attempts == math.MaxUint64 {
 		return coalescingDeliveryError(ErrFoundationContract)
+	}
+	if err := d.Phase.Validate(); err != nil {
+		return coalescingDeliveryError(err)
 	}
 	if err := d.Value.Validate(); err != nil {
 		return coalescingDeliveryError(err)
@@ -87,8 +148,8 @@ func (d CoalescingDelivery[T]) Retry(generation uint64, now UnixNanoTime, policy
 		return CoalescingDelivery[T]{}, coalescingDeliveryError(err)
 	}
 	attempt := policy.MaxAttempts - 1
-	if d.Attempts < uint64(attempt) {
-		attempt = int(d.Attempts)
+	if d.Attempts < attempt {
+		attempt = d.Attempts
 	}
 	delay, err := policy.Delay(attempt, jitterFraction)
 	if err != nil {

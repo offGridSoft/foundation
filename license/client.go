@@ -144,7 +144,7 @@ func (c Client[P, R]) roundTrip(ctx context.Context, body []byte, nonce CheckInN
 	var lastErr error
 	var retryAfter time.Duration
 	var retryAfterHint time.Duration
-	for attempt := 0; attempt < policy.MaxAttempts; attempt++ {
+	for attempt := uint64(0); attempt < policy.MaxAttempts; attempt++ {
 		if attempt > 0 {
 			delay, err := policy.Delay(attempt-1, c.jitterFraction())
 			if err != nil {
