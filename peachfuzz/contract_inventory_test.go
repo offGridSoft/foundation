@@ -18,7 +18,10 @@ var (
 	_ foundationcore.Validatable   = RunEvidenceDescriptor{}
 	_ foundationcore.Validatable   = RunEvidenceUploadRequest{}
 	_ foundationcore.Validatable   = RunEvidenceUploadGrant{}
+	_ foundationcore.Validatable   = RunEvidenceUploadDispositionUnknown
+	_ foundationcore.Validatable   = RunEvidenceUploadResponse{}
 	_ foundationcore.APIBody       = RunEvidenceUploadRequest{}
 	_ foundationcore.APIBody       = RunEvidenceUploadGrant{}
+	_ foundationcore.APIBody       = RunEvidenceUploadResponse{}
 	_ foundationcore.APIBody       = ProjectSnapshot{}
 )

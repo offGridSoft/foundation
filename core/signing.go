@@ -77,8 +77,8 @@ const (
 	ErrFmtSigningDomain                              = "core.SigningDomain: %w"
 )
 
-func signingDomainNames() [SchemaPeachfuzzRunEvidenceUploadGrant + 1]string {
-	return [SchemaPeachfuzzRunEvidenceUploadGrant + 1]string{
+func signingDomainNames() [SchemaPeachfuzzRunEvidenceUploadResponse + 1]string {
+	return [SchemaPeachfuzzRunEvidenceUploadResponse + 1]string{
 		SigningDomainBugCheckInResponse:             SigningDomainTokenBugCheckInResponse,
 		SigningDomainBugCheckInTimeCommitment:       SigningDomainTokenBugCheckInTimeCommitment,
 		SigningDomainBugSeatLease:                   SigningDomainTokenBugSeatLease,

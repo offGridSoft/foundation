@@ -100,6 +100,57 @@ func TestRunEvidenceUploadGrantBindsRequestOGSBoundaryTable(t *testing.T) {
 	}
 }
 
+func TestRunEvidenceUploadResponseHasExactlyOneDispositionOGSBoundaryTable(t *testing.T) {
+	t.Parallel()
+	request := validRunEvidenceUploadRequest(t)
+	descriptor, err := request.Descriptor()
+	if err != nil {
+		t.Fatalf("Descriptor() error = %v, want nil", err)
+	}
+	grant := validRunEvidenceUploadGrant(t, descriptor)
+	tests := []struct {
+		name     string
+		response RunEvidenceUploadResponse
+		wantErr  bool
+	}{
+		{name: "upload required", response: RunEvidenceUploadResponse{Grant: &grant, Descriptor: descriptor, Disposition: RunEvidenceUploadDispositionRequired, Schema: foundationcore.SchemaPeachfuzzRunEvidenceUploadResponse}},
+		{name: "already present", response: RunEvidenceUploadResponse{Descriptor: descriptor, Disposition: RunEvidenceUploadDispositionPresent, Schema: foundationcore.SchemaPeachfuzzRunEvidenceUploadResponse}},
+		{name: "required without grant", response: RunEvidenceUploadResponse{Descriptor: descriptor, Disposition: RunEvidenceUploadDispositionRequired, Schema: foundationcore.SchemaPeachfuzzRunEvidenceUploadResponse}, wantErr: true},
+		{name: "present with grant", response: RunEvidenceUploadResponse{Grant: &grant, Descriptor: descriptor, Disposition: RunEvidenceUploadDispositionPresent, Schema: foundationcore.SchemaPeachfuzzRunEvidenceUploadResponse}, wantErr: true},
+		{name: "unknown disposition", response: RunEvidenceUploadResponse{Descriptor: descriptor, Schema: foundationcore.SchemaPeachfuzzRunEvidenceUploadResponse}, wantErr: true},
+		{name: "wrong schema", response: RunEvidenceUploadResponse{Descriptor: descriptor, Disposition: RunEvidenceUploadDispositionPresent, Schema: foundationcore.SchemaPeachfuzzRunEvidenceUploadGrant}, wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := tc.response.ValidateRequest(request)
+			if tc.wantErr && !errors.Is(err, ErrContract) {
+				t.Fatalf("ValidateRequest() error = %v, want errors.Is(..., %v)", err, ErrContract)
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("ValidateRequest() error = %v, want nil", err)
+			}
+		})
+	}
+}
+
+func validRunEvidenceUploadGrant(t *testing.T, descriptor RunEvidenceDescriptor) RunEvidenceUploadGrant {
+	t.Helper()
+	uploadURL, err := foundationcore.ParseSignedUploadURL("https://storage.googleapis.com/evidence/object?X-Goog-Signature=abc")
+	if err != nil {
+		t.Fatalf("ParseSignedUploadURL() error = %v, want nil", err)
+	}
+	return RunEvidenceUploadGrant{
+		Descriptor: descriptor,
+		URL:        uploadURL,
+		Headers:    []foundationcore.UploadHeader{{Name: foundationcore.HTTPHeaderContentType, Value: RunEvidenceContentType}},
+		ExpiresAt:  foundationcore.UnixNanoTimeFromInt64(10),
+		Provider:   foundationcore.StorageProviderGCS,
+		Method:     foundationcore.UploadMethodSignedPUT,
+		Schema:     foundationcore.SchemaPeachfuzzRunEvidenceUploadGrant,
+	}
+}
+
 func validRunEvidenceUploadRequest(t *testing.T) RunEvidenceUploadRequest {
 	t.Helper()
 	key, machine := signedRunEvidenceKey(t)

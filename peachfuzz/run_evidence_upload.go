@@ -12,13 +12,65 @@ import (
 )
 
 const (
-	RunEvidenceArchiveSegment           = "effort"
-	RunEvidenceContentType              = "application/vnd.offgridsoftware.peachfuzz-run-evidence+json"
-	RunEvidenceDigestShardHexCharacters = 2
-	RunEvidenceObjectDigestSeparator    = "@"
-	RunEvidenceObjectExtension          = ".json"
-	RunEvidenceUploadGrantMaxHeaders    = 8
+	RunEvidenceArchiveSegment                 = "effort"
+	RunEvidenceContentType                    = "application/vnd.offgridsoftware.peachfuzz-run-evidence+json"
+	RunEvidenceDigestShardHexCharacters       = 2
+	RunEvidenceObjectDigestSeparator          = "@"
+	RunEvidenceObjectExtension                = ".json"
+	RunEvidenceUploadGrantMaxHeaders          = 8
+	RunEvidenceUploadDispositionTokenRequired = "upload-required"
+	RunEvidenceUploadDispositionTokenPresent  = "already-present"
 )
+
+type RunEvidenceUploadDisposition uint8
+
+const (
+	RunEvidenceUploadDispositionUnknown RunEvidenceUploadDisposition = iota
+	RunEvidenceUploadDispositionRequired
+	RunEvidenceUploadDispositionPresent
+)
+
+func (d RunEvidenceUploadDisposition) String() string {
+	switch d {
+	case RunEvidenceUploadDispositionRequired:
+		return RunEvidenceUploadDispositionTokenRequired
+	case RunEvidenceUploadDispositionPresent:
+		return RunEvidenceUploadDispositionTokenPresent
+	default:
+		return ""
+	}
+}
+
+func (d RunEvidenceUploadDisposition) Validate() error {
+	if d <= RunEvidenceUploadDispositionUnknown || d > RunEvidenceUploadDispositionPresent {
+		return runEvidenceUploadError(ErrContract)
+	}
+	return nil
+}
+
+func (d RunEvidenceUploadDisposition) MarshalJSON() ([]byte, error) {
+	if err := d.Validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(d.String())
+}
+
+func (d *RunEvidenceUploadDisposition) UnmarshalJSON(data []byte) error {
+	if d == nil {
+		return runEvidenceUploadError(ErrContract)
+	}
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return runEvidenceUploadError(err)
+	}
+	for candidate := RunEvidenceUploadDispositionRequired; candidate <= RunEvidenceUploadDispositionPresent; candidate++ {
+		if candidate.String() == value {
+			*d = candidate
+			return nil
+		}
+	}
+	return runEvidenceUploadError(ErrContract)
+}
 
 type RunEvidenceObjectName struct {
 	value string
@@ -203,9 +255,62 @@ func (g RunEvidenceUploadGrant) ValidateRequest(request RunEvidenceUploadRequest
 	return nil
 }
 
+// RunEvidenceUploadResponse makes immutable retries explicit. A confirmed
+// existing object carries no upload capability; an absent object carries one
+// exact short-lived grant. The two states cannot be confused by callers.
+type RunEvidenceUploadResponse struct {
+	Grant       *RunEvidenceUploadGrant      `json:"grant,omitempty"`
+	Descriptor  RunEvidenceDescriptor        `json:"descriptor"`
+	Disposition RunEvidenceUploadDisposition `json:"disposition"`
+	Schema      core.SchemaID                `json:"schema"`
+}
+
+func (RunEvidenceUploadResponse) APIBody() {}
+
+func (r RunEvidenceUploadResponse) Validate() error {
+	if r.Schema != core.SchemaPeachfuzzRunEvidenceUploadResponse {
+		return runEvidenceUploadError(ErrContract)
+	}
+	if err := r.Descriptor.Validate(); err != nil {
+		return err
+	}
+	if err := r.Disposition.Validate(); err != nil {
+		return err
+	}
+	switch r.Disposition {
+	case RunEvidenceUploadDispositionRequired:
+		if r.Grant == nil || r.Grant.Descriptor != r.Descriptor {
+			return runEvidenceUploadError(ErrContract)
+		}
+		return r.Grant.Validate()
+	case RunEvidenceUploadDispositionPresent:
+		if r.Grant != nil {
+			return runEvidenceUploadError(ErrContract)
+		}
+		return nil
+	default:
+		return runEvidenceUploadError(ErrContract)
+	}
+}
+
+func (r RunEvidenceUploadResponse) ValidateRequest(request RunEvidenceUploadRequest) error {
+	if err := r.Validate(); err != nil {
+		return err
+	}
+	descriptor, err := request.Descriptor()
+	if err != nil || descriptor != r.Descriptor {
+		return runEvidenceUploadError(errors.Join(ErrContract, err))
+	}
+	if r.Grant != nil {
+		return r.Grant.ValidateRequest(request)
+	}
+	return nil
+}
+
 func runEvidenceUploadError(err error) error {
 	return fmt.Errorf(ErrFmtRunEvidenceUpload, errors.Join(ErrContract, err))
 }
 
 var _ core.APIBody = RunEvidenceUploadRequest{}
 var _ core.APIBody = RunEvidenceUploadGrant{}
+var _ core.APIBody = RunEvidenceUploadResponse{}
