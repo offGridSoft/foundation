@@ -13,10 +13,13 @@ var (
 )
 
 const (
-	ErrFmtIdentity        = "peachfuzz.%s: %w"
-	ErrFmtOutcome         = "peachfuzz.RunOutcome: %w"
-	ErrFmtRunStats        = "peachfuzz.RunStats: %w"
-	ErrFmtProjectSnapshot = "peachfuzz.ProjectSnapshot: %w"
-	ErrFmtSnapshotClient  = "peachfuzz.SnapshotClient: %w"
-	ErrFmtHTTP            = "peachfuzz.HTTP: %w"
+	ErrFmtIdentity               = "peachfuzz.%s: %w"
+	ErrFmtOutcome                = "peachfuzz.RunOutcome: %w"
+	ErrFmtRunStats               = "peachfuzz.RunStats: %w"
+	ErrFmtProjectSnapshot        = "peachfuzz.ProjectSnapshot: %w"
+	ErrFmtMachineContribution    = "peachfuzz.MachineContribution: %w"
+	ErrFmtProjectContributionSet = "peachfuzz.ProjectContributionSet: %w"
+	ErrFmtContributionReceipt    = "peachfuzz.ContributionReceipt: %w"
+	ErrFmtSnapshotClient         = "peachfuzz.SnapshotClient: %w"
+	ErrFmtHTTP                   = "peachfuzz.HTTP: %w"
 )

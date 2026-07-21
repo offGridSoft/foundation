@@ -209,11 +209,17 @@ func (s ProjectSnapshot) Validate() error {
 	if err != nil {
 		return fmt.Errorf(ErrFmtProjectSnapshot, errors.Join(ErrContract, err))
 	}
-	if s.LastRunAt.Time().Before(s.RecordedSince.Time()) || s.RunCount == 0 || s.UniqueCandidatesRetained > s.CandidateSightings ||
-		s.CoreYears != wantCoreYears || s.CoreYearsHumanized != wantHumanized {
+	if !s.matchesDerivedValues(wantCoreYears, wantHumanized) {
 		return fmt.Errorf(ErrFmtProjectSnapshot, ErrContract)
 	}
 	return nil
+}
+
+func (s ProjectSnapshot) matchesDerivedValues(wantCoreYears float64, wantHumanized string) bool {
+	validInterval := !s.LastRunAt.Time().Before(s.RecordedSince.Time())
+	validCounters := s.RunCount > 0 && s.UniqueCandidatesRetained <= s.CandidateSightings
+	validCoverage := s.PackagesExercised > 0 && s.TargetsExercised > 0 && s.PackagesExercised <= s.TargetsExercised
+	return validInterval && validCounters && validCoverage && s.CoreYears == wantCoreYears && s.CoreYearsHumanized == wantHumanized
 }
 
 func EffortCoreYears(effort core.NanosecondsDuration) (float64, error) {

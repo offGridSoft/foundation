@@ -12,5 +12,10 @@ var (
 	_ foundationcore.Validatable = RunOutcomeUnknown
 	_ foundationcore.Validatable = RunStatsSchemaUnknown
 	_ foundationcore.Validatable = RunStats{}
+	_ foundationcore.Validatable = MachineContribution{}
+	_ foundationcore.Validatable = ProjectContributionSet{}
+	_ foundationcore.Validatable = ContributionReceipt{}
+	_ foundationcore.APIBody     = MachineContribution{}
 	_ foundationcore.APIBody     = ProjectSnapshot{}
+	_ foundationcore.APIBody     = ContributionReceipt{}
 )

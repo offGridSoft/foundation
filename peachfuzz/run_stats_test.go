@@ -58,6 +58,9 @@ func TestProjectSnapshotOGSBoundaryTable(t *testing.T) {
 		{name: "reversed interval", mutate: func(s *ProjectSnapshot) { s.LastRunAt = foundationcore.UnixNanoTimeFromInt64(0) }},
 		{name: "zero runs", mutate: func(s *ProjectSnapshot) { s.RunCount = 0 }},
 		{name: "retained exceeds sightings", mutate: func(s *ProjectSnapshot) { s.CandidateSightings = 1; s.UniqueCandidatesRetained = 2 }},
+		{name: "zero packages", mutate: func(s *ProjectSnapshot) { s.PackagesExercised = 0 }},
+		{name: "zero targets", mutate: func(s *ProjectSnapshot) { s.TargetsExercised = 0 }},
+		{name: "packages exceed targets", mutate: func(s *ProjectSnapshot) { s.PackagesExercised = 3; s.TargetsExercised = 2 }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -146,6 +149,7 @@ func validProjectSnapshot(t *testing.T) ProjectSnapshot {
 	return ProjectSnapshot{
 		Project: project, RecordedSince: foundationcore.UnixNanoTimeFromInt64(1), LastRunAt: foundationcore.UnixNanoTimeFromInt64(2),
 		Effort: effort, CoreYears: coreYears, CoreYearsHumanized: humanized, LastOutcome: RunOutcomeCompleted, RunCount: 1,
+		PackagesExercised: 1, TargetsExercised: 1,
 	}
 }
 
