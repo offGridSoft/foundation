@@ -63,6 +63,40 @@ func TestRunEvidenceObjectNameRejectsHostileShapeOGSBoundaryTable(t *testing.T) 
 	}
 }
 
+func TestRunEvidenceDigestShardContractOGSBoundaryTable(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		value string
+		want  RunEvidenceDigestShard
+	}{
+		{name: "first", value: "00", want: RunEvidenceDigestShard(0)},
+		{name: "lowercase boundary", value: "0f", want: RunEvidenceDigestShard(15)},
+		{name: "last", value: "ff", want: RunEvidenceDigestShard(255)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := ParseRunEvidenceDigestShard(tc.value)
+			if err != nil || got != tc.want || got.String() != tc.value {
+				t.Fatalf("ParseRunEvidenceDigestShard(%q) = %s/%v, want %s/nil", tc.value, got.String(), err, tc.want.String())
+			}
+			wantPrefix := foundationcore.FoundationVersion2026 + RunEvidenceObjectPathSeparator + RunEvidenceArchiveSegment + RunEvidenceObjectPathSeparator + tc.value + RunEvidenceObjectPathSeparator
+			if gotPrefix := RunEvidenceDigestShardPrefix(got); gotPrefix != wantPrefix {
+				t.Fatalf("RunEvidenceDigestShardPrefix(%s) = %q, want %q", got.String(), gotPrefix, wantPrefix)
+			}
+		})
+	}
+}
+
+func TestRunEvidenceDigestShardRejectsNonCanonicalInputOGSBoundaryTable(t *testing.T) {
+	t.Parallel()
+	for _, value := range []string{"", "0", "000", "0F", "gg", "-1", "+1"} {
+		if _, err := ParseRunEvidenceDigestShard(value); !errors.Is(err, ErrContract) {
+			t.Errorf("ParseRunEvidenceDigestShard(%q) error = %v, want %v", value, err, ErrContract)
+		}
+	}
+}
+
 func TestRunEvidenceUploadGrantBindsRequestOGSBoundaryTable(t *testing.T) {
 	t.Parallel()
 

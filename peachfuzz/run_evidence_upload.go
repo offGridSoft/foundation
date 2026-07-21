@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"strconv"
 	"strings"
 
 	"github.com/offGridSoft/foundation/v2026/core"
@@ -17,10 +18,41 @@ const (
 	RunEvidenceDigestShardHexCharacters       = 2
 	RunEvidenceObjectDigestSeparator          = "@"
 	RunEvidenceObjectExtension                = ".json"
+	RunEvidenceObjectPathSeparator            = "/"
 	RunEvidenceUploadGrantMaxHeaders          = 8
 	RunEvidenceUploadDispositionTokenRequired = "upload-required"
 	RunEvidenceUploadDispositionTokenPresent  = "already-present"
 )
+
+// RunEvidenceDigestShard is the closed 256-way partition key derived from
+// the first byte of a signed evidence digest. Every value of the underlying
+// uint8 domain is valid, so callers cannot construct an out-of-range shard.
+type RunEvidenceDigestShard uint8
+
+func (s RunEvidenceDigestShard) Validate() error { return nil }
+
+func (s RunEvidenceDigestShard) String() string {
+	const radix = 16
+	encoded := strconv.FormatUint(uint64(s), radix)
+	if len(encoded) == RunEvidenceDigestShardHexCharacters {
+		return encoded
+	}
+	return "0" + encoded
+}
+
+func ParseRunEvidenceDigestShard(value string) (RunEvidenceDigestShard, error) {
+	const bitSize = 8
+	parsed, err := strconv.ParseUint(value, 16, bitSize)
+	shard := RunEvidenceDigestShard(parsed)
+	if err != nil || len(value) != RunEvidenceDigestShardHexCharacters || shard.String() != value {
+		return 0, runEvidenceUploadError(errors.Join(ErrContract, err))
+	}
+	return shard, nil
+}
+
+func RunEvidenceDigestShardPrefix(shard RunEvidenceDigestShard) string {
+	return path.Join(core.FoundationVersion2026, RunEvidenceArchiveSegment, shard.String()) + RunEvidenceObjectPathSeparator
+}
 
 type RunEvidenceUploadDisposition uint8
 
@@ -100,8 +132,9 @@ func ParseRunEvidenceObjectName(value string) (RunEvidenceObjectName, error) {
 		return RunEvidenceObjectName{}, runEvidenceUploadError(ErrContract)
 	}
 	digest, runID, err := parseRunEvidenceObjectLeaf(segments[5])
-	if err != nil || segments[2] != digest.String()[:RunEvidenceDigestShardHexCharacters] {
-		return RunEvidenceObjectName{}, runEvidenceUploadError(errors.Join(ErrContract, err))
+	shard, shardErr := ParseRunEvidenceDigestShard(segments[2])
+	if err != nil || shardErr != nil || shard.String() != digest.String()[:RunEvidenceDigestShardHexCharacters] {
+		return RunEvidenceObjectName{}, runEvidenceUploadError(errors.Join(ErrContract, err, shardErr))
 	}
 	_, projectErr := ParseProjectID(segments[3])
 	_, machineErr := ParseMachineID(segments[4])
