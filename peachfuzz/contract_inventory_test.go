@@ -11,6 +11,7 @@ var (
 	_ foundationcore.Validatable   = CommitSHA{}
 	_ foundationcore.Validatable   = RunOutcomeUnknown
 	_ foundationcore.Validatable   = RunEvidence{}
+	_ foundationcore.Validatable   = ExecutionObservation{}
 	_ foundationcore.CanonicalBody = RunEvidence{}
 	_ foundationcore.Validatable   = MachineContribution{}
 	_ foundationcore.Validatable   = ProjectContributionSet{}

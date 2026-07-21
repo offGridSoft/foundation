@@ -10,14 +10,16 @@ import (
 const (
 	jsonFieldCandidateSightings       = "candidate_sightings"
 	jsonFieldCommit                   = "commit"
+	jsonFieldCount                    = "count"
 	jsonFieldCPUNanos                 = "cpu_nanos"
 	jsonFieldEndUnixNanos             = "end_unix_nanos"
 	jsonFieldFuzzTarget               = "fuzz_target"
 	jsonFieldMachine                  = "machine"
+	jsonFieldKnown                    = "known"
 	jsonFieldOutcome                  = "outcome"
 	jsonFieldPackagePath              = "package_path"
 	jsonFieldProject                  = "project"
-	jsonFieldReportedExecutions       = "reported_executions"
+	jsonFieldExecutions               = "executions"
 	jsonFieldRunID                    = "run_id"
 	jsonFieldStartUnixNanos           = "start_unix_nanos"
 	jsonFieldUniqueCandidatesRetained = "unique_candidates_retained"
@@ -36,7 +38,7 @@ type RunEvidence struct {
 	End                      core.UnixNanoTime        `json:"end_unix_nanos"`
 	Start                    core.UnixNanoTime        `json:"start_unix_nanos"`
 	CPU                      core.NanosecondsDuration `json:"cpu_nanos"`
-	ReportedExecutions       uint64                   `json:"reported_executions"`
+	Executions               ExecutionObservation     `json:"executions"`
 	CandidateSightings       uint32                   `json:"candidate_sightings"`
 	UniqueCandidatesRetained uint32                   `json:"unique_candidates_retained"`
 	Outcome                  RunOutcome               `json:"outcome"`
@@ -44,7 +46,7 @@ type RunEvidence struct {
 }
 
 func (e RunEvidence) Validate() error {
-	checks := []error{e.RunID.Validate(), e.Project.Validate(), e.PackagePath.Validate(), e.FuzzTarget.Validate(), e.Commit.Validate(), e.Machine.Validate(), e.Outcome.Validate(), e.Start.Validate(), e.End.Validate(), e.CPU.Validate(), e.Schema.Validate()}
+	checks := []error{e.RunID.Validate(), e.Project.Validate(), e.PackagePath.Validate(), e.FuzzTarget.Validate(), e.Commit.Validate(), e.Machine.Validate(), e.Outcome.Validate(), e.Start.Validate(), e.End.Validate(), e.CPU.Validate(), e.Executions.Validate(), e.Schema.Validate()}
 	for _, err := range checks {
 		if err != nil {
 			return fmt.Errorf(ErrFmtRunEvidence, errors.Join(ErrContract, err))
@@ -81,9 +83,36 @@ func appendRunEvidenceJSON(dst []byte, e RunEvidence) ([]byte, error) {
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldStartUnixNanos, e.Start)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldEndUnixNanos, e.End)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCPUNanos, e.CPU)
-	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldReportedExecutions, e.ReportedExecutions)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldExecutions, e.Executions)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCandidateSightings, e.CandidateSightings)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldUniqueCandidatesRetained, e.UniqueCandidatesRetained)
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, '}'), nil
+}
+
+// ExecutionObservation preserves the distinction between a real zero and a
+// slice that ended before Go emitted its best-effort execution counter.
+type ExecutionObservation struct {
+	Count uint64 `json:"count"`
+	Known bool   `json:"known"`
+}
+
+func (o ExecutionObservation) Validate() error {
+	if !o.Known && o.Count != 0 {
+		return fmt.Errorf(ErrFmtRunEvidence, ErrContract)
+	}
+	return nil
+}
+
+func (o ExecutionObservation) MarshalJSON() ([]byte, error) {
+	if err := o.Validate(); err != nil {
+		return nil, err
+	}
+	dst := []byte{'{'}
+	dst, err := core.AppendJSONField(dst, jsonFieldCount, o.Count)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldKnown, o.Known)
 	if err != nil {
 		return nil, err
 	}

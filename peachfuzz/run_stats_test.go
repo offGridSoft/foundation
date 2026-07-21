@@ -56,6 +56,7 @@ func TestRunEvidenceValidateOGSBoundaryTable(t *testing.T) {
 		{name: "negative cpu", mutate: func(s *RunEvidence) { s.CPU = foundationcore.NanosecondsDurationFromInt64(-1) }},
 		{name: "retained exceeds sightings", mutate: func(s *RunEvidence) { s.CandidateSightings = 1; s.UniqueCandidatesRetained = 2 }},
 		{name: "wrong schema", mutate: func(s *RunEvidence) { s.Schema = foundationcore.SchemaUnknown }},
+		{name: "unknown executions carry no count", mutate: func(s *RunEvidence) { s.Executions = ExecutionObservation{Count: 1} }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -207,5 +208,5 @@ func validRunEvidence(t *testing.T) RunEvidence {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return RunEvidence{RunID: runID, Project: project, PackagePath: packagePath, FuzzTarget: fuzz, Commit: commit, Machine: machine, Outcome: RunOutcomeCompleted, Start: foundationcore.UnixNanoTimeFromInt64(1), End: foundationcore.UnixNanoTimeFromInt64(2), CPU: foundationcore.NanosecondsDurationFromInt64(1), ReportedExecutions: 3, Schema: foundationcore.SchemaPeachfuzzRunEvidence}
+	return RunEvidence{RunID: runID, Project: project, PackagePath: packagePath, FuzzTarget: fuzz, Commit: commit, Machine: machine, Outcome: RunOutcomeCompleted, Start: foundationcore.UnixNanoTimeFromInt64(1), End: foundationcore.UnixNanoTimeFromInt64(2), CPU: foundationcore.NanosecondsDurationFromInt64(1), Executions: ExecutionObservation{Count: 3, Known: true}, Schema: foundationcore.SchemaPeachfuzzRunEvidence}
 }
