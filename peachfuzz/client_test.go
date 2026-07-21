@@ -124,6 +124,26 @@ func TestOffgridRunEvidenceUploadPathUsesPublicAPIVersionContract(t *testing.T) 
 	}
 }
 
+func TestOffgridRunEvidenceFoldPathsUsePublicAPIVersionContract(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		endpoint func() (core.APIEndpoint, error)
+		path     string
+		want     string
+	}{
+		{path: OffgridRunEvidenceFinalizePath, want: "/" + core.APIVersionToken + "/peachfuzz/evidence/finalize", endpoint: OffgridRunEvidenceFinalizeEndpoint},
+		{path: OffgridRunEvidenceMaterializePath, want: "/" + core.APIVersionToken + "/peachfuzz/evidence/materialize", endpoint: OffgridRunEvidenceMaterializeEndpoint},
+	} {
+		if tc.path != tc.want {
+			t.Fatalf("fold path = %q, want %q", tc.path, tc.want)
+		}
+		endpoint, err := tc.endpoint()
+		if err != nil || endpoint.String() != core.OffgridAPIBaseURL+tc.want {
+			t.Fatalf("fold endpoint = %q, error=%v, want %q", endpoint.String(), err, core.OffgridAPIBaseURL+tc.want)
+		}
+	}
+}
+
 func validSnapshotClient(t *testing.T, server *httptest.Server) SnapshotClient {
 	t.Helper()
 	endpoint, err := core.APIEndpointForBaseURL(server.URL, OffgridRunStatsPath)
