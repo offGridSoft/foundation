@@ -18,14 +18,12 @@ func TestRunOutcomeOwnsExecutionPolicyOGSBoundaryTable(t *testing.T) {
 		name               string
 		outcome            RunOutcome
 		failure            bool
-		preflightCacheable bool
 		retainsDiagnostics bool
 	}{
-		{name: "completed", outcome: RunOutcomeCompleted, preflightCacheable: true},
+		{name: "completed", outcome: RunOutcomeCompleted},
 		{name: "candidate", outcome: RunOutcomeCandidateFound, retainsDiagnostics: true},
 		{name: "seed failure", outcome: RunOutcomeSeedFailure, failure: true, retainsDiagnostics: true},
-		{name: "build failure", outcome: RunOutcomeBuildFailed, failure: true, preflightCacheable: true, retainsDiagnostics: true},
-		{name: "ordinary test failure", outcome: RunOutcomeOrdinaryTestFailed, failure: true, preflightCacheable: true, retainsDiagnostics: true},
+		{name: "build failure", outcome: RunOutcomeBuildFailed, failure: true, retainsDiagnostics: true},
 		{name: "timeout", outcome: RunOutcomeTimedOut, failure: true, retainsDiagnostics: true},
 		{name: "interrupted", outcome: RunOutcomeInterrupted, retainsDiagnostics: true},
 		{name: "infrastructure", outcome: RunOutcomeInfrastructureError, failure: true, retainsDiagnostics: true},
@@ -36,9 +34,6 @@ func TestRunOutcomeOwnsExecutionPolicyOGSBoundaryTable(t *testing.T) {
 			t.Parallel()
 			if got := test.outcome.Failure(); got != test.failure {
 				t.Fatalf("RunOutcome.Failure() = %t, want %t", got, test.failure)
-			}
-			if got := test.outcome.PreflightCacheable(); got != test.preflightCacheable {
-				t.Fatalf("RunOutcome.PreflightCacheable() = %t, want %t", got, test.preflightCacheable)
 			}
 			if got := test.outcome.RetainsDiagnostics(); got != test.retainsDiagnostics {
 				t.Fatalf("RunOutcome.RetainsDiagnostics() = %t, want %t", got, test.retainsDiagnostics)
@@ -55,7 +50,6 @@ func TestRunOutcomeOwnsOneClosedTokenDomainOGSBoundary(t *testing.T) {
 		RunOutcomeCandidateFound,
 		RunOutcomeSeedFailure,
 		RunOutcomeBuildFailed,
-		RunOutcomeOrdinaryTestFailed,
 		RunOutcomeTimedOut,
 		RunOutcomeInterrupted,
 		RunOutcomeInfrastructureError,

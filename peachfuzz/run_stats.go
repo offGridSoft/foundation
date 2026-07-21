@@ -43,7 +43,6 @@ const (
 	RunOutcomeCandidateFound
 	RunOutcomeSeedFailure
 	RunOutcomeBuildFailed
-	RunOutcomeOrdinaryTestFailed
 	RunOutcomeTimedOut
 	RunOutcomeInterrupted
 	RunOutcomeInfrastructureError
@@ -55,7 +54,6 @@ const (
 	RunOutcomeTokenCandidateFound      = "candidate-found"
 	RunOutcomeTokenSeedFailure         = "seed-failure"
 	RunOutcomeTokenBuildFailed         = "build-failed"
-	RunOutcomeTokenOrdinaryTestFailed  = "ordinary-test-failed"
 	RunOutcomeTokenTimedOut            = "timed-out"
 	RunOutcomeTokenInterrupted         = "interrupted"
 	RunOutcomeTokenInfrastructureError = "infrastructure-error"
@@ -66,7 +64,7 @@ func (o RunOutcome) String() string {
 	if !o.IsValid() {
 		return ""
 	}
-	return [...]string{"", RunOutcomeTokenCompleted, RunOutcomeTokenCandidateFound, RunOutcomeTokenSeedFailure, RunOutcomeTokenBuildFailed, RunOutcomeTokenOrdinaryTestFailed, RunOutcomeTokenTimedOut, RunOutcomeTokenInterrupted, RunOutcomeTokenInfrastructureError, RunOutcomeTokenUnsupported}[o]
+	return [...]string{"", RunOutcomeTokenCompleted, RunOutcomeTokenCandidateFound, RunOutcomeTokenSeedFailure, RunOutcomeTokenBuildFailed, RunOutcomeTokenTimedOut, RunOutcomeTokenInterrupted, RunOutcomeTokenInfrastructureError, RunOutcomeTokenUnsupported}[o]
 }
 
 func (o RunOutcome) IsValid() bool { return o > RunOutcomeUnknown && o <= RunOutcomeUnsupported }
@@ -75,17 +73,12 @@ func (o RunOutcome) IsValid() bool { return o > RunOutcomeUnknown && o <= RunOut
 // the fuzzer produced exactly the evidence it was asked to produce.
 func (o RunOutcome) Failure() bool {
 	switch o {
-	case RunOutcomeSeedFailure, RunOutcomeBuildFailed, RunOutcomeOrdinaryTestFailed,
+	case RunOutcomeSeedFailure, RunOutcomeBuildFailed,
 		RunOutcomeTimedOut, RunOutcomeInfrastructureError, RunOutcomeUnsupported:
 		return true
 	default:
 		return false
 	}
-}
-
-// PreflightCacheable reports the closed durable preflight subset.
-func (o RunOutcome) PreflightCacheable() bool {
-	return o == RunOutcomeCompleted || o == RunOutcomeBuildFailed || o == RunOutcomeOrdinaryTestFailed
 }
 
 // RetainsDiagnostics reports whether a durable run record may retain the
