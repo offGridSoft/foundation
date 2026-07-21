@@ -29,6 +29,7 @@ const (
 	FoundationCustodyPackagePath          = FoundationModulePath + "/custody"
 	FoundationLicensePackagePath          = FoundationModulePath + "/license"
 	FoundationPeachfuzzPackagePath        = FoundationModulePath + "/peachfuzz"
+	ProductTokenPeachfuzz                 = "peachfuzz"
 	FoundationReleasePackagePath          = FoundationModulePath + "/release"
 	FoundationTestSerialPackagePath       = FoundationModulePath + "/testserial"
 	FoundationWorkloadIdentityPackagePath = FoundationModulePath + "/workloadidentity"

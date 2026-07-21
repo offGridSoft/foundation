@@ -1,6 +1,8 @@
 package peachfuzz
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -8,26 +10,52 @@ import (
 	foundationcore "github.com/offGridSoft/foundation/v2026/core"
 )
 
-func TestRunStatsValidateOGSBoundaryTable(t *testing.T) {
+func TestRunEvidenceCanonicalRoundTripPinsSigningDomain(t *testing.T) {
 	t.Parallel()
-	valid := validRunStats(t)
+	evidence := validRunEvidence(t)
+	canonical, err := evidence.Canonical(nil)
+	if err != nil {
+		t.Fatalf("RunEvidence.Canonical() error = %v, want nil", err)
+	}
+	encoded, err := json.Marshal(evidence)
+	if err != nil {
+		t.Fatalf("json.Marshal(RunEvidence) error = %v, want nil", err)
+	}
+	if !bytes.Equal(encoded, canonical) {
+		t.Fatalf("json.Marshal(RunEvidence) = %q, want canonical %q", encoded, canonical)
+	}
+	decoded, err := foundationcore.DecodeStrictJSONStructure[RunEvidence](canonical)
+	if err != nil {
+		t.Fatalf("DecodeStrictJSONStructure[RunEvidence]() error = %v, want nil", err)
+	}
+	if decoded != evidence {
+		t.Fatalf("decoded RunEvidence = %#v, want %#v", decoded, evidence)
+	}
+	if evidence.SigningSchema().ResolveSigningDomain() != foundationcore.SigningDomainPeachfuzzRunEvidence {
+		t.Fatalf("RunEvidence signing domain = %v, want %v", evidence.SigningSchema().ResolveSigningDomain(), foundationcore.SigningDomainPeachfuzzRunEvidence)
+	}
+}
+
+func TestRunEvidenceValidateOGSBoundaryTable(t *testing.T) {
+	t.Parallel()
+	valid := validRunEvidence(t)
 	tests := []struct {
-		mutate func(*RunStats)
+		mutate func(*RunEvidence)
 		name   string
 	}{
-		{name: "invalid run id", mutate: func(s *RunStats) { s.RunID = RunID{} }},
-		{name: "invalid project", mutate: func(s *RunStats) { s.Project = ProjectID{} }},
-		{name: "invalid package", mutate: func(s *RunStats) { s.PackagePath = PackageImportPath{} }},
-		{name: "invalid target", mutate: func(s *RunStats) { s.FuzzTarget = FuzzTargetName{} }},
-		{name: "invalid commit", mutate: func(s *RunStats) { s.Commit = CommitSHA{} }},
-		{name: "invalid machine", mutate: func(s *RunStats) { s.Machine = MachineID{} }},
-		{name: "invalid outcome", mutate: func(s *RunStats) { s.Outcome = RunOutcomeUnknown }},
-		{name: "missing start", mutate: func(s *RunStats) { s.Start = foundationcore.UnixNanoTime{} }},
-		{name: "missing end", mutate: func(s *RunStats) { s.End = foundationcore.UnixNanoTime{} }},
-		{name: "reversed interval", mutate: func(s *RunStats) { s.End = foundationcore.UnixNanoTimeFromInt64(0) }},
-		{name: "negative cpu", mutate: func(s *RunStats) { s.CPU = foundationcore.NanosecondsDurationFromInt64(-1) }},
-		{name: "retained exceeds sightings", mutate: func(s *RunStats) { s.CandidateSightings = 1; s.UniqueCandidatesRetained = 2 }},
-		{name: "wrong schema", mutate: func(s *RunStats) { s.Schema = RunStatsSchemaUnknown }},
+		{name: "invalid run id", mutate: func(s *RunEvidence) { s.RunID = RunID{} }},
+		{name: "invalid project", mutate: func(s *RunEvidence) { s.Project = ProjectID{} }},
+		{name: "invalid package", mutate: func(s *RunEvidence) { s.PackagePath = PackageImportPath{} }},
+		{name: "invalid target", mutate: func(s *RunEvidence) { s.FuzzTarget = FuzzTargetName{} }},
+		{name: "invalid commit", mutate: func(s *RunEvidence) { s.Commit = CommitSHA{} }},
+		{name: "invalid machine", mutate: func(s *RunEvidence) { s.Machine = MachineID{} }},
+		{name: "invalid outcome", mutate: func(s *RunEvidence) { s.Outcome = RunOutcomeUnknown }},
+		{name: "missing start", mutate: func(s *RunEvidence) { s.Start = foundationcore.UnixNanoTime{} }},
+		{name: "missing end", mutate: func(s *RunEvidence) { s.End = foundationcore.UnixNanoTime{} }},
+		{name: "reversed interval", mutate: func(s *RunEvidence) { s.End = foundationcore.UnixNanoTimeFromInt64(0) }},
+		{name: "negative cpu", mutate: func(s *RunEvidence) { s.CPU = foundationcore.NanosecondsDurationFromInt64(-1) }},
+		{name: "retained exceeds sightings", mutate: func(s *RunEvidence) { s.CandidateSightings = 1; s.UniqueCandidatesRetained = 2 }},
+		{name: "wrong schema", mutate: func(s *RunEvidence) { s.Schema = foundationcore.SchemaUnknown }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -35,7 +63,7 @@ func TestRunStatsValidateOGSBoundaryTable(t *testing.T) {
 			candidate := valid
 			test.mutate(&candidate)
 			if err := candidate.Validate(); !errors.Is(err, ErrContract) {
-				t.Fatalf("RunStats.Validate() error = %v, want %v", err, ErrContract)
+				t.Fatalf("RunEvidence.Validate() error = %v, want %v", err, ErrContract)
 			}
 		})
 	}
@@ -153,7 +181,7 @@ func validProjectSnapshot(t *testing.T) ProjectSnapshot {
 	}
 }
 
-func validRunStats(t *testing.T) RunStats {
+func validRunEvidence(t *testing.T) RunEvidence {
 	t.Helper()
 	project, err := ParseProjectID("witness")
 	if err != nil {
@@ -179,5 +207,5 @@ func validRunStats(t *testing.T) RunStats {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return RunStats{RunID: runID, Project: project, PackagePath: packagePath, FuzzTarget: fuzz, Commit: commit, Machine: machine, Outcome: RunOutcomeCompleted, Start: foundationcore.UnixNanoTimeFromInt64(1), End: foundationcore.UnixNanoTimeFromInt64(2), CPU: foundationcore.NanosecondsDurationFromInt64(1), ReportedExecutions: 3, Schema: RunStatsSchema2026}
+	return RunEvidence{RunID: runID, Project: project, PackagePath: packagePath, FuzzTarget: fuzz, Commit: commit, Machine: machine, Outcome: RunOutcomeCompleted, Start: foundationcore.UnixNanoTimeFromInt64(1), End: foundationcore.UnixNanoTimeFromInt64(2), CPU: foundationcore.NanosecondsDurationFromInt64(1), ReportedExecutions: 3, Schema: foundationcore.SchemaPeachfuzzRunEvidence}
 }

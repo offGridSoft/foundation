@@ -35,45 +35,6 @@ const (
 	effortDisplayUnitSeconds
 )
 
-type RunStatsSchema uint8
-
-const (
-	RunStatsSchemaUnknown RunStatsSchema = iota
-	RunStatsSchema2026
-)
-
-func (s RunStatsSchema) String() string {
-	if s == RunStatsSchema2026 {
-		return core.FoundationVersion2026
-	}
-	return ""
-}
-
-func (s RunStatsSchema) IsValid() bool { return s == RunStatsSchema2026 }
-
-func (s RunStatsSchema) Validate() error {
-	if !s.IsValid() {
-		return fmt.Errorf(ErrFmtRunStats, ErrContract)
-	}
-	return nil
-}
-
-func (s RunStatsSchema) MarshalJSON() ([]byte, error) {
-	if err := s.Validate(); err != nil {
-		return nil, err
-	}
-	return json.Marshal(s.String())
-}
-
-func (s *RunStatsSchema) UnmarshalJSON(data []byte) error {
-	var token string
-	if err := json.Unmarshal(data, &token); err != nil || token != core.FoundationVersion2026 {
-		return fmt.Errorf(ErrFmtRunStats, ErrContract)
-	}
-	*s = RunStatsSchema2026
-	return nil
-}
-
 type RunOutcome uint8
 
 const (
@@ -141,36 +102,6 @@ func (o *RunOutcome) UnmarshalJSON(data []byte) error {
 		*o = parsed
 	}
 	return err
-}
-
-type RunStats struct {
-	Project                  ProjectID                `json:"project"`
-	PackagePath              PackageImportPath        `json:"packagePath"`
-	FuzzTarget               FuzzTargetName           `json:"fuzzTarget"`
-	Commit                   CommitSHA                `json:"commit"`
-	Machine                  MachineID                `json:"machine"`
-	RunID                    RunID                    `json:"runId"`
-	End                      core.UnixNanoTime        `json:"endUnixNanos"`
-	Start                    core.UnixNanoTime        `json:"startUnixNanos"`
-	CPU                      core.NanosecondsDuration `json:"cpuNanos"`
-	ReportedExecutions       uint64                   `json:"reportedExecutions"`
-	CandidateSightings       uint32                   `json:"candidateSightings"`
-	UniqueCandidatesRetained uint32                   `json:"uniqueCandidatesRetained"`
-	Outcome                  RunOutcome               `json:"outcome"`
-	Schema                   RunStatsSchema           `json:"schema"`
-}
-
-func (s RunStats) Validate() error {
-	checks := []error{s.RunID.Validate(), s.Project.Validate(), s.PackagePath.Validate(), s.FuzzTarget.Validate(), s.Commit.Validate(), s.Machine.Validate(), s.Outcome.Validate(), s.Start.Validate(), s.End.Validate(), s.CPU.Validate(), s.Schema.Validate()}
-	for _, err := range checks {
-		if err != nil {
-			return fmt.Errorf(ErrFmtRunStats, errors.Join(ErrContract, err))
-		}
-	}
-	if s.End.Time().Before(s.Start.Time()) || s.UniqueCandidatesRetained > s.CandidateSightings {
-		return fmt.Errorf(ErrFmtRunStats, ErrContract)
-	}
-	return nil
 }
 
 // ProjectSnapshot is the public, bounded projection consumed by product

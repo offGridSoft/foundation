@@ -54,6 +54,7 @@ const (
 	SchemaCustodyDownloadGrant
 	SchemaReleaseDataRequest
 	SchemaReleaseDataResponse
+	SchemaPeachfuzzRunEvidence
 )
 
 const (
@@ -98,9 +99,10 @@ const (
 	SchemaTokenCustodyDownloadGrant           = ProductTokenWitness + "-custody-download-grant-" + ContractVersionToken
 	SchemaTokenReleaseDataRequest             = "offgrid-release-data-request-" + ContractVersionToken
 	SchemaTokenReleaseDataResponse            = "offgrid-release-data-response-" + ContractVersionToken
+	SchemaTokenPeachfuzzRunEvidence           = ProductTokenPeachfuzz + "-run-evidence-" + ContractVersionToken
 )
 
-func schemaNames() [SchemaReleaseDataResponse + 1]string {
+func schemaNames() [SchemaPeachfuzzRunEvidence + 1]string {
 	return [...]string{
 		SchemaBugUsage:                       SchemaTokenBugUsage,
 		SchemaWitnessUsage:                   SchemaTokenWitnessUsage,
@@ -143,6 +145,7 @@ func schemaNames() [SchemaReleaseDataResponse + 1]string {
 		SchemaCustodyDownloadGrant:           SchemaTokenCustodyDownloadGrant,
 		SchemaReleaseDataRequest:             SchemaTokenReleaseDataRequest,
 		SchemaReleaseDataResponse:            SchemaTokenReleaseDataResponse,
+		SchemaPeachfuzzRunEvidence:           SchemaTokenPeachfuzzRunEvidence,
 	}
 }
 

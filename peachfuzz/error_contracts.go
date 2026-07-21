@@ -15,7 +15,7 @@ var (
 const (
 	ErrFmtIdentity               = "peachfuzz.%s: %w"
 	ErrFmtOutcome                = "peachfuzz.RunOutcome: %w"
-	ErrFmtRunStats               = "peachfuzz.RunStats: %w"
+	ErrFmtRunEvidence            = "peachfuzz.RunEvidence: %w"
 	ErrFmtProjectSnapshot        = "peachfuzz.ProjectSnapshot: %w"
 	ErrFmtMachineContribution    = "peachfuzz.MachineContribution: %w"
 	ErrFmtProjectContributionSet = "peachfuzz.ProjectContributionSet: %w"

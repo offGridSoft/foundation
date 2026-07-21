@@ -49,6 +49,7 @@ const (
 	SigningDomainReleaseUpdateCheckResponse     = SigningDomain(SchemaReleaseUpdateCheckResponse)
 	SigningDomainReleaseUpdateDiagnosticReceipt = SigningDomain(SchemaReleaseUpdateDiagnosticReceipt)
 	SigningDomainWitnessCustodyDownloadGrant    = SigningDomain(SchemaCustodyDownloadGrant)
+	SigningDomainPeachfuzzRunEvidence           = SigningDomain(SchemaPeachfuzzRunEvidence)
 )
 
 const (
@@ -72,11 +73,12 @@ const (
 	SigningDomainTokenReleaseUpdateCheckResponse     = "release-update-check-response-" + ContractYear
 	SigningDomainTokenReleaseUpdateDiagnosticReceipt = "release-update-diagnostic-receipt-" + ContractYear
 	SigningDomainTokenWitnessCustodyDownloadGrant    = "witness-custody-download-grant-" + ContractYear
+	SigningDomainTokenPeachfuzzRunEvidence           = "peachfuzz-run-evidence-" + ContractYear
 	ErrFmtSigningDomain                              = "core.SigningDomain: %w"
 )
 
-func signingDomainNames() [SchemaCustodyDownloadGrant + 1]string {
-	return [SchemaCustodyDownloadGrant + 1]string{
+func signingDomainNames() [SchemaPeachfuzzRunEvidence + 1]string {
+	return [SchemaPeachfuzzRunEvidence + 1]string{
 		SigningDomainBugCheckInResponse:             SigningDomainTokenBugCheckInResponse,
 		SigningDomainBugCheckInTimeCommitment:       SigningDomainTokenBugCheckInTimeCommitment,
 		SigningDomainBugSeatLease:                   SigningDomainTokenBugSeatLease,
@@ -97,6 +99,7 @@ func signingDomainNames() [SchemaCustodyDownloadGrant + 1]string {
 		SigningDomainReleaseUpdateCheckResponse:     SigningDomainTokenReleaseUpdateCheckResponse,
 		SigningDomainReleaseUpdateDiagnosticReceipt: SigningDomainTokenReleaseUpdateDiagnosticReceipt,
 		SigningDomainWitnessCustodyDownloadGrant:    SigningDomainTokenWitnessCustodyDownloadGrant,
+		SigningDomainPeachfuzzRunEvidence:           SigningDomainTokenPeachfuzzRunEvidence,
 	}
 }
 
