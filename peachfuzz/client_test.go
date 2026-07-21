@@ -109,6 +109,21 @@ func TestOffgridRunStatsPathUsesPublicAPIVersionContract(t *testing.T) {
 	}
 }
 
+func TestOffgridRunEvidenceUploadPathUsesPublicAPIVersionContract(t *testing.T) {
+	t.Parallel()
+	want := "/" + core.APIVersionToken + "/peachfuzz/evidence/uploads"
+	if OffgridRunEvidenceUploadPath != want {
+		t.Fatalf("OffgridRunEvidenceUploadPath = %q, want %q", OffgridRunEvidenceUploadPath, want)
+	}
+	endpoint, err := OffgridRunEvidenceUploadEndpoint()
+	if err != nil {
+		t.Fatalf("OffgridRunEvidenceUploadEndpoint() error = %v, want nil", err)
+	}
+	if endpoint.String() != core.OffgridAPIBaseURL+want {
+		t.Fatalf("OffgridRunEvidenceUploadEndpoint() = %q, want %q", endpoint.String(), core.OffgridAPIBaseURL+want)
+	}
+}
+
 func validSnapshotClient(t *testing.T, server *httptest.Server) SnapshotClient {
 	t.Helper()
 	endpoint, err := core.APIEndpointForBaseURL(server.URL, OffgridRunStatsPath)

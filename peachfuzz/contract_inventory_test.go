@@ -20,10 +20,5 @@ var (
 	_ foundationcore.Validatable   = RunEvidenceUploadGrant{}
 	_ foundationcore.APIBody       = RunEvidenceUploadRequest{}
 	_ foundationcore.APIBody       = RunEvidenceUploadGrant{}
-	_ foundationcore.Validatable   = MachineContribution{}
-	_ foundationcore.Validatable   = ProjectContributionSet{}
-	_ foundationcore.Validatable   = ContributionReceipt{}
-	_ foundationcore.APIBody       = MachineContribution{}
 	_ foundationcore.APIBody       = ProjectSnapshot{}
-	_ foundationcore.APIBody       = ContributionReceipt{}
 )
