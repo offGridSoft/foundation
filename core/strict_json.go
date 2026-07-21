@@ -17,6 +17,23 @@ const (
 	StrictJSONMaxObjectFields = 256
 )
 
+// EncodeValidatedJSON is Foundation's sole general JSON output boundary. The
+// owning value must validate before encoding, and the produced bytes must pass
+// the same closed structural and domain contract accepted at ingress.
+func EncodeValidatedJSON[T Validatable](value T) ([]byte, error) {
+	if err := value.Validate(); err != nil {
+		return nil, errors.Join(ErrJSONContract, err)
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, errors.Join(ErrJSONContract, fmt.Errorf(ErrFmtJSONEncode, err))
+	}
+	if _, err := DecodeStrictJSON[T](data); err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
 func DecodeStrictJSON[T Validatable](data []byte) (T, error) {
 	value, err := DecodeStrictJSONStructure[T](data)
 	if err != nil {

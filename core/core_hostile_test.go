@@ -972,11 +972,84 @@ type strictJSONHostilePayload struct {
 	OK        bool   `json:"ok"`
 }
 
+const strictJSONHostileUnexpectedField = "unexpected"
+
+type strictJSONHostileEncoder struct {
+	Value string `json:"value"`
+}
+
+func (e strictJSONHostileEncoder) Validate() error {
+	if e.Value == "" {
+		return ErrFoundationContract
+	}
+	return nil
+}
+
+func (e strictJSONHostileEncoder) MarshalJSON() ([]byte, error) {
+	encoded := []byte{'{'}
+	encoded, err := AppendJSONField(encoded, strictJSONHostileUnexpectedField, e.Value)
+	if err != nil {
+		return nil, err
+	}
+	return append(encoded, '}'), nil
+}
+
 func (p strictJSONHostilePayload) Validate() error {
 	if p.Name == "" || p.At < 0 {
 		return ErrFoundationContract
 	}
 	return nil
+}
+
+func TestEncodeValidatedJSONRoundTripTable(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		wantErr error
+		name    string
+		value   strictJSONHostilePayload
+	}{
+		{
+			name:  "valid structure round trips",
+			value: strictJSONHostilePayload{Name: "Ada", FirstName: "Lovelace", At: 1, OK: true},
+		},
+		{
+			name:    "owner validation rejects output",
+			value:   strictJSONHostilePayload{},
+			wantErr: ErrJSONContract,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			encoded, err := EncodeValidatedJSON(tc.value)
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("EncodeValidatedJSON() error = %v, want errors.Is(..., %v)", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("EncodeValidatedJSON() error = %v, want nil", err)
+			}
+			decoded, err := DecodeStrictJSON[strictJSONHostilePayload](encoded)
+			if err != nil {
+				t.Fatalf("DecodeStrictJSON() error = %v, want nil", err)
+			}
+			if decoded != tc.value {
+				t.Fatalf("DecodeStrictJSON() = %+v, want %+v", decoded, tc.value)
+			}
+		})
+	}
+}
+
+func TestEncodeValidatedJSONRejectsEncoderContractDrift(t *testing.T) {
+	t.Parallel()
+
+	if _, err := EncodeValidatedJSON(strictJSONHostileEncoder{Value: "valid-owner-state"}); !errors.Is(err, ErrJSONContract) {
+		t.Fatalf("EncodeValidatedJSON(drifting encoder) error = %v, want errors.Is(..., %v)", err, ErrJSONContract)
+	}
 }
 
 func TestDecodeStrictJSONHostileTable(t *testing.T) {

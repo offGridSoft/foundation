@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	foundationcore "github.com/offGridSoft/foundation/v2026/core"
+	foundationkeygen "github.com/offGridSoft/foundation/v2026/keygen"
 )
 
 func TestRunEvidenceCanonicalRoundTripPinsSigningDomain(t *testing.T) {
@@ -65,6 +66,130 @@ func TestRunEvidenceValidateOGSBoundaryTable(t *testing.T) {
 			test.mutate(&candidate)
 			if err := candidate.Validate(); !errors.Is(err, ErrContract) {
 				t.Fatalf("RunEvidence.Validate() error = %v, want %v", err, ErrContract)
+			}
+		})
+	}
+}
+
+func TestSignedRunEvidenceBindsMachineToSignerOGSBoundaryTable(t *testing.T) {
+	t.Parallel()
+
+	key, machine := signedRunEvidenceKey(t)
+	body := validRunEvidence(t)
+	body.Machine = machine
+	generic, err := foundationcore.SignCanonical(key, body)
+	if err != nil {
+		t.Fatalf("SignCanonical() error = %v, want nil", err)
+	}
+	signed, err := NewSignedRunEvidence(generic)
+	if err != nil {
+		t.Fatalf("NewSignedRunEvidence() error = %v, want nil", err)
+	}
+	if err := signed.Verify(); err != nil {
+		t.Fatalf("SignedRunEvidence.Verify() error = %v, want nil", err)
+	}
+	encoded, err := foundationcore.EncodeValidatedJSON(signed)
+	if err != nil {
+		t.Fatalf("EncodeValidatedJSON() error = %v, want nil", err)
+	}
+	decoded, err := foundationcore.DecodeStrictJSON[SignedRunEvidence](encoded)
+	if err != nil {
+		t.Fatalf("DecodeStrictJSON() error = %v, want nil", err)
+	}
+	if decoded != signed {
+		t.Fatalf("DecodeStrictJSON() = %+v, want %+v", decoded, signed)
+	}
+
+	tests := []struct {
+		mutate func(*SignedRunEvidence)
+		name   string
+	}{
+		{name: "different valid machine", mutate: func(candidate *SignedRunEvidence) {
+			candidate.Body.Machine, _ = ParseMachineID(strings.Repeat("d", MachineIDTextBytes))
+		}},
+		{name: "body changed after signing", mutate: func(candidate *SignedRunEvidence) {
+			candidate.Body.CPU = foundationcore.NanosecondsDurationFromInt64(candidate.Body.CPU.Nanoseconds() + 1)
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			candidate := signed
+			tc.mutate(&candidate)
+			if err := candidate.Verify(); !errors.Is(err, ErrContract) {
+				t.Fatalf("SignedRunEvidence.Verify() error = %v, want errors.Is(..., %v)", err, ErrContract)
+			}
+		})
+	}
+}
+
+func signedRunEvidenceKey(tb testing.TB) (foundationcore.Ed25519SigningKey, MachineID) {
+	tb.Helper()
+	generated, err := foundationkeygen.GenerateEd25519SigningKey()
+	if err != nil {
+		tb.Fatalf("GenerateEd25519SigningKey() error = %v, want nil", err)
+	}
+	key, err := foundationcore.ParseEd25519SigningKeyBase64(generated.PrivateKeyBase64)
+	if err != nil {
+		tb.Fatalf("ParseEd25519SigningKeyBase64() error = %v, want nil", err)
+	}
+	machine, err := MachineIDFromSigningPublicKey(generated.PublicKeyHex)
+	if err != nil {
+		tb.Fatalf("MachineIDFromSigningPublicKey() error = %v, want nil", err)
+	}
+	return key, machine
+}
+
+func TestMachineEvidenceIdentityIsOneAtomicContractOGSBoundaryTable(t *testing.T) {
+	t.Parallel()
+
+	generated, err := foundationkeygen.GenerateEd25519SigningKey()
+	if err != nil {
+		t.Fatalf("GenerateEd25519SigningKey() error = %v, want nil", err)
+	}
+	identity, err := NewMachineEvidenceIdentity(generated)
+	if err != nil {
+		t.Fatalf("NewMachineEvidenceIdentity() error = %v, want nil", err)
+	}
+	privateKey, err := identity.PrivateSigningKey()
+	if err != nil {
+		t.Fatalf("PrivateSigningKey() error = %v, want nil", err)
+	}
+	publicKey, err := privateKey.PublicKey()
+	if err != nil || publicKey != identity.SigningKey.PublicKeyHex {
+		t.Fatalf("PrivateSigningKey().PublicKey() = (%v, %v), want (%v, nil)", publicKey, err, identity.SigningKey.PublicKeyHex)
+	}
+	encoded, err := foundationcore.EncodeValidatedJSON(identity)
+	if err != nil {
+		t.Fatalf("EncodeValidatedJSON() error = %v, want nil", err)
+	}
+	decoded, err := foundationcore.DecodeStrictJSON[MachineEvidenceIdentity](encoded)
+	if err != nil || decoded != identity {
+		t.Fatalf("DecodeStrictJSON() = (%+v, %v), want (%+v, nil)", decoded, err, identity)
+	}
+
+	otherGenerated, err := foundationkeygen.GenerateEd25519SigningKey()
+	if err != nil {
+		t.Fatalf("GenerateEd25519SigningKey(other) error = %v, want nil", err)
+	}
+	tests := []struct {
+		mutate func(*MachineEvidenceIdentity)
+		name   string
+	}{
+		{name: "machine does not match key", mutate: func(candidate *MachineEvidenceIdentity) {
+			candidate.Machine, _ = ParseMachineID(strings.Repeat("d", MachineIDTextBytes))
+		}},
+		{name: "public key does not match private key", mutate: func(candidate *MachineEvidenceIdentity) {
+			candidate.SigningKey.PublicKeyHex = otherGenerated.PublicKeyHex
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			candidate := identity
+			tc.mutate(&candidate)
+			if err := candidate.Validate(); !errors.Is(err, ErrContract) {
+				t.Fatalf("MachineEvidenceIdentity.Validate() error = %v, want errors.Is(..., %v)", err, ErrContract)
 			}
 		})
 	}

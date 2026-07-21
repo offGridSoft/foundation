@@ -13,6 +13,13 @@ var (
 	_ foundationcore.Validatable   = RunEvidence{}
 	_ foundationcore.Validatable   = ExecutionObservation{}
 	_ foundationcore.CanonicalBody = RunEvidence{}
+	_ foundationcore.Validatable   = SignedRunEvidence{}
+	_ foundationcore.Validatable   = MachineEvidenceIdentity{}
+	_ foundationcore.Validatable   = RunEvidenceDescriptor{}
+	_ foundationcore.Validatable   = RunEvidenceUploadRequest{}
+	_ foundationcore.Validatable   = RunEvidenceUploadGrant{}
+	_ foundationcore.APIBody       = RunEvidenceUploadRequest{}
+	_ foundationcore.APIBody       = RunEvidenceUploadGrant{}
 	_ foundationcore.Validatable   = MachineContribution{}
 	_ foundationcore.Validatable   = ProjectContributionSet{}
 	_ foundationcore.Validatable   = ContributionReceipt{}

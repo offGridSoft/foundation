@@ -82,5 +82,6 @@ const (
 	ErrFmtJSONUnexpectedField = "core.JSON.UnexpectedField: %w"
 	ErrFmtJSONUnexpectedDelim = "core.JSON.UnexpectedDelimiter: %w"
 	ErrFmtJSONUnexpectedValue = "core.JSON.UnexpectedValue: %w"
+	ErrFmtJSONEncode          = "core.JSON.Encode: %w"
 	ErrFmtJSONDecode          = "core.JSON.Decode: %w"
 )

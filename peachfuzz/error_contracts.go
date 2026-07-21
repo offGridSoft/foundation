@@ -13,13 +13,16 @@ var (
 )
 
 const (
-	ErrFmtIdentity               = "peachfuzz.%s: %w"
-	ErrFmtOutcome                = "peachfuzz.RunOutcome: %w"
-	ErrFmtRunEvidence            = "peachfuzz.RunEvidence: %w"
-	ErrFmtProjectSnapshot        = "peachfuzz.ProjectSnapshot: %w"
-	ErrFmtMachineContribution    = "peachfuzz.MachineContribution: %w"
-	ErrFmtProjectContributionSet = "peachfuzz.ProjectContributionSet: %w"
-	ErrFmtContributionReceipt    = "peachfuzz.ContributionReceipt: %w"
-	ErrFmtSnapshotClient         = "peachfuzz.SnapshotClient: %w"
-	ErrFmtHTTP                   = "peachfuzz.HTTP: %w"
+	ErrFmtIdentity                = "peachfuzz.%s: %w"
+	ErrFmtOutcome                 = "peachfuzz.RunOutcome: %w"
+	ErrFmtRunEvidence             = "peachfuzz.RunEvidence: %w"
+	ErrFmtSignedRunEvidence       = "peachfuzz.SignedRunEvidence: %w"
+	ErrFmtRunEvidenceUpload       = "peachfuzz.RunEvidenceUpload: %w"
+	ErrFmtMachineEvidenceIdentity = "peachfuzz.MachineEvidenceIdentity: %w"
+	ErrFmtProjectSnapshot         = "peachfuzz.ProjectSnapshot: %w"
+	ErrFmtMachineContribution     = "peachfuzz.MachineContribution: %w"
+	ErrFmtProjectContributionSet  = "peachfuzz.ProjectContributionSet: %w"
+	ErrFmtContributionReceipt     = "peachfuzz.ContributionReceipt: %w"
+	ErrFmtSnapshotClient          = "peachfuzz.SnapshotClient: %w"
+	ErrFmtHTTP                    = "peachfuzz.HTTP: %w"
 )
