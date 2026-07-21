@@ -36,6 +36,8 @@ var (
 	ErrDoctrineContract                = fmt.Errorf("doctrine contract violation: %w", ErrFoundationContract)
 	ErrPeachfuzzContributionRegression = fmt.Errorf("peachfuzz contribution regression: %w", ErrFoundationContract)
 	ErrNilContext                      = fmt.Errorf("nil context: %w", ErrFoundationContract)
+	ErrNumericOverflow                 = fmt.Errorf("numeric overflow: %w", ErrFoundationContract)
+	ErrInvalidDecimal                  = fmt.Errorf("invalid decimal: %w", ErrFoundationContract)
 )
 
 func wrapFoundationContract(format string) error {

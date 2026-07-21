@@ -271,7 +271,6 @@ func TestProjectSnapshotOGSBoundaryTable(t *testing.T) {
 		{name: "invalid project", mutate: func(s *ProjectSnapshot) { s.Project = ProjectID{} }},
 		{name: "missing recorded since", mutate: func(s *ProjectSnapshot) { s.RecordedSince = foundationcore.UnixNanoTime{} }},
 		{name: "missing last run", mutate: func(s *ProjectSnapshot) { s.LastRunAt = foundationcore.UnixNanoTime{} }},
-		{name: "negative effort", mutate: func(s *ProjectSnapshot) { s.Effort = foundationcore.NanosecondsDurationFromInt64(-1) }},
 		{name: "drifted core years", mutate: func(s *ProjectSnapshot) { s.CoreYears = 2 }},
 		{name: "drifted humanized effort", mutate: func(s *ProjectSnapshot) { s.CoreYearsHumanized = "2.00 core-years" }},
 		{name: "invalid outcome", mutate: func(s *ProjectSnapshot) { s.LastOutcome = RunOutcomeUnknown }},
@@ -311,7 +310,11 @@ func TestHumanizeEffortOGSUnitLadder(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := HumanizeEffort(foundationcore.NanosecondsDurationFromInt64(tc.nanos))
+			effort, err := NewEffortNanoseconds(foundationcore.NanosecondsDurationFromInt64(tc.nanos))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := HumanizeEffort(effort)
 			if err != nil {
 				t.Fatalf("HumanizeEffort() error = %v", err)
 			}
@@ -319,9 +322,6 @@ func TestHumanizeEffortOGSUnitLadder(t *testing.T) {
 				t.Fatalf("HumanizeEffort() = %q, want %q", got, tc.want)
 			}
 		})
-	}
-	if _, err := HumanizeEffort(foundationcore.NanosecondsDurationFromInt64(-1)); !errors.Is(err, ErrContract) {
-		t.Fatalf("negative HumanizeEffort() error = %v, want %v", err, ErrContract)
 	}
 }
 
@@ -340,7 +340,11 @@ func TestHumanizeEffortTruncatesEveryPublicTrustValue(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := HumanizeEffort(foundationcore.NanosecondsDurationFromInt64(tc.nanos))
+			effort, err := NewEffortNanoseconds(foundationcore.NanosecondsDurationFromInt64(tc.nanos))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := HumanizeEffort(effort)
 			if err != nil {
 				t.Fatalf("HumanizeEffort() error = %v, want nil", err)
 			}
@@ -357,7 +361,10 @@ func validProjectSnapshot(t *testing.T) ProjectSnapshot {
 	if err != nil {
 		t.Fatal(err)
 	}
-	effort := foundationcore.NanosecondsDurationFromInt64(NanosPerCoreYear)
+	effort, err := NewEffortNanoseconds(foundationcore.NanosecondsDurationFromInt64(NanosPerCoreYear))
+	if err != nil {
+		t.Fatal(err)
+	}
 	coreYears, err := EffortCoreYears(effort)
 	if err != nil {
 		t.Fatal(err)

@@ -20,6 +20,7 @@ var (
 	_ foundationcore.Validatable   = RunEvidenceUploadGrant{}
 	_ foundationcore.Validatable   = RunEvidenceUploadDispositionUnknown
 	_ foundationcore.Validatable   = RunEvidenceUploadResponse{}
+	_ foundationcore.Validatable   = EffortNanoseconds{}
 	_ foundationcore.APIBody       = RunEvidenceUploadRequest{}
 	_ foundationcore.APIBody       = RunEvidenceUploadGrant{}
 	_ foundationcore.APIBody       = RunEvidenceUploadResponse{}

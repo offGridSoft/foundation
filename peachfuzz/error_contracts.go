@@ -20,6 +20,7 @@ const (
 	ErrFmtRunEvidenceUpload       = "peachfuzz.RunEvidenceUpload: %w"
 	ErrFmtMachineEvidenceIdentity = "peachfuzz.MachineEvidenceIdentity: %w"
 	ErrFmtProjectSnapshot         = "peachfuzz.ProjectSnapshot: %w"
+	ErrFmtEffortNanoseconds       = "peachfuzz.EffortNanoseconds: %w"
 	ErrFmtSnapshotClient          = "peachfuzz.SnapshotClient: %w"
 	ErrFmtHTTP                    = "peachfuzz.HTTP: %w"
 )

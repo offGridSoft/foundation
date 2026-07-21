@@ -15,11 +15,11 @@ const (
 	NanosPerCoreHour   = 60 * NanosPerCoreMinute
 	NanosPerCoreDay    = 24 * NanosPerCoreHour
 	NanosPerCoreYear   = 365*NanosPerCoreDay + 6*NanosPerCoreHour
-	CoreYearsFormat    = "%d.%02d core-years"
-	CoreDaysFormat     = "%d.%01d core-days"
-	CoreHoursFormat    = "%d.%01d core-hours"
-	CoreMinutesFormat  = "%d.%01d core-minutes"
-	CoreSecondsFormat  = "%d.%01d core-seconds"
+	CoreYearsFormat    = "%s.%02d core-years"
+	CoreDaysFormat     = "%s.%01d core-days"
+	CoreHoursFormat    = "%s.%01d core-hours"
+	CoreMinutesFormat  = "%s.%01d core-minutes"
+	CoreSecondsFormat  = "%s.%01d core-seconds"
 	CoreYearsScale     = int64(100)
 	CoreSubYearScale   = int64(10)
 )
@@ -132,19 +132,19 @@ func (o *RunOutcome) UnmarshalJSON(data []byte) error {
 // pages. Firestore is a query projection only; exact run records and GCS
 // evidence remain the source facts behind every value.
 type ProjectSnapshot struct {
-	CoreYearsHumanized       string                   `json:"coreYearsHumanized"`
-	Project                  ProjectID                `json:"project"`
-	RecordedSince            core.UnixNanoTime        `json:"recordedSinceUnixNanos"`
-	LastRunAt                core.UnixNanoTime        `json:"lastRunAtUnixNanos"`
-	CandidateSightings       uint64                   `json:"candidateSightings"`
-	CoreYears                float64                  `json:"coreYears"`
-	RunCount                 uint64                   `json:"runCount"`
-	ReportedExecutions       uint64                   `json:"reportedExecutions"`
-	Effort                   core.NanosecondsDuration `json:"cpuNanos"`
-	UniqueCandidatesRetained uint64                   `json:"uniqueCandidatesRetained"`
-	PackagesExercised        uint64                   `json:"packagesExercised"`
-	TargetsExercised         uint64                   `json:"targetsExercised"`
-	LastOutcome              RunOutcome               `json:"lastOutcome"`
+	CoreYearsHumanized       string            `json:"coreYearsHumanized"`
+	Project                  ProjectID         `json:"project"`
+	RecordedSince            core.UnixNanoTime `json:"recordedSinceUnixNanos"`
+	LastRunAt                core.UnixNanoTime `json:"lastRunAtUnixNanos"`
+	CandidateSightings       uint64            `json:"candidateSightings"`
+	CoreYears                float64           `json:"coreYears"`
+	RunCount                 uint64            `json:"runCount"`
+	ReportedExecutions       uint64            `json:"reportedExecutions"`
+	Effort                   EffortNanoseconds `json:"cpuNanos"`
+	UniqueCandidatesRetained uint64            `json:"uniqueCandidatesRetained"`
+	PackagesExercised        uint64            `json:"packagesExercised"`
+	TargetsExercised         uint64            `json:"targetsExercised"`
+	LastOutcome              RunOutcome        `json:"lastOutcome"`
 }
 
 func (ProjectSnapshot) APIBody() {}
@@ -177,43 +177,45 @@ func (s ProjectSnapshot) matchesDerivedValues(wantCoreYears float64, wantHumaniz
 	return validInterval && validCounters && validCoverage && s.CoreYears == wantCoreYears && s.CoreYearsHumanized == wantHumanized
 }
 
-func EffortCoreYears(effort core.NanosecondsDuration) (float64, error) {
+func EffortCoreYears(effort EffortNanoseconds) (float64, error) {
 	if err := effort.Validate(); err != nil {
 		return 0, fmt.Errorf(ErrFmtProjectSnapshot, errors.Join(ErrContract, err))
 	}
-	return float64(effort.Nanoseconds()) / float64(NanosPerCoreYear), nil
+	return effort.Float64() / float64(NanosPerCoreYear), nil
 }
 
 // HumanizeEffort owns the one wording ladder used by producers and every
 // public projection. The API returns this alongside raw values so clients do
 // not fork the marketing claim's rounding or unit selection.
-func HumanizeEffort(effort core.NanosecondsDuration) (string, error) {
+func HumanizeEffort(effort EffortNanoseconds) (string, error) {
 	if err := effort.Validate(); err != nil {
 		return "", fmt.Errorf(ErrFmtProjectSnapshot, errors.Join(ErrContract, err))
 	}
-	nanos := effort.Nanoseconds()
 	switch {
-	case nanos >= NanosPerCoreYear:
-		return formatTruncatedEffort(nanos, effortDisplayUnitYears)
-	case nanos >= NanosPerCoreDay:
-		return formatTruncatedEffort(nanos, effortDisplayUnitDays)
-	case nanos >= NanosPerCoreHour:
-		return formatTruncatedEffort(nanos, effortDisplayUnitHours)
-	case nanos >= NanosPerCoreMinute:
-		return formatTruncatedEffort(nanos, effortDisplayUnitMinutes)
+	case effort.High != 0 || effort.Low >= uint64(NanosPerCoreYear):
+		return formatTruncatedEffort(effort, effortDisplayUnitYears)
+	case effort.Low >= uint64(NanosPerCoreDay):
+		return formatTruncatedEffort(effort, effortDisplayUnitDays)
+	case effort.Low >= uint64(NanosPerCoreHour):
+		return formatTruncatedEffort(effort, effortDisplayUnitHours)
+	case effort.Low >= uint64(NanosPerCoreMinute):
+		return formatTruncatedEffort(effort, effortDisplayUnitMinutes)
 	default:
-		return formatTruncatedEffort(nanos, effortDisplayUnitSeconds)
+		return formatTruncatedEffort(effort, effortDisplayUnitSeconds)
 	}
 }
 
-func formatTruncatedEffort(nanos int64, unit effortDisplayUnit) (string, error) {
+func formatTruncatedEffort(effort EffortNanoseconds, unit effortDisplayUnit) (string, error) {
 	divisor, scale, format, err := unit.contract()
 	if err != nil {
 		return "", err
 	}
-	whole := nanos / divisor
-	fraction := (nanos % divisor) * scale / divisor
-	return fmt.Sprintf(format, whole, fraction), nil
+	whole, remainder, err := effort.quotientRemainder(uint64(divisor))
+	if err != nil {
+		return "", err
+	}
+	fraction := remainder * uint64(scale) / uint64(divisor)
+	return fmt.Sprintf(format, whole.Decimal(), fraction), nil
 }
 
 func (u effortDisplayUnit) contract() (int64, int64, string, error) {
