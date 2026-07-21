@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/offGridSoft/foundation/v2026/core"
+	"github.com/offGridSoft/foundation/v2026/workloadidentity"
 )
 
 func TestSnapshotClientOGSPublicBoundary(t *testing.T) {
@@ -141,6 +142,18 @@ func TestOffgridRunEvidenceFoldPathsUsePublicAPIVersionContract(t *testing.T) {
 		if err != nil || endpoint.String() != core.OffgridAPIBaseURL+tc.want {
 			t.Fatalf("fold endpoint = %q, error=%v, want %q", endpoint.String(), err, core.OffgridAPIBaseURL+tc.want)
 		}
+	}
+}
+
+func TestPeachfuzzWorkloadPrincipalsRemainDisjointOGSBoundary(t *testing.T) {
+	t.Parallel()
+	uploader, uploadErr := workloadidentity.ParsePrincipal(GoogleCloudServiceAccount)
+	folder, foldErr := workloadidentity.ParsePrincipal(GoogleCloudFoldServiceAccount)
+	if uploadErr != nil || foldErr != nil {
+		t.Fatalf("ParsePrincipal() errors = %v/%v", uploadErr, foldErr)
+	}
+	if uploader == folder {
+		t.Fatalf("uploader/folder principals = %q/%q, want disjoint authorities", uploader.String(), folder.String())
 	}
 }
 

@@ -11,6 +11,7 @@ const (
 	OffgridRunEvidenceFinalizePath    = "/" + core.APIVersionToken + "/peachfuzz/evidence/finalize"
 	OffgridRunEvidenceMaterializePath = "/" + core.APIVersionToken + "/peachfuzz/evidence/materialize"
 	GoogleCloudServiceAccount         = "peachfuzz@" + core.OffgridGoogleCloudProjectID + workloadidentity.GoogleServiceAccountEmailSuffix
+	GoogleCloudFoldServiceAccount     = "peachfuzz-fold@" + core.OffgridGoogleCloudProjectID + workloadidentity.GoogleServiceAccountEmailSuffix
 	QueryProject                      = "project"
 )
 
