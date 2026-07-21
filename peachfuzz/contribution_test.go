@@ -101,8 +101,8 @@ func TestProjectContributionSetRejectsHostileShapeOGSBoundaryTable(t *testing.T)
 	first := validMachineContribution(t, 'a')
 	second := validMachineContribution(t, 'b')
 	for _, testCase := range []struct {
-		set  ProjectContributionSet
 		name string
+		set  ProjectContributionSet
 	}{
 		{name: "empty"},
 		{name: "duplicate machine", set: ProjectContributionSet{Contributions: []MachineContribution{first, first}}},

@@ -132,24 +132,27 @@ func (l *DoctrinePackageLayer) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func doctrinePackageLayerImportCeilings() [doctrinePackageLayerLimit]DoctrinePackageLayer {
+	return [doctrinePackageLayerLimit]DoctrinePackageLayer{
+		DoctrinePackageLayerPrimitive:    DoctrinePackageLayerCore,
+		DoctrinePackageLayerFoundation:   DoctrinePackageLayerPrimitive,
+		DoctrinePackageLayerComponent:    DoctrinePackageLayerFoundation,
+		DoctrinePackageLayerOrchestrator: DoctrinePackageLayerOrchestrator,
+	}
+}
+
 func DoctrineImportAllowed(src DoctrinePackageLayer, dst DoctrinePackageLayer) bool {
+	if !src.IsValid() || !dst.IsValid() {
+		return false
+	}
 	switch src {
-	case DoctrinePackageLayerCore:
-		return false
-	case DoctrinePackageLayerPrimitive:
-		return dst == DoctrinePackageLayerCore
-	case DoctrinePackageLayerFoundation:
-		return dst == DoctrinePackageLayerCore || dst == DoctrinePackageLayerPrimitive
-	case DoctrinePackageLayerComponent:
-		return dst == DoctrinePackageLayerCore || dst == DoctrinePackageLayerPrimitive || dst == DoctrinePackageLayerFoundation
-	case DoctrinePackageLayerOrchestrator:
-		return dst == DoctrinePackageLayerCore || dst == DoctrinePackageLayerPrimitive || dst == DoctrinePackageLayerFoundation || dst == DoctrinePackageLayerComponent || dst == DoctrinePackageLayerOrchestrator
 	case DoctrinePackageLayerTestSupport:
-		return dst != DoctrinePackageLayerShell && dst.IsValid()
+		return dst != DoctrinePackageLayerShell
 	case DoctrinePackageLayerShell:
-		return dst.IsValid()
+		return true
 	default:
-		return false
+		ceiling := doctrinePackageLayerImportCeilings()[src]
+		return ceiling.IsValid() && dst <= ceiling
 	}
 }
 
@@ -166,14 +169,14 @@ const (
 )
 
 const (
-	DoctrinePackageCapabilityProcessExecutionToken = "process_execution"
-	DoctrinePackageCapabilityTestSupportToken      = "test_support"
+	DoctrinePackageCapabilityProcessExecutionWireValue = "process_execution"
+	DoctrinePackageCapabilityTestSupportWireValue      = "test_support"
 )
 
 func doctrinePackageCapabilityTokens() [doctrinePackageCapabilityLimit]string {
 	return [...]string{
-		DoctrinePackageCapabilityProcessExecution: DoctrinePackageCapabilityProcessExecutionToken,
-		DoctrinePackageCapabilityTestSupport:      DoctrinePackageCapabilityTestSupportToken,
+		DoctrinePackageCapabilityProcessExecution: DoctrinePackageCapabilityProcessExecutionWireValue,
+		DoctrinePackageCapabilityTestSupport:      DoctrinePackageCapabilityTestSupportWireValue,
 	}
 }
 

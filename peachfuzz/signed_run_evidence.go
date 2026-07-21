@@ -11,9 +11,9 @@ import (
 // generic signed body, it binds Machine to the signing public key so one
 // producer cannot claim another producer's namespace.
 type SignedRunEvidence struct {
-	Body      RunEvidence              `json:"body"`
 	KeyID     core.SigningKeyID        `json:"key_id"`
 	Signature core.Ed25519SignatureHex `json:"signature"`
+	Body      RunEvidence              `json:"body"`
 }
 
 func NewSignedRunEvidence(signed core.Signed[RunEvidence]) (SignedRunEvidence, error) {

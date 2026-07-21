@@ -15,8 +15,8 @@ const ProjectContributionMaxMachines = 64
 // The control plane replaces only the matching Machine identity and derives the
 // public aggregate from the full typed contribution set.
 type MachineContribution struct {
-	Snapshot ProjectSnapshot `json:"snapshot"`
 	Machine  MachineID       `json:"machine"`
+	Snapshot ProjectSnapshot `json:"snapshot"`
 }
 
 func (MachineContribution) APIBody() {}

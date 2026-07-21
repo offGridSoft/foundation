@@ -70,6 +70,30 @@ func (o RunOutcome) String() string {
 }
 
 func (o RunOutcome) IsValid() bool { return o > RunOutcomeUnknown && o <= RunOutcomeUnsupported }
+
+// Failure reports the scheduler-policy subset. CandidateFound is success:
+// the fuzzer produced exactly the evidence it was asked to produce.
+func (o RunOutcome) Failure() bool {
+	switch o {
+	case RunOutcomeSeedFailure, RunOutcomeBuildFailed, RunOutcomeOrdinaryTestFailed,
+		RunOutcomeTimedOut, RunOutcomeInfrastructureError, RunOutcomeUnsupported:
+		return true
+	default:
+		return false
+	}
+}
+
+// PreflightCacheable reports the closed durable preflight subset.
+func (o RunOutcome) PreflightCacheable() bool {
+	return o == RunOutcomeCompleted || o == RunOutcomeBuildFailed || o == RunOutcomeOrdinaryTestFailed
+}
+
+// RetainsDiagnostics reports whether a durable run record may retain the
+// bounded child-output tails needed to explain the classified outcome.
+func (o RunOutcome) RetainsDiagnostics() bool {
+	return o.IsValid() && o != RunOutcomeCompleted
+}
+
 func (o RunOutcome) Validate() error {
 	if !o.IsValid() {
 		return fmt.Errorf(ErrFmtOutcome, ErrContract)

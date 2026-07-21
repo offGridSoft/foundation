@@ -6,3 +6,8 @@ const (
 	doctrinePackageLayer      foundationcore.DoctrinePackageLayer      = foundationcore.DoctrinePackageLayerFoundation
 	doctrinePackageCapability foundationcore.DoctrinePackageCapability = foundationcore.DoctrinePackageCapabilityTestSupport
 )
+
+var (
+	_ foundationcore.DoctrinePackageLayer      = doctrinePackageLayer
+	_ foundationcore.DoctrinePackageCapability = doctrinePackageCapability
+)

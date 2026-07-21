@@ -147,10 +147,7 @@ func (d CoalescingDelivery[T]) Retry(generation uint64, now UnixNanoTime, policy
 	if err := policy.Validate(); err != nil {
 		return CoalescingDelivery[T]{}, coalescingDeliveryError(err)
 	}
-	attempt := policy.MaxAttempts - 1
-	if d.Attempts < attempt {
-		attempt = d.Attempts
-	}
+	attempt := min(d.Attempts, policy.MaxAttempts-1)
 	delay, err := policy.Delay(attempt, jitterFraction)
 	if err != nil {
 		return CoalescingDelivery[T]{}, coalescingDeliveryError(err)

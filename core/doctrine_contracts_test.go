@@ -10,8 +10,8 @@ func TestDoctrinePackageLayerContractTable(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name       string
-		layer      DoctrinePackageLayer
 		identifier string
+		layer      DoctrinePackageLayer
 		valid      bool
 	}{
 		{name: "core", layer: DoctrinePackageLayerCore, identifier: "DoctrinePackageLayerCore", valid: true},
