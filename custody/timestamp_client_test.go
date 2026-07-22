@@ -165,35 +165,35 @@ func TestTimestampClientHostileTransportTable(t *testing.T) {
 		accept      bool
 		wantHTTP    bool
 	}{
-		{name: "granted status zero reply accepted", status: core.HTTPStatusOK, contentType: RFC3161ContentTypeReply,
+		{name: "granted status zero reply accepted", status: core.HTTPStatusOK.Int(), contentType: core.HTTPContentTypeTimestampReply,
 			body: func(t *testing.T) []byte { return testTimestampReplyDER(t, 0) }, accept: true},
-		{name: "granted with mods status one reply accepted", status: core.HTTPStatusOK, contentType: RFC3161ContentTypeReply,
+		{name: "granted with mods status one reply accepted", status: core.HTTPStatusOK.Int(), contentType: core.HTTPContentTypeTimestampReply,
 			body: func(t *testing.T) []byte { return testTimestampReplyDER(t, 1) }, accept: true},
-		{name: "json content type refused", status: core.HTTPStatusOK, contentType: core.HTTPContentTypeJSON,
+		{name: "json content type refused", status: core.HTTPStatusOK.Int(), contentType: core.HTTPContentTypeJSON,
 			body: func(t *testing.T) []byte { return testTimestampReplyDER(t, 0) }, wantHTTP: true},
-		{name: "text plain content type refused", status: core.HTTPStatusOK, contentType: "text/plain",
+		{name: "text plain content type refused", status: core.HTTPStatusOK.Int(), contentType: "text/plain",
 			body: func(t *testing.T) []byte { return testTimestampReplyDER(t, 0) }, wantHTTP: true},
-		{name: "query content type echoed back refused", status: core.HTTPStatusOK, contentType: RFC3161ContentTypeQuery,
+		{name: "query content type echoed back refused", status: core.HTTPStatusOK.Int(), contentType: core.HTTPContentTypeTimestampQuery,
 			body: func(t *testing.T) []byte { return testTimestampReplyDER(t, 0) }, wantHTTP: true},
-		{name: "http 400 with granted body refused", status: 400, contentType: RFC3161ContentTypeReply,
+		{name: "http 400 with granted body refused", status: 400, contentType: core.HTTPContentTypeTimestampReply,
 			body: func(t *testing.T) []byte { return testTimestampReplyDER(t, 0) }, wantHTTP: true},
-		{name: "http 500 with granted body refused", status: core.HTTPStatusInternalServerError, contentType: RFC3161ContentTypeReply,
+		{name: "http 500 with granted body refused", status: core.HTTPStatusInternalServerError.Int(), contentType: core.HTTPContentTypeTimestampReply,
 			body: func(t *testing.T) []byte { return testTimestampReplyDER(t, 0) }, wantHTTP: true},
-		{name: "empty body refused", status: core.HTTPStatusOK, contentType: RFC3161ContentTypeReply,
+		{name: "empty body refused", status: core.HTTPStatusOK.Int(), contentType: core.HTTPContentTypeTimestampReply,
 			body: func(*testing.T) []byte { return nil }, wantHTTP: true},
-		{name: "body one over maximum refused", status: core.HTTPStatusOK, contentType: RFC3161ContentTypeReply,
+		{name: "body one over maximum refused", status: core.HTTPStatusOK.Int(), contentType: core.HTTPContentTypeTimestampReply,
 			body: func(*testing.T) []byte { return bytes.Repeat([]byte{0x30}, RFC3161DERMaximumBytes+1) }, wantHTTP: true},
-		{name: "garbage body at exact maximum passes transport but fails parse", status: core.HTTPStatusOK, contentType: RFC3161ContentTypeReply,
+		{name: "garbage body at exact maximum passes transport but fails parse", status: core.HTTPStatusOK.Int(), contentType: core.HTTPContentTypeTimestampReply,
 			body: func(*testing.T) []byte { return bytes.Repeat([]byte{0x30}, RFC3161DERMaximumBytes) }},
-		{name: "garbage der refused", status: core.HTTPStatusOK, contentType: RFC3161ContentTypeReply,
+		{name: "garbage der refused", status: core.HTTPStatusOK.Int(), contentType: core.HTTPContentTypeTimestampReply,
 			body: func(*testing.T) []byte { return []byte("not a timestamp reply") }},
-		{name: "truncated reply refused", status: core.HTTPStatusOK, contentType: RFC3161ContentTypeReply,
+		{name: "truncated reply refused", status: core.HTTPStatusOK.Int(), contentType: core.HTTPContentTypeTimestampReply,
 			body: func(t *testing.T) []byte { reply := testTimestampReplyDER(t, 0); return reply[:len(reply)-1] }},
-		{name: "trailing byte after reply refused", status: core.HTTPStatusOK, contentType: RFC3161ContentTypeReply,
+		{name: "trailing byte after reply refused", status: core.HTTPStatusOK.Int(), contentType: core.HTTPContentTypeTimestampReply,
 			body: func(t *testing.T) []byte { return append(testTimestampReplyDER(t, 0), 0x00) }},
-		{name: "rejection status two reply refused", status: core.HTTPStatusOK, contentType: RFC3161ContentTypeReply,
+		{name: "rejection status two reply refused", status: core.HTTPStatusOK.Int(), contentType: core.HTTPContentTypeTimestampReply,
 			body: func(t *testing.T) []byte { return testTimestampReplyDER(t, 2) }},
-		{name: "status only reply without token refused", status: core.HTTPStatusOK, contentType: RFC3161ContentTypeReply,
+		{name: "status only reply without token refused", status: core.HTTPStatusOK.Int(), contentType: core.HTTPContentTypeTimestampReply,
 			body: func(t *testing.T) []byte {
 				statusDER, err := asn1.Marshal(struct{ Status int }{Status: 0})
 				if err != nil {
@@ -201,7 +201,7 @@ func TestTimestampClientHostileTransportTable(t *testing.T) {
 				}
 				return testDERSequence(t, statusDER)
 			}},
-		{name: "empty der sequence reply refused", status: core.HTTPStatusOK, contentType: RFC3161ContentTypeReply,
+		{name: "empty der sequence reply refused", status: core.HTTPStatusOK.Int(), contentType: core.HTTPContentTypeTimestampReply,
 			body: func(*testing.T) []byte { return []byte{0x30, 0x00} }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -251,8 +251,8 @@ func newTimestampReplyTestServer(t *testing.T, wantQuery []byte, fixture timesta
 		if request.Method != http.MethodPost || request.URL.Path != testTimestampReplyPath {
 			t.Errorf("request = %s %s, want POST %s", request.Method, request.URL.Path, testTimestampReplyPath)
 		}
-		if got := request.Header.Get(core.HTTPHeaderContentType); got != RFC3161ContentTypeQuery {
-			t.Errorf("request content type = %q, want %q", got, RFC3161ContentTypeQuery)
+		if got := request.Header.Get(core.HTTPHeaderContentType); got != core.HTTPContentTypeTimestampQuery {
+			t.Errorf("request content type = %q, want %q", got, core.HTTPContentTypeTimestampQuery)
 		}
 		gotQuery, readErr := io.ReadAll(request.Body)
 		if readErr != nil {
@@ -350,7 +350,7 @@ func TestTimestampClientFailClosedBeforeTransportTable(t *testing.T) {
 				case requestSeen <- struct{}{}:
 				default:
 				}
-				w.Header().Set(core.HTTPHeaderContentType, RFC3161ContentTypeReply)
+				w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeTimestampReply)
 				_, _ = w.Write(grantedReply)
 			}))
 			defer server.Close()

@@ -33,6 +33,32 @@ func TestEffortNanosecondsDecimalBoundaries(t *testing.T) {
 	}
 }
 
+func TestEffortNanosecondsPartsPreserveFullUnsignedDomainTable(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name string
+		want string
+		high uint64
+		low  uint64
+	}{
+		{name: "zero limbs remain zero", want: "0"},
+		{name: "low limb floor", low: 1, want: "1"},
+		{name: "low limb ceiling", low: math.MaxUint64, want: "18446744073709551615"},
+		{name: "high limb floor", high: 1, want: "18446744073709551616"},
+		{name: "high limb ceiling with low floor", high: math.MaxUint64, want: "340282366920938463444927863358058659840"},
+		{name: "both limbs ceiling", high: math.MaxUint64, low: math.MaxUint64, want: "340282366920938463463374607431768211455"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got := NewEffortNanosecondsParts(test.high, test.low)
+			if got.High != test.high || got.Low != test.low || got.Decimal() != test.want {
+				t.Fatalf("NewEffortNanosecondsParts(%d, %d) = %+v/%q, want exact limbs/%q", test.high, test.low, got, got.Decimal(), test.want)
+			}
+		})
+	}
+}
+
 func TestEffortNanosecondsRejectsNonCanonicalAndOverflow(t *testing.T) {
 	t.Parallel()
 	for _, value := range []string{"", "00", "01", "-1", "+1", "1.0", "340282366920938463463374607431768211456"} {

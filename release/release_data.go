@@ -52,6 +52,10 @@ func (r ReleaseDataRequest) Validate() error {
 	return nil
 }
 
+func (r ReleaseDataRequest) HTTPIdempotencyKey() (core.HTTPIdempotencyKey, error) {
+	return core.ParseHTTPIdempotencyKey(r.RequestID.String())
+}
+
 func (r ReleaseDataRequest) MarshalJSON() ([]byte, error) {
 	if err := r.Validate(); err != nil {
 		return nil, err

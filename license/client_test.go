@@ -1,13 +1,11 @@
 package license
 
 import (
-	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,6 +14,11 @@ import (
 
 	"github.com/offGridSoft/foundation/v2026/core"
 )
+
+func checkInTestBackoff(maxAttempts uint64) core.BackoffPolicy {
+	delay := core.NewNanosecondsDuration(time.Nanosecond)
+	return core.BackoffPolicy{Base: delay, Max: delay, MaxAttempts: maxAttempts}
+}
 
 func TestMaximalBugCheckInResponseFitsTransportBoundary(t *testing.T) {
 	t.Parallel()
@@ -40,10 +43,13 @@ func TestMaximalBugCheckInResponseFitsTransportBoundary(t *testing.T) {
 	if len(body) > CheckInResponseByteCap {
 		t.Fatalf("maximal legal response bytes = %d, cap = %d", len(body), CheckInResponseByteCap)
 	}
-	reply := &http.Response{Body: io.NopCloser(bytes.NewReader(body))}
 	keyring := core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}}
-	if _, err := readResponse[BugCheckInResponse](reply, keyring); err != nil {
-		t.Fatalf("readResponse(maximal response) error = %v", err)
+	decoded, err := core.DecodeStrictJSON[core.APIEnvelope[BugCheckInResponse]](body)
+	if err != nil || decoded.Data == nil {
+		t.Fatalf("DecodeStrictJSON(maximal response) = (%+v, %v), want typed response", decoded, err)
+	}
+	if err := decoded.Data.Verify(keyring); err != nil {
+		t.Fatalf("maximal response Verify() error = %v", err)
 	}
 }
 
@@ -457,7 +463,7 @@ func TestRetryLoopRetriesThenAcceptsEnvelope(t *testing.T) {
 		HTTP:     server.Client(),
 		Endpoint: endpoint,
 		Jitter:   func() float64 { return 1 },
-		Backoff:  core.BackoffPolicy{Base: time.Nanosecond, Max: time.Nanosecond, MaxAttempts: 3},
+		Backoff:  checkInTestBackoff(3),
 		Keyring:  core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}},
 	}
 
@@ -501,7 +507,7 @@ func TestWitnessClientRetryThenAcceptsSubscriptionEnvelope(t *testing.T) {
 		HTTP:     server.Client(),
 		Endpoint: endpoint,
 		Jitter:   func() float64 { return 1 },
-		Backoff:  core.BackoffPolicy{Base: time.Nanosecond, Max: time.Nanosecond, MaxAttempts: 2},
+		Backoff:  checkInTestBackoff(2),
 		Keyring:  core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}},
 	}
 
@@ -536,7 +542,7 @@ func TestRetryExhaustionCarriesServerRetryAfter(t *testing.T) {
 		HTTP:     server.Client(),
 		Endpoint: endpoint,
 		Jitter:   func() float64 { return 1 },
-		Backoff:  core.BackoffPolicy{Base: time.Nanosecond, Max: time.Nanosecond, MaxAttempts: 1},
+		Backoff:  checkInTestBackoff(1),
 		Keyring:  testClientKeyring(t),
 	}
 
@@ -567,7 +573,7 @@ func TestRetryExhaustedTransportErrorCarriesLicenseIdentity(t *testing.T) {
 		HTTP:     &http.Client{Transport: failingRoundTripper{}},
 		Endpoint: endpoint,
 		Jitter:   func() float64 { return 1 },
-		Backoff:  core.BackoffPolicy{Base: time.Nanosecond, Max: time.Nanosecond, MaxAttempts: 1},
+		Backoff:  checkInTestBackoff(1),
 		Keyring:  testClientKeyring(t),
 	}
 
@@ -602,7 +608,7 @@ func TestClientValidateChecksAPIKeyAndBackoffTable(t *testing.T) {
 				HTTP:     &http.Client{},
 				Endpoint: mustDefaultCheckInEndpoint(t, core.ProductBug),
 				APIKey:   testAPICallKey(t),
-				Backoff:  core.BackoffPolicy{Base: time.Nanosecond, Max: time.Nanosecond, MaxAttempts: 1},
+				Backoff:  checkInTestBackoff(1),
 				Keyring:  testClientKeyring(t),
 			}
 			tc.mutate(&client)
@@ -617,28 +623,6 @@ func TestClientValidateChecksAPIKeyAndBackoffTable(t *testing.T) {
 				t.Fatalf("Client.Validate() = %v", err)
 			}
 		})
-	}
-}
-
-func TestJitterFractionZeroFailsToMaxDelay(t *testing.T) {
-	t.Parallel()
-	client := Client[BugCheckIn, BugCheckInResponse]{Jitter: func() float64 { return 0 }}
-	if got := client.jitterFraction(); got != 1 {
-		t.Fatalf("jitterFraction zero = %v, want 1", got)
-	}
-	if got := conservativeJitterFraction(-0.1); got != 1 {
-		t.Fatalf("conservativeJitterFraction negative = %v, want 1", got)
-	}
-	if got := conservativeJitterFraction(1.1); got != 1 {
-		t.Fatalf("conservativeJitterFraction >1 = %v, want 1", got)
-	}
-	backoff := DefaultCheckInBackoff()
-	got, err := backoff.Delay(0, client.jitterFraction())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != backoff.Base {
-		t.Fatalf("zero jitter delay = %s, want %s", got, backoff.Base)
 	}
 }
 
@@ -720,10 +704,10 @@ func TestClientRejectsNilContextWithTypedIdentity(t *testing.T) {
 func TestCompilerOwnedDefaultsCannotBeMutatedGlobally(t *testing.T) {
 	t.Parallel()
 
-	mutated := DefaultCheckInBackoff()
+	mutated := core.DefaultHTTPBackoffPolicy()
 	mutated.MaxAttempts = 0
-	if err := DefaultCheckInBackoff().Validate(); err != nil {
-		t.Fatalf("DefaultCheckInBackoff() after local mutation = %v", err)
+	if err := core.DefaultHTTPBackoffPolicy().Validate(); err != nil {
+		t.Fatalf("DefaultHTTPBackoffPolicy() after local mutation = %v", err)
 	}
 	for _, endpoint := range []core.APIEndpoint{
 		mustDefaultCheckInEndpoint(t, core.ProductBug),
@@ -750,26 +734,23 @@ func TestClientBoundaryErrorsCarryLicenseIdentityTable(t *testing.T) {
 		run  func() error
 		name string
 	}{
-		{name: "body read failure", run: func() error {
-			_, err := readCappedResponseBody(failingReader{})
-			return err
-		}},
-		{name: "nil response body", run: func() error {
-			_, err := readCappedResponseBody(nil)
-			return err
-		}},
 		{name: "success envelope decode failure", run: func() error {
-			reply := &http.Response{Body: io.NopCloser(strings.NewReader("<html>"))}
-			_, err := readResponse[BugCheckInResponse](reply, testClientKeyring(t))
-			return err
+			return runMalformedCheckInResponse(t, core.HTTPStatusOK)
 		}},
 		{name: "failure envelope decode failure", run: func() error {
-			reply := &http.Response{Body: io.NopCloser(strings.NewReader("<html>"))}
-			err := readFailureResponse[BugCheckInResponse](reply, http.StatusBadGateway, 0)
-			var statusErr CheckInHTTPError
-			if !errors.As(err, &statusErr) || statusErr.StatusCode != http.StatusBadGateway {
-				return fmt.Errorf("status error = %v, want CheckInHTTPError 502", err)
+			status, err := core.NewHTTPStatusCode(http.StatusBadRequest)
+			if err != nil {
+				return err
 			}
+			return runMalformedCheckInResponse(t, status)
+		}},
+		{name: "network transport failure", run: func() error {
+			endpoint := mustDefaultCheckInEndpoint(t, core.ProductBug)
+			client := Client[BugCheckIn, BugCheckInResponse]{
+				HTTP: &http.Client{Transport: failingRoundTripper{}}, Endpoint: endpoint,
+				Backoff: checkInTestBackoff(1), Keyring: testClientKeyring(t),
+			}
+			_, err := client.Do(t.Context(), testBugCheckIn(t))
 			return err
 		}},
 		{name: "request build failure", run: func() error {
@@ -789,36 +770,32 @@ func TestClientBoundaryErrorsCarryLicenseIdentityTable(t *testing.T) {
 	}
 }
 
-func TestCheckInBudgetCoversWorstCaseRetryAfterSchedule(t *testing.T) {
-	t.Parallel()
-	backoff := DefaultCheckInBackoff()
-	minBudget := time.Duration(backoff.MaxAttempts-1) * backoff.Max
-	if CheckInBudget < minBudget {
-		t.Fatalf("CheckInBudget = %s, want at least %s", CheckInBudget, minBudget)
+func runMalformedCheckInResponse(t *testing.T, status core.HTTPStatusCode) error {
+	t.Helper()
+	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
+		writer.WriteHeader(status.Int())
+		_, _ = writer.Write([]byte(`{"request_id":`))
+	}))
+	t.Cleanup(server.Close)
+	endpoint, err := ParseCheckInEndpoint(server.URL + OffgridBugCheckInPath)
+	if err != nil {
+		return err
 	}
+	client := Client[BugCheckIn, BugCheckInResponse]{
+		HTTP: server.Client(), Endpoint: endpoint,
+		Backoff: checkInTestBackoff(1), Keyring: testClientKeyring(t),
+	}
+	_, err = client.Do(t.Context(), testBugCheckIn(t))
+	return err
 }
 
-func TestRetryAfterClampedToBackoffMax(t *testing.T) {
+func TestCheckInBudgetCoversWorstCaseRetryAfterSchedule(t *testing.T) {
 	t.Parallel()
-	now := time.Date(2026, time.July, 7, 12, 0, 0, 0, time.UTC)
-	maxWait := 17 * time.Millisecond
-	for _, header := range []string{
-		"8640000",
-		"9223372036854775807",
-		"184467440737095516160",
-		now.Add(24 * time.Hour).Format(http.TimeFormat),
-	} {
-		if got := parseRetryAfter(header, now, maxWait); got.Wait != maxWait {
-			t.Fatalf("parseRetryAfter(%q).Wait = %s, want %s", header, got.Wait, maxWait)
-		}
-	}
-	for _, header := range []string{
-		"-1",
-		now.Add(-time.Hour).Format(http.TimeFormat),
-	} {
-		if got := parseRetryAfter(header, now, maxWait); got.Wait != 0 || got.Hint != 0 {
-			t.Fatalf("parseRetryAfter(%q) = %+v, want zero decision", header, got)
-		}
+	backoff := core.DefaultHTTPBackoffPolicy()
+	minBudget := time.Duration(backoff.MaxAttempts-1) * backoff.Max.Duration()
+	if CheckInBudget < minBudget {
+		t.Fatalf("CheckInBudget = %s, want at least %s", CheckInBudget, minBudget)
 	}
 }
 
@@ -986,12 +963,6 @@ type failingRoundTripper struct{}
 
 func (failingRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
 	return nil, errors.New("dial failed")
-}
-
-type failingReader struct{}
-
-func (failingReader) Read([]byte) (int, error) {
-	return 0, errors.New("read failed")
 }
 
 func testSeatLeaseBody(t *testing.T) SeatLeaseBody {

@@ -12,8 +12,8 @@ func TestFullSyncRealFileKindsAndInvalidHandles(t *testing.T) {
 
 	dir := t.TempDir()
 	cases := []struct {
-		name      string
 		open      func() (*os.File, error)
+		name      string
 		wantError bool
 	}{
 		{name: "p01_empty_regular", open: func() (*os.File, error) { return os.Create(filepath.Join(dir, "empty")) }},

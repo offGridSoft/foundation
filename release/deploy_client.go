@@ -1,20 +1,19 @@
 package release
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/offGridSoft/foundation/v2026/core"
+	"github.com/offGridSoft/foundation/v2026/exchange"
 )
 
-const ReleaseAPIHTTPBudget = 15 * time.Second
+const (
+	ReleaseAPIHTTPBudget = 15 * time.Second
+)
 
 type DeployAPIError struct {
 	RequestID  core.APIRequestID
@@ -126,7 +125,7 @@ func (c DeployClient) Publication(ctx context.Context, releaseID ReleaseID) (Dep
 	return response, nil
 }
 
-func deployPost[Request core.Validatable, Response core.Validatable](
+func deployPost[Request core.HTTPIdempotentBody, Response core.Validatable](
 	ctx context.Context,
 	httpClient *http.Client,
 	endpoint core.APIEndpoint,
@@ -136,31 +135,19 @@ func deployPost[Request core.Validatable, Response core.Validatable](
 	if ctx == nil {
 		return zero, fmt.Errorf(ErrFmtDeployClient, errors.Join(core.ErrReleaseContract, core.ErrNilContext))
 	}
-	body, err := json.Marshal(request)
+	key, err := request.HTTPIdempotencyKey()
 	if err != nil {
 		return zero, DeployHTTPError{Cause: err}
 	}
 	requestContext, cancel := context.WithTimeout(ctx, ReleaseAPIHTTPBudget)
 	defer cancel()
-	httpRequest, err := http.NewRequestWithContext(requestContext, http.MethodPost, endpoint.String(), bytes.NewReader(body))
-	if err != nil {
-		return zero, DeployHTTPError{Cause: err}
+	exchangeRequest := exchange.Request[Request]{
+		Body: &request, Endpoint: endpoint,
+		Semantics:      core.HTTPRequestSemantics{Method: core.HTTPMethodPost, Replay: core.HTTPReplayIdempotent, IdempotencyKey: key},
+		ExpectedStatus: core.HTTPStatusOK,
 	}
-	httpRequest.Header.Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
-	httpResponse, err := httpClient.Do(httpRequest)
-	if err != nil {
-		return zero, DeployHTTPError{Cause: err}
-	}
-	if httpResponse == nil || httpResponse.Body == nil {
-		return zero, DeployHTTPError{Cause: core.ErrReleaseContract}
-	}
-	defer func() { _ = httpResponse.Body.Close() }()
-	contentType := httpResponse.Header.Get(core.HTTPHeaderContentType)
-	responseBody, err := io.ReadAll(io.LimitReader(httpResponse.Body, core.StrictJSONMaxBytes+1))
-	if err != nil || len(responseBody) == 0 || len(responseBody) > core.StrictJSONMaxBytes {
-		return zero, DeployHTTPError{StatusCode: httpResponse.StatusCode, Cause: core.ErrReleaseContract}
-	}
-	return decodeDeployHTTPResponse[Response](httpResponse.StatusCode, contentType, responseBody)
+	response, err := exchange.SendJSON[Request, Response](requestContext, exchange.Client{HTTP: httpClient}, exchangeRequest, releaseAPIClientPolicy())
+	return deployExchangeResult(response, err)
 }
 
 func deployGet[Response core.Validatable](
@@ -174,43 +161,32 @@ func deployGet[Response core.Validatable](
 	}
 	requestContext, cancel := context.WithTimeout(ctx, ReleaseAPIHTTPBudget)
 	defer cancel()
-	httpRequest, err := http.NewRequestWithContext(requestContext, http.MethodGet, endpoint.String(), nil)
-	if err != nil {
-		return zero, DeployHTTPError{Cause: err}
+	exchangeRequest := exchange.Request[core.HTTPNoBody]{
+		Endpoint:       endpoint,
+		Semantics:      core.HTTPRequestSemantics{Method: core.HTTPMethodGet, Replay: core.HTTPReplaySafe},
+		ExpectedStatus: core.HTTPStatusOK,
 	}
-	httpResponse, err := httpClient.Do(httpRequest)
-	if err != nil {
-		return zero, DeployHTTPError{Cause: err}
-	}
-	if httpResponse == nil || httpResponse.Body == nil {
-		return zero, DeployHTTPError{Cause: core.ErrReleaseContract}
-	}
-	defer func() { _ = httpResponse.Body.Close() }()
-	contentType := httpResponse.Header.Get(core.HTTPHeaderContentType)
-	responseBody, err := io.ReadAll(io.LimitReader(httpResponse.Body, core.StrictJSONMaxBytes+1))
-	if err != nil || len(responseBody) == 0 || len(responseBody) > core.StrictJSONMaxBytes {
-		return zero, DeployHTTPError{StatusCode: httpResponse.StatusCode, Cause: core.ErrReleaseContract}
-	}
-	return decodeDeployHTTPResponse[Response](httpResponse.StatusCode, contentType, responseBody)
+	response, err := exchange.SendJSON[core.HTTPNoBody, Response](requestContext, exchange.Client{HTTP: httpClient}, exchangeRequest, releaseAPIClientPolicy())
+	return deployExchangeResult(response, err)
 }
 
-func decodeDeployHTTPResponse[Response core.Validatable](statusCode int, contentType string, responseBody []byte) (Response, error) {
+func deployExchangeResult[Response core.Validatable](response exchange.Response[Response], cause error) (Response, error) {
 	var zero Response
-	if !strings.HasPrefix(contentType, core.HTTPContentTypeJSON) {
-		return zero, DeployHTTPError{StatusCode: statusCode, Cause: core.ErrReleaseContract}
+	if cause == nil {
+		return *response.Envelope.Data, nil
 	}
-	envelope, err := core.DecodeStrictJSON[core.APIEnvelope[Response]](responseBody)
-	if err != nil {
-		return zero, DeployHTTPError{StatusCode: statusCode, Cause: err}
+	if apiError, ok := errors.AsType[exchange.ResponseError](cause); ok {
+		return zero, DeployAPIError{StatusCode: apiError.Status.Int(), RequestID: apiError.RequestID, Body: apiError.Body}
 	}
-	if statusCode != core.HTTPStatusOK {
-		if err := envelope.ValidateFailure(); err != nil {
-			return zero, DeployHTTPError{StatusCode: statusCode, Cause: err}
-		}
-		return zero, DeployAPIError{StatusCode: statusCode, RequestID: envelope.RequestID, Body: *envelope.Error}
+	return zero, DeployHTTPError{StatusCode: response.Status.Int(), Cause: cause}
+}
+
+func releaseAPIClientPolicy() exchange.ClientPolicy {
+	return exchange.ClientPolicy{
+		AttemptTimeout:    core.NewNanosecondsDuration(ReleaseAPIHTTPBudget),
+		RequestBodyLimit:  core.NewByteCount(core.StrictJSONMaxBytes),
+		ResponseBodyLimit: core.NewByteCount(core.StrictJSONMaxBytes),
+		Retry:             core.DefaultHTTPRetryPolicy(),
+		Redirect:          core.HTTPRedirectReject,
 	}
-	if err := envelope.ValidateSuccess(); err != nil {
-		return zero, DeployHTTPError{StatusCode: statusCode, Cause: err}
-	}
-	return *envelope.Data, nil
 }

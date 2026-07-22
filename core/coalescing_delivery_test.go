@@ -60,15 +60,24 @@ func (f deliveryFixture) Validate() error {
 	return nil
 }
 
+func deliveryBackoffPolicy(base, maximum time.Duration, maxAttempts uint64) BackoffPolicy {
+	return BackoffPolicy{
+		Base:        NewNanosecondsDuration(base),
+		Max:         NewNanosecondsDuration(maximum),
+		MaxAttempts: maxAttempts,
+	}
+}
+
 func TestCoalescingDeliveryTransitionTable(t *testing.T) {
 	t.Parallel()
 
 	now := NewUnixNanoTime(time.Unix(10, 0))
+	policy := deliveryBackoffPolicy(time.Second, time.Minute, 3)
 	valid, err := NewCoalescingDelivery(deliveryFixture{Valid: true}, now)
 	if err != nil {
 		t.Fatalf("NewCoalescingDelivery() error = %v, want nil", err)
 	}
-	inFlight, err := valid.Begin(now)
+	inFlight, err := valid.Begin(now, policy)
 	if err != nil {
 		t.Fatalf("Begin() error = %v, want nil", err)
 	}
@@ -77,29 +86,35 @@ func TestCoalescingDeliveryTransitionTable(t *testing.T) {
 		name    string
 		wantErr bool
 	}{
-		{name: "pending begins when available", run: func() error { _, gotErr := valid.Begin(now); return gotErr }},
+		{name: "pending begins when available", run: func() error { _, gotErr := valid.Begin(now, policy); return gotErr }},
 		{name: "pending cannot begin before available", run: func() error {
 			future := valid
 			future.AvailableAt = now.Add(time.Second)
-			_, gotErr := future.Begin(now)
+			_, gotErr := future.Begin(now, policy)
 			return gotErr
 		}, wantErr: true},
 		{name: "pending cannot acknowledge", run: func() error { _, gotErr := valid.Acknowledge(valid.Generation); return gotErr }, wantErr: true},
 		{name: "matching in-flight generation acknowledges", run: func() error { _, gotErr := inFlight.Acknowledge(inFlight.Generation); return gotErr }},
 		{name: "old generation cannot acknowledge", run: func() error { _, gotErr := inFlight.Acknowledge(inFlight.Generation + 1); return gotErr }, wantErr: true},
 		{name: "in-flight retry schedules", run: func() error {
-			_, gotErr := inFlight.Retry(inFlight.Generation, now, BackoffPolicy{Base: time.Second, Max: time.Minute, MaxAttempts: 3}, 1)
+			_, gotErr := inFlight.Retry(inFlight.Generation, now, policy, 1)
 			return gotErr
 		}},
 		{name: "old generation cannot schedule retry", run: func() error {
-			_, gotErr := inFlight.Retry(inFlight.Generation+1, now, BackoffPolicy{Base: time.Second, Max: time.Minute, MaxAttempts: 3}, 1)
+			_, gotErr := inFlight.Retry(inFlight.Generation+1, now, policy, 1)
 			return gotErr
 		}, wantErr: true},
 		{name: "pending cannot retry", run: func() error {
-			_, gotErr := valid.Retry(valid.Generation, now, BackoffPolicy{Base: time.Second, Max: time.Minute, MaxAttempts: 3}, 1)
+			_, gotErr := valid.Retry(valid.Generation, now, policy, 1)
 			return gotErr
 		}, wantErr: true},
-		{name: "zero clock cannot begin delivery", run: func() error { _, gotErr := valid.Begin(UnixNanoTime{}); return gotErr }, wantErr: true},
+		{name: "zero clock cannot begin delivery", run: func() error { _, gotErr := valid.Begin(UnixNanoTime{}, policy); return gotErr }, wantErr: true},
+		{name: "exact attempt limit cannot begin delivery", run: func() error {
+			exhausted := valid
+			exhausted.Attempts = policy.MaxAttempts
+			_, gotErr := exhausted.Begin(now, policy)
+			return gotErr
+		}, wantErr: true},
 		{name: "invalid replacement rejected", run: func() error { _, gotErr := valid.Replace(deliveryFixture{}, now); return gotErr }, wantErr: true},
 		{name: "generation exhaustion rejected", run: func() error {
 			exhausted := valid
@@ -127,7 +142,7 @@ func TestCoalescingDeliveryReplacementInvalidatesOlderAcknowledgement(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldRequest, err := first.Begin(now)
+	oldRequest, err := first.Begin(now, deliveryBackoffPolicy(time.Second, time.Minute, 3))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,24 +162,32 @@ func TestCoalescingDeliveryRetryBackoffTable(t *testing.T) {
 	t.Parallel()
 
 	now := NewUnixNanoTime(time.Unix(10, 0))
-	policy := BackoffPolicy{Base: time.Second, Max: 4 * time.Second, MaxAttempts: 3}
 	cases := []struct {
-		wantErr      error
-		name         string
-		attempts     uint64
-		jitter       float64
-		wantDelay    time.Duration
-		wantAttempts uint64
+		wantErr       error
+		name          string
+		policy        BackoffPolicy
+		priorAttempts uint64
+		jitter        float64
+		wantDelay     time.Duration
+		wantAttempts  uint64
 	}{
-		{name: "first failure schedules full base delay", attempts: 0, jitter: 1, wantDelay: time.Second, wantAttempts: 1},
-		{name: "second failure doubles full delay", attempts: 1, jitter: 1, wantDelay: 2 * time.Second, wantAttempts: 2},
-		{name: "third failure reaches maximum delay", attempts: 2, jitter: 1, wantDelay: 4 * time.Second, wantAttempts: 3},
-		{name: "later failure remains at maximum delay", attempts: 9, jitter: 1, wantDelay: 4 * time.Second, wantAttempts: 10},
-		{name: "zero jitter permits immediate durable retry", attempts: 0, jitter: 0, wantDelay: 0, wantAttempts: 1},
-		{name: "half jitter scales base delay", attempts: 0, jitter: 0.5, wantDelay: 500 * time.Millisecond, wantAttempts: 1},
-		{name: "negative jitter is rejected", attempts: 0, jitter: -0.01, wantErr: ErrDeliveryContract},
-		{name: "jitter above one is rejected", attempts: 0, jitter: 1.01, wantErr: ErrDeliveryContract},
-		{name: "attempt counter exhaustion is rejected", attempts: math.MaxUint64, jitter: 1, wantErr: ErrDeliveryContract},
+		{name: "first failure schedules second attempt", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, 3), priorAttempts: 0, jitter: 1, wantDelay: time.Second, wantAttempts: 1},
+		{name: "second failure schedules final attempt", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, 3), priorAttempts: 1, jitter: 1, wantDelay: 2 * time.Second, wantAttempts: 2},
+		{name: "final failure cannot schedule fourth attempt", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, 3), priorAttempts: 2, jitter: 1, wantErr: ErrDeliveryContract},
+		{name: "exact attempt limit cannot begin", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, 3), priorAttempts: 3, jitter: 1, wantErr: ErrDeliveryContract},
+		{name: "one above attempt limit cannot begin", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, 3), priorAttempts: 4, jitter: 1, wantErr: ErrDeliveryContract},
+		{name: "far above attempt limit cannot begin", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, 3), priorAttempts: math.MaxUint64 - 1, jitter: 1, wantErr: ErrDeliveryContract},
+		{name: "attempt counter exhaustion is rejected", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, math.MaxUint64), priorAttempts: math.MaxUint64, jitter: 1, wantErr: ErrDeliveryContract},
+		{name: "single attempt policy never retries", policy: deliveryBackoffPolicy(time.Second, time.Second, 1), priorAttempts: 0, jitter: 1, wantErr: ErrDeliveryContract},
+		{name: "zero jitter permits immediate durable retry", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, 3), priorAttempts: 0, jitter: 0, wantDelay: 0, wantAttempts: 1},
+		{name: "smallest positive jitter remains bounded", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, 3), priorAttempts: 0, jitter: math.SmallestNonzeroFloat64, wantDelay: 0, wantAttempts: 1},
+		{name: "half jitter scales base delay", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, 3), priorAttempts: 0, jitter: 0.5, wantDelay: 500 * time.Millisecond, wantAttempts: 1},
+		{name: "one jitter includes full ceiling", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, 3), priorAttempts: 1, jitter: 1, wantDelay: 2 * time.Second, wantAttempts: 2},
+		{name: "smallest negative jitter is rejected", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, 3), priorAttempts: 0, jitter: -math.SmallestNonzeroFloat64, wantErr: ErrDeliveryContract},
+		{name: "jitter above one is rejected", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, 3), priorAttempts: 0, jitter: math.Nextafter(1, 2), wantErr: ErrDeliveryContract},
+		{name: "negative infinity jitter is rejected", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, 3), priorAttempts: 0, jitter: math.Inf(-1), wantErr: ErrDeliveryContract},
+		{name: "positive infinity jitter is rejected", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, 3), priorAttempts: 0, jitter: math.Inf(1), wantErr: ErrDeliveryContract},
+		{name: "not a number jitter is rejected", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, 3), priorAttempts: 0, jitter: math.NaN(), wantErr: ErrDeliveryContract},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -174,15 +197,15 @@ func TestCoalescingDeliveryRetryBackoffTable(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewCoalescingDelivery() error = %v, want nil", err)
 			}
-			pending.Attempts = testCase.attempts
-			inFlight, err := pending.Begin(now)
+			pending.Attempts = testCase.priorAttempts
+			inFlight, err := pending.Begin(now, testCase.policy)
 			if err != nil {
 				if errors.Is(err, testCase.wantErr) {
 					return
 				}
 				t.Fatalf("Begin() error = %v, want nil", err)
 			}
-			got, gotErr := inFlight.Retry(inFlight.Generation, now, policy, testCase.jitter)
+			got, gotErr := inFlight.Retry(inFlight.Generation, now, testCase.policy, testCase.jitter)
 			if !errors.Is(gotErr, testCase.wantErr) {
 				t.Fatalf("Retry() error = %v, want %v", gotErr, testCase.wantErr)
 			}
@@ -197,4 +220,37 @@ func TestCoalescingDeliveryRetryBackoffTable(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCoalescingDeliveryEnforcesExactAttemptBudgetSequence(t *testing.T) {
+	t.Parallel()
+
+	now := NewUnixNanoTime(time.Unix(10, 0))
+	policy := deliveryBackoffPolicy(time.Nanosecond, time.Nanosecond, 3)
+	delivery, err := NewCoalescingDelivery(deliveryFixture{Valid: true}, now)
+	if err != nil {
+		t.Fatalf("NewCoalescingDelivery() error = %v, want nil", err)
+	}
+	for wantAttempt := uint64(1); wantAttempt <= policy.MaxAttempts; wantAttempt++ {
+		inFlight, beginErr := delivery.Begin(now, policy)
+		if beginErr != nil || inFlight.Attempts != wantAttempt || inFlight.Phase != DeliveryPhaseInFlight {
+			t.Fatalf("Begin() attempt %d = phase %v attempts %d error %v, want %v/%d/nil", wantAttempt, inFlight.Phase, inFlight.Attempts, beginErr, DeliveryPhaseInFlight, wantAttempt)
+		}
+		if wantAttempt == policy.MaxAttempts {
+			if _, retryErr := inFlight.Retry(inFlight.Generation, now, policy, 1); !errors.Is(retryErr, ErrDeliveryContract) {
+				t.Fatalf("Retry() after final attempt error = %v, want %v", retryErr, ErrDeliveryContract)
+			}
+			exhausted := inFlight
+			exhausted.Phase = DeliveryPhasePending
+			if _, beginErr := exhausted.Begin(now, policy); !errors.Is(beginErr, ErrDeliveryContract) {
+				t.Fatalf("Begin() from exhausted pending state error = %v, want %v", beginErr, ErrDeliveryContract)
+			}
+			return
+		}
+		delivery, err = inFlight.Retry(inFlight.Generation, now, policy, 0)
+		if err != nil {
+			t.Fatalf("Retry() after attempt %d error = %v, want nil", wantAttempt, err)
+		}
+	}
+	t.Fatalf("attempt sequence completed attempts = %d, want terminal proof at %d", delivery.Attempts, policy.MaxAttempts)
 }

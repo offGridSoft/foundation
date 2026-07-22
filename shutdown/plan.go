@@ -10,8 +10,8 @@ import (
 type StepAction func(context.Context) error
 
 type Step struct {
-	ID  StepID
 	Run StepAction
+	ID  StepID
 }
 
 func (s Step) Validate() error {
@@ -43,8 +43,8 @@ func (p PlanPolicy) Validate() error {
 }
 
 type Plan struct {
-	Policy PlanPolicy
 	Steps  []Step
+	Policy PlanPolicy
 }
 
 func (p Plan) Validate() error {
@@ -86,9 +86,9 @@ func (o StepOutcome) Validate() error {
 }
 
 type StepResult struct {
+	Err     error
 	ID      StepID
 	Outcome StepOutcome
-	Err     error
 }
 
 func (r StepResult) Validate() error {
@@ -198,8 +198,8 @@ func runStep(root context.Context, budget core.NanosecondsDuration, step Step) S
 			return timedOutStepResult(root, step.ID)
 		}
 		if err != nil {
-			var panicErr StepPanicError
-			if errors.As(err, &panicErr) && panicErr.Validate() == nil {
+			panicErr, isPanic := errors.AsType[StepPanicError](err)
+			if isPanic && panicErr.Validate() == nil {
 				return newStepResult(step.ID, StepOutcomePanicked, err)
 			}
 			return newStepResult(step.ID, StepOutcomeFailed, errors.Join(core.ErrShutdownStepFailure, err))
@@ -211,12 +211,11 @@ func runStep(root context.Context, budget core.NanosecondsDuration, step Step) S
 }
 
 func callStep(ctx context.Context, step Step, result chan<- error) {
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			result <- newStepPanicError(recovered)
-		}
-	}()
-	result <- step.Run(ctx)
+	runCapturingPanic(
+		func() error { return step.Run(ctx) },
+		result,
+		func(value PanicValue) error { return newStepPanicError(value) },
+	)
 }
 
 func timedOutStepResult(root context.Context, id StepID) StepResult {

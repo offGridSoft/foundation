@@ -67,9 +67,9 @@ func (r ForceRequest) Validate() error {
 type ForceAction func(context.Context, ForceRequest) error
 
 type ForceResult struct {
+	Err     error
 	Request ForceRequest
 	Outcome ForceOutcome
-	Err     error
 }
 
 func (r ForceResult) Validate() error {
@@ -123,8 +123,8 @@ func (e SignalCause) Unwrap() error   { return core.ErrShutdownSignalReceived }
 type WatchRequest struct {
 	Parent  context.Context
 	Signals <-chan os.Signal
-	Policy  SignalPolicy
 	Force   ForceAction
+	Policy  SignalPolicy
 }
 
 func (r WatchRequest) Validate() error {
@@ -143,9 +143,9 @@ func (r WatchRequest) Validate() error {
 
 type NotifyRequest struct {
 	Parent context.Context
-	Set    SignalSet
-	Policy SignalPolicy
 	Force  ForceAction
+	Policy SignalPolicy
+	Set    SignalSet
 }
 
 func (r NotifyRequest) Validate() error {
@@ -207,8 +207,8 @@ func newController(request WatchRequest, release func()) (*Controller, error) {
 	controller := &Controller{
 		ctx:            ctx,
 		cancel:         cancel,
-		stop:           make(chan struct{}),
-		done:           make(chan struct{}),
+		stop:           make(chan struct{}, 1),
+		done:           make(chan struct{}, 1),
 		forced:         make(chan ForceResult, 1),
 		releaseSignals: release,
 	}
@@ -335,12 +335,11 @@ func (c *Controller) force(request WatchRequest, forceRequest ForceRequest) {
 }
 
 func callForceAction(ctx context.Context, action ForceAction, request ForceRequest, result chan<- error) {
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			result <- newForcePanicError(recovered)
-		}
-	}()
-	result <- action(ctx, request)
+	runCapturingPanic(
+		func() error { return action(ctx, request) },
+		result,
+		func(value PanicValue) error { return newForcePanicError(value) },
+	)
 }
 
 func forceResultFromError(ctx context.Context, request ForceRequest, err error) ForceResult {
@@ -350,8 +349,8 @@ func forceResultFromError(ctx context.Context, request ForceRequest, err error) 
 	if err == nil {
 		return ForceResult{Request: request, Outcome: ForceOutcomeCompleted}
 	}
-	var panicErr ForcePanicError
-	if errors.As(err, &panicErr) && panicErr.Validate() == nil {
+	panicErr, isPanic := errors.AsType[ForcePanicError](err)
+	if isPanic && panicErr.Validate() == nil {
 		return ForceResult{Request: request, Outcome: ForceOutcomePanicked, Err: err}
 	}
 	if errors.Is(err, context.DeadlineExceeded) {

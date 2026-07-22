@@ -36,7 +36,7 @@ func (r DirectoryRequest) Validate() error {
 	return nil
 }
 
-func EnsureDirectory(ctx context.Context, request DirectoryRequest) (resultErr error) {
+func EnsureDirectory(ctx context.Context, request DirectoryRequest) error {
 	if err := contextcheck.Validate(ctx); err != nil {
 		return err
 	}
@@ -47,15 +47,19 @@ func EnsureDirectory(ctx context.Context, request DirectoryRequest) (resultErr e
 	if err != nil {
 		return err
 	}
-	defer func() { resultErr = errors.Join(resultErr, root.Close()) }()
+	operationErr := ensureDirectoryElements(ctx, root, request)
+	return errors.Join(operationErr, root.Close())
+}
+
+func ensureDirectoryElements(ctx context.Context, root *os.Root, request DirectoryRequest) error {
 	relative, _ := filepath.Rel(request.Root.String(), request.Target.String())
 	if relative == "." {
 		return nil
 	}
 	parent := "."
 	for element := range strings.SplitSeq(relative, string(filepath.Separator)) {
-		if err := contextcheck.Validate(ctx); err != nil {
-			return err
+		if contextErr := contextcheck.Validate(ctx); contextErr != nil {
+			return contextErr
 		}
 		next := filepath.Join(parent, element)
 		created, err := createRootDirectory(root, next, request.Mode)

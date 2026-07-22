@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 )
@@ -78,7 +79,7 @@ func (p *DeliveryPhase) UnmarshalJSON(data []byte) error {
 }
 
 func coalescingDeliveryError(cause error) error {
-	return fmt.Errorf(ErrFmtCoalescingDelivery, fmt.Errorf("%w: %w", ErrDeliveryContract, cause))
+	return fmt.Errorf(ErrFmtCoalescingDelivery, errors.Join(ErrDeliveryContract, cause))
 }
 
 // CoalescingDelivery retains exactly the newest valid value. Generation binds
@@ -123,16 +124,20 @@ func (d CoalescingDelivery[T]) Replace(value T, now UnixNanoTime) (CoalescingDel
 	return next, next.Validate()
 }
 
-func (d CoalescingDelivery[T]) Begin(now UnixNanoTime) (CoalescingDelivery[T], error) {
+func (d CoalescingDelivery[T]) Begin(now UnixNanoTime, policy BackoffPolicy) (CoalescingDelivery[T], error) {
 	if err := d.Validate(); err != nil {
 		return CoalescingDelivery[T]{}, err
+	}
+	if err := policy.Validate(); err != nil {
+		return CoalescingDelivery[T]{}, coalescingDeliveryError(err)
 	}
 	if err := now.Validate(); err != nil {
 		return CoalescingDelivery[T]{}, coalescingDeliveryError(err)
 	}
-	if d.Phase != DeliveryPhasePending || now.Before(d.AvailableAt) {
+	if d.Phase != DeliveryPhasePending || now.Before(d.AvailableAt) || d.Attempts >= policy.MaxAttempts {
 		return CoalescingDelivery[T]{}, coalescingDeliveryError(ErrFoundationContract)
 	}
+	d.Attempts++
 	d.Phase = DeliveryPhaseInFlight
 	return d, nil
 }
@@ -141,22 +146,20 @@ func (d CoalescingDelivery[T]) Retry(generation uint64, now UnixNanoTime, policy
 	if err := d.Validate(); err != nil {
 		return CoalescingDelivery[T]{}, err
 	}
-	if d.Phase != DeliveryPhaseInFlight || generation != d.Generation || d.Attempts == math.MaxUint64 {
-		return CoalescingDelivery[T]{}, coalescingDeliveryError(ErrFoundationContract)
-	}
 	if err := policy.Validate(); err != nil {
 		return CoalescingDelivery[T]{}, coalescingDeliveryError(err)
 	}
-	attempt := min(d.Attempts, policy.MaxAttempts-1)
-	delay, err := policy.Delay(attempt, jitterFraction)
+	if d.Phase != DeliveryPhaseInFlight || generation != d.Generation || d.Attempts == 0 || d.Attempts >= policy.MaxAttempts {
+		return CoalescingDelivery[T]{}, coalescingDeliveryError(ErrFoundationContract)
+	}
+	delay, err := policy.Delay(d.Attempts-1, jitterFraction)
 	if err != nil {
 		return CoalescingDelivery[T]{}, coalescingDeliveryError(err)
 	}
-	available, err := AddUnixNanoDuration(now, delay)
+	available, err := AddUnixNanoDuration(now, delay.Duration())
 	if err != nil {
 		return CoalescingDelivery[T]{}, coalescingDeliveryError(err)
 	}
-	d.Attempts++
 	d.AvailableAt = available
 	d.Phase = DeliveryPhasePending
 	return d, d.Validate()

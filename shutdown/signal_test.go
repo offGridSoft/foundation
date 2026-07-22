@@ -94,7 +94,7 @@ func TestWatchFiltersUnknownSignalAndCancelsWithTypedCause(t *testing.T) {
 		t.Fatalf("signal release count = %d, want exactly one", len(released))
 	}
 	if _, open := <-controller.Forced(); open {
-		t.Fatal("Forced channel remains open after controller completion")
+		t.Fatalf("Forced() open after completion = %v, want false", open)
 	}
 }
 
@@ -205,12 +205,12 @@ func TestWatchForceFailurePanicAndTimeoutPreserveTypedIdentity(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name       string
-		budget     time.Duration
-		action     ForceAction
-		outcome    ForceOutcome
 		identity   error
 		underlying error
+		action     ForceAction
+		name       string
+		budget     time.Duration
+		outcome    ForceOutcome
 	}{
 		{name: "failure", budget: time.Second, action: func(context.Context, ForceRequest) error { return errForcedCleanup }, outcome: ForceOutcomeFailed, identity: core.ErrShutdownForceFailure, underlying: errForcedCleanup},
 		{name: "panic", budget: time.Second, action: func(context.Context, ForceRequest) error { panic("hostile force panic") }, outcome: ForceOutcomePanicked, identity: core.ErrShutdownForcePanic},

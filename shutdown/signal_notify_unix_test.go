@@ -11,6 +11,9 @@ import (
 	"os/exec"
 	"syscall"
 	"testing"
+
+	"github.com/offGridSoft/foundation/v2026/core"
+	"github.com/offGridSoft/foundation/v2026/testserial"
 )
 
 const (
@@ -27,6 +30,8 @@ type notifyHelperProcess struct {
 }
 
 func TestNotifyHandlesRealInterruptAndRestoresOperatingSystemDefault(t *testing.T) {
+	testserial.Serial(t, core.TestSerialReasonProcessSignal)
+
 	if mode := os.Getenv(notifyHelperEnvironment); mode != "" {
 		runNotifyHelper(t, mode)
 		return

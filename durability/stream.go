@@ -12,6 +12,8 @@ import (
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
+const errFmtBoundedFileNotRegular = "bounded durable file is not a regular file: %w"
+
 type ContextReader struct {
 	Context context.Context
 	Reader  io.Reader
@@ -97,7 +99,7 @@ func requireRegularFile(path string) error {
 		return fmt.Errorf("stat bounded durable file: %w", err)
 	}
 	if !info.Mode().IsRegular() {
-		return fmt.Errorf("bounded durable file is not a regular file: %w", core.ErrDurabilityContract)
+		return fmt.Errorf(errFmtBoundedFileNotRegular, core.ErrDurabilityContract)
 	}
 	return nil
 }
@@ -108,7 +110,7 @@ func requireOpenRegularFile(file *os.File) error {
 		return fmt.Errorf("stat open bounded durable file: %w", err)
 	}
 	if !info.Mode().IsRegular() {
-		return fmt.Errorf("bounded durable file is not a regular file: %w", core.ErrDurabilityContract)
+		return fmt.Errorf(errFmtBoundedFileNotRegular, core.ErrDurabilityContract)
 	}
 	return nil
 }

@@ -26,14 +26,17 @@ func TestWorkloadIdentitySourceOGSMetadataBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	transport := workloadIdentityRoundTrip(func(request *http.Request) (*http.Response, error) {
-		if request.URL.String() != (Source{Audience: audience}).metadataURL() {
-			t.Errorf("metadata URL = %q", request.URL.String())
+		if request.URL.Scheme+"://"+request.URL.Host+request.URL.Path != GoogleMetadataIdentityURL {
+			t.Errorf("metadata target = %q, want %q", request.URL.Scheme+"://"+request.URL.Host+request.URL.Path, GoogleMetadataIdentityURL)
+		}
+		if request.URL.Query().Get(GoogleMetadataAudienceQuery) != audience.String() || request.URL.Query().Get(GoogleMetadataFormatQuery) != GoogleMetadataFullFormat {
+			t.Errorf("metadata query = %q, want typed audience and full format", request.URL.RawQuery)
 		}
 		if got := request.Header.Get(GoogleMetadataFlavorHeader); got != GoogleMetadataFlavorValue {
 			t.Errorf("metadata flavor = %q, want %q", got, GoogleMetadataFlavorValue)
 		}
 		return &http.Response{
-			StatusCode: core.HTTPStatusOK,
+			StatusCode: core.HTTPStatusOK.Int(),
 			Body:       io.NopCloser(strings.NewReader(workloadIdentityTestToken)),
 			Header:     make(http.Header),
 			Request:    request,
@@ -57,7 +60,7 @@ func TestWorkloadIdentitySourceOGSRejectsOversizedResponse(t *testing.T) {
 	}
 	transport := workloadIdentityRoundTrip(func(request *http.Request) (*http.Response, error) {
 		return &http.Response{
-			StatusCode: core.HTTPStatusOK,
+			StatusCode: core.HTTPStatusOK.Int(),
 			Body:       io.NopCloser(strings.NewReader(strings.Repeat("a", TokenMaxBytes+1))),
 			Header:     make(http.Header),
 			Request:    request,

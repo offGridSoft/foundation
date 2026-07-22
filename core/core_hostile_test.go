@@ -847,43 +847,127 @@ func TestHTTPHeaderValidationHostileTable(t *testing.T) {
 
 func TestBackoffPolicyValidateHostileTable(t *testing.T) {
 	t.Parallel()
-	valid := BackoffPolicy{
-		Base:        time.Second,
-		Max:         time.Minute,
-		MaxAttempts: 3,
-	}
-	if err := valid.Validate(); err != nil {
-		t.Fatal(err)
-	}
-	for _, policy := range []BackoffPolicy{
-		{Base: time.Second, Max: time.Minute},
-		{Base: 0, Max: time.Minute, MaxAttempts: 1},
-		{Base: time.Minute, Max: time.Second, MaxAttempts: 1},
-		{Base: time.Second, Max: BackoffMaxDuration + time.Nanosecond, MaxAttempts: 1},
-	} {
-		if err := policy.Validate(); !errors.Is(err, ErrFoundationContract) {
-			t.Fatalf("BackoffPolicy.Validate error = %v, want ErrFoundationContract", err)
-		}
-		if _, err := policy.Delay(0, 1); !errors.Is(err, ErrFoundationContract) {
-			t.Fatalf("BackoffPolicy.Delay error = %v, want ErrFoundationContract", err)
-		}
-	}
-	for _, tc := range []struct {
-		name     string
-		attempt  uint64
-		fraction float64
+	cases := []struct {
+		wantValidateErr error
+		wantDelayErr    error
+		name            string
+		policy          BackoffPolicy
+		attempt         uint64
+		fraction        float64
+		wantDelay       NanosecondsDuration
 	}{
-		{name: "attempt at maximum", attempt: valid.MaxAttempts, fraction: 1},
-		{name: "negative jitter", fraction: -0.1},
-		{name: "jitter above one", fraction: 1.1},
-		{name: "nan jitter", fraction: math.NaN()},
-	} {
+		{name: "one nanosecond floor accepts zero jitter", policy: deliveryBackoffPolicy(time.Nanosecond, time.Nanosecond, 1), fraction: 0, wantDelay: NewNanosecondsDuration(0)},
+		{name: "one nanosecond floor accepts full jitter", policy: deliveryBackoffPolicy(time.Nanosecond, time.Nanosecond, 1), fraction: 1, wantDelay: NewNanosecondsDuration(time.Nanosecond)},
+		{name: "equal base and maximum accept first attempt", policy: deliveryBackoffPolicy(time.Second, time.Second, 1), fraction: 1, wantDelay: NewNanosecondsDuration(time.Second)},
+		{name: "zero attempt selects base", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, 3), fraction: 1, wantDelay: NewNanosecondsDuration(time.Second)},
+		{name: "middle attempt doubles base", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, 3), attempt: 1, fraction: 1, wantDelay: NewNanosecondsDuration(2 * time.Second)},
+		{name: "last permitted attempt reaches maximum", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, 3), attempt: 2, fraction: 1, wantDelay: NewNanosecondsDuration(4 * time.Second)},
+		{name: "non power of two window clamps to maximum", policy: deliveryBackoffPolicy(3*time.Second, 5*time.Second, 2), attempt: 1, fraction: 1, wantDelay: NewNanosecondsDuration(5 * time.Second)},
+		{name: "deep permitted attempt remains saturated", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, 12), attempt: 10, fraction: 1, wantDelay: NewNanosecondsDuration(4 * time.Second)},
+		{name: "quarter jitter scales within ceiling", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, 3), fraction: 0.25, wantDelay: NewNanosecondsDuration(250 * time.Millisecond)},
+		{name: "half jitter scales within ceiling", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, 3), fraction: 0.5, wantDelay: NewNanosecondsDuration(500 * time.Millisecond)},
+		{name: "three quarter jitter scales within ceiling", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, 3), fraction: 0.75, wantDelay: NewNanosecondsDuration(750 * time.Millisecond)},
+		{name: "smallest positive jitter rounds down safely", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, 3), fraction: math.SmallestNonzeroFloat64, wantDelay: NewNanosecondsDuration(0)},
+		{name: "maximum legal window accepts exact boundary", policy: deliveryBackoffPolicy(BackoffMaxDuration, BackoffMaxDuration, 1), fraction: 1, wantDelay: NewNanosecondsDuration(BackoffMaxDuration)},
+		{name: "half maximum base doubles to exact maximum", policy: deliveryBackoffPolicy(BackoffMaxDuration/2, BackoffMaxDuration, 2), attempt: 1, fraction: 1, wantDelay: NewNanosecondsDuration(BackoffMaxDuration)},
+		{name: "one below maximum duration remains legal", policy: deliveryBackoffPolicy(BackoffMaxDuration-time.Nanosecond, BackoffMaxDuration, 1), fraction: 1, wantDelay: NewNanosecondsDuration(BackoffMaxDuration - time.Nanosecond)},
+		{name: "maximum attempt domain accepts one below", policy: deliveryBackoffPolicy(time.Second, 4*time.Second, math.MaxUint64), attempt: math.MaxUint64 - 1, fraction: 1, wantDelay: NewNanosecondsDuration(4 * time.Second)},
+		{name: "huge attempt stays constant when base equals maximum", policy: deliveryBackoffPolicy(time.Second, time.Second, math.MaxUint64), attempt: math.MaxUint64 - 2, fraction: 1, wantDelay: NewNanosecondsDuration(time.Second)},
+		{name: "two nanosecond base preserves half jitter", policy: deliveryBackoffPolicy(2*time.Nanosecond, 2*time.Nanosecond, 1), fraction: 0.5, wantDelay: NewNanosecondsDuration(time.Nanosecond)},
+		{name: "one third jitter truncates inside three nanoseconds", policy: deliveryBackoffPolicy(3*time.Nanosecond, 3*time.Nanosecond, 1), fraction: 1.0 / 3.0, wantDelay: NewNanosecondsDuration(time.Nanosecond)},
+		{name: "odd maximum clamps doubled base", policy: deliveryBackoffPolicy(2*time.Second, 3*time.Second, 2), attempt: 1, fraction: 1, wantDelay: NewNanosecondsDuration(3 * time.Second)},
+		{name: "zero value policy rejects validation and delay", policy: BackoffPolicy{}, fraction: 1, wantValidateErr: ErrFoundationContract, wantDelayErr: ErrFoundationContract},
+		{name: "zero attempts rejects otherwise legal window", policy: deliveryBackoffPolicy(time.Second, time.Minute, 0), fraction: 1, wantValidateErr: ErrFoundationContract, wantDelayErr: ErrFoundationContract},
+		{name: "zero base rejects exact lower boundary", policy: deliveryBackoffPolicy(0, time.Second, 1), fraction: 1, wantValidateErr: ErrFoundationContract, wantDelayErr: ErrFoundationContract},
+		{name: "negative base rejects one below lower boundary", policy: BackoffPolicy{Base: NanosecondsDurationFromInt64(-1), Max: NewNanosecondsDuration(time.Second), MaxAttempts: 1}, fraction: 1, wantValidateErr: ErrFoundationContract, wantDelayErr: ErrFoundationContract},
+		{name: "zero maximum rejects required window", policy: deliveryBackoffPolicy(time.Second, 0, 1), fraction: 1, wantValidateErr: ErrFoundationContract, wantDelayErr: ErrFoundationContract},
+		{name: "negative maximum rejects hostile duration", policy: BackoffPolicy{Base: NewNanosecondsDuration(time.Nanosecond), Max: NanosecondsDurationFromInt64(-1), MaxAttempts: 1}, fraction: 1, wantValidateErr: ErrFoundationContract, wantDelayErr: ErrFoundationContract},
+		{name: "maximum one nanosecond below base rejects inversion", policy: deliveryBackoffPolicy(time.Second, time.Second-time.Nanosecond, 1), fraction: 1, wantValidateErr: ErrFoundationContract, wantDelayErr: ErrFoundationContract},
+		{name: "maximum one nanosecond above global boundary rejects", policy: deliveryBackoffPolicy(time.Second, BackoffMaxDuration+time.Nanosecond, 1), fraction: 1, wantValidateErr: ErrFoundationContract, wantDelayErr: ErrFoundationContract},
+		{name: "base one nanosecond above global boundary rejects", policy: deliveryBackoffPolicy(BackoffMaxDuration+time.Nanosecond, BackoffMaxDuration+time.Nanosecond, 1), fraction: 1, wantValidateErr: ErrFoundationContract, wantDelayErr: ErrFoundationContract},
+		{name: "maximum duration value rejects global upper boundary", policy: deliveryBackoffPolicy(time.Second, time.Duration(math.MaxInt64), 1), fraction: 1, wantValidateErr: ErrFoundationContract, wantDelayErr: ErrFoundationContract},
+		{name: "attempt exact limit rejects", policy: deliveryBackoffPolicy(time.Second, time.Minute, 3), attempt: 3, fraction: 1, wantDelayErr: ErrFoundationContract},
+		{name: "attempt one above limit rejects", policy: deliveryBackoffPolicy(time.Second, time.Minute, 3), attempt: 4, fraction: 1, wantDelayErr: ErrFoundationContract},
+		{name: "attempt maximum rejects finite budget", policy: deliveryBackoffPolicy(time.Second, time.Minute, 3), attempt: math.MaxUint64, fraction: 1, wantDelayErr: ErrFoundationContract},
+		{name: "smallest negative jitter rejects one below boundary", policy: deliveryBackoffPolicy(time.Second, time.Minute, 3), fraction: -math.SmallestNonzeroFloat64, wantDelayErr: ErrFoundationContract},
+		{name: "negative one jitter rejects", policy: deliveryBackoffPolicy(time.Second, time.Minute, 3), fraction: -1, wantDelayErr: ErrFoundationContract},
+		{name: "jitter one ulp above boundary rejects", policy: deliveryBackoffPolicy(time.Second, time.Minute, 3), fraction: math.Nextafter(1, 2), wantDelayErr: ErrFoundationContract},
+		{name: "jitter two rejects far above boundary", policy: deliveryBackoffPolicy(time.Second, time.Minute, 3), fraction: 2, wantDelayErr: ErrFoundationContract},
+		{name: "negative infinity jitter rejects", policy: deliveryBackoffPolicy(time.Second, time.Minute, 3), fraction: math.Inf(-1), wantDelayErr: ErrFoundationContract},
+		{name: "positive infinity jitter rejects", policy: deliveryBackoffPolicy(time.Second, time.Minute, 3), fraction: math.Inf(1), wantDelayErr: ErrFoundationContract},
+		{name: "not a number jitter rejects unordered comparison", policy: deliveryBackoffPolicy(time.Second, time.Minute, 3), fraction: math.NaN(), wantDelayErr: ErrFoundationContract},
+	}
+	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if _, err := valid.Delay(tc.attempt, tc.fraction); !errors.Is(err, ErrFoundationContract) {
-				t.Fatalf("BackoffPolicy.Delay() error = %v, want ErrFoundationContract", err)
+			gotValidateErr := tc.policy.Validate()
+			if !errors.Is(gotValidateErr, tc.wantValidateErr) {
+				t.Fatalf("BackoffPolicy.Validate() error = %v, want %v", gotValidateErr, tc.wantValidateErr)
+			}
+			gotDelay, gotDelayErr := tc.policy.Delay(tc.attempt, tc.fraction)
+			if !errors.Is(gotDelayErr, tc.wantDelayErr) {
+				t.Fatalf("BackoffPolicy.Delay() error = %v, want %v", gotDelayErr, tc.wantDelayErr)
+			}
+			if tc.wantDelayErr == nil && gotDelay != tc.wantDelay {
+				t.Fatalf("BackoffPolicy.Delay() = %v, want %v", gotDelay, tc.wantDelay)
 			}
 		})
+	}
+}
+
+func TestHTTPRetryPolicyValidateHostileBoundaryTable(t *testing.T) {
+	t.Parallel()
+
+	baseline := DefaultHTTPRetryPolicy()
+	cases := []struct {
+		mutate  func(*HTTPRetryPolicy)
+		wantErr error
+		name    string
+	}{
+		{name: "canonical default is valid"},
+		{name: "one nanosecond retry hint floor is valid", mutate: func(p *HTTPRetryPolicy) {
+			p.MaximumRetryAfter = NewNanosecondsDuration(time.Nanosecond)
+			p.RetryWaitLimit = NewNanosecondsDuration(time.Nanosecond)
+		}},
+		{name: "exact global retry hint ceiling is valid", mutate: func(p *HTTPRetryPolicy) { p.MaximumRetryAfter = NewNanosecondsDuration(BackoffMaxDuration) }},
+		{name: "foreground wait may equal retry hint ceiling", mutate: func(p *HTTPRetryPolicy) { p.RetryWaitLimit = p.MaximumRetryAfter }},
+		{name: "zero policy rejects every missing requirement", mutate: func(p *HTTPRetryPolicy) { *p = HTTPRetryPolicy{} }, wantErr: ErrExchangeContract},
+		{name: "zero retry hint rejects missing ceiling", mutate: func(p *HTTPRetryPolicy) { p.MaximumRetryAfter = NanosecondsDuration{} }, wantErr: ErrExchangeContract},
+		{name: "negative retry hint rejects one below floor", mutate: func(p *HTTPRetryPolicy) { p.MaximumRetryAfter = NanosecondsDurationFromInt64(-1) }, wantErr: ErrExchangeContract},
+		{name: "retry hint one nanosecond above global ceiling rejects", mutate: func(p *HTTPRetryPolicy) {
+			p.MaximumRetryAfter = NewNanosecondsDuration(BackoffMaxDuration + time.Nanosecond)
+		}, wantErr: ErrExchangeContract},
+		{name: "maximum duration retry hint rejects hostile upper end", mutate: func(p *HTTPRetryPolicy) { p.MaximumRetryAfter = NewNanosecondsDuration(time.Duration(math.MaxInt64)) }, wantErr: ErrExchangeContract},
+		{name: "zero foreground wait rejects missing bound", mutate: func(p *HTTPRetryPolicy) { p.RetryWaitLimit = NanosecondsDuration{} }, wantErr: ErrExchangeContract},
+		{name: "negative foreground wait rejects one below floor", mutate: func(p *HTTPRetryPolicy) { p.RetryWaitLimit = NanosecondsDurationFromInt64(-1) }, wantErr: ErrExchangeContract},
+		{name: "foreground wait one above retry hint rejects inversion", mutate: func(p *HTTPRetryPolicy) {
+			p.RetryWaitLimit = NewNanosecondsDuration(p.MaximumRetryAfter.Duration() + time.Nanosecond)
+		}, wantErr: ErrExchangeContract},
+		{name: "zero backoff rejects missing immediate retry policy", mutate: func(p *HTTPRetryPolicy) { p.Backoff = BackoffPolicy{} }, wantErr: ErrExchangeContract},
+		{name: "zero backoff attempts rejects no execution budget", mutate: func(p *HTTPRetryPolicy) { p.Backoff.MaxAttempts = 0 }, wantErr: ErrExchangeContract},
+		{name: "backoff above retry hint remains independently invalid", mutate: func(p *HTTPRetryPolicy) {
+			p.Backoff.Max = NewNanosecondsDuration(BackoffMaxDuration + time.Nanosecond)
+		}, wantErr: ErrExchangeContract},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			policy := baseline
+			if tc.mutate != nil {
+				tc.mutate(&policy)
+			}
+			gotErr := policy.Validate()
+			if !errors.Is(gotErr, tc.wantErr) {
+				t.Fatalf("HTTPRetryPolicy.Validate() error = %v, want %v", gotErr, tc.wantErr)
+			}
+		})
+	}
+
+	mutated := DefaultHTTPRetryPolicy()
+	mutated.Backoff.MaxAttempts = 0
+	if gotErr := DefaultHTTPRetryPolicy().Validate(); gotErr != nil {
+		t.Fatalf("DefaultHTTPRetryPolicy() after caller mutation error = %v, want nil", gotErr)
 	}
 }
 

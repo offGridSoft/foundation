@@ -12,8 +12,8 @@ func TestDurabilityEnumsExhaustiveCompilerDomainTable(t *testing.T) {
 	t.Parallel()
 
 	installCases := []struct {
-		value InstallMode
 		name  string
+		value InstallMode
 		valid bool
 	}{
 		{value: InstallUnknown, name: InstallNameUnknown},
@@ -29,8 +29,8 @@ func TestDurabilityEnumsExhaustiveCompilerDomainTable(t *testing.T) {
 	}
 
 	activationCases := []struct {
-		value ActivationState
 		name  string
+		value ActivationState
 		valid bool
 	}{
 		{value: ActivationUnknown, name: ActivationNameUnknown},
@@ -47,8 +47,8 @@ func TestDurabilityEnumsExhaustiveCompilerDomainTable(t *testing.T) {
 	}
 
 	temporaryCases := []struct {
-		value TemporaryState
 		name  string
+		value TemporaryState
 		valid bool
 	}{
 		{value: TemporaryUnknown, name: TemporaryNameUnknown},

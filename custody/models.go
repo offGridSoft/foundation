@@ -74,6 +74,10 @@ func (r SessionOpenRequest) Validate() error {
 	}, ErrFmtOpenRequest)
 }
 
+func (r SessionOpenRequest) HTTPIdempotencyKey() (core.HTTPIdempotencyKey, error) {
+	return core.ParseHTTPIdempotencyKey(r.BundleRoot.String())
+}
+
 type SessionOpenResponse struct {
 	ExistingReceipt *core.Signed[ReceiptBody] `json:"existing_receipt,omitempty"`
 	Upload          *SessionUploadGrant       `json:"upload,omitempty"`
@@ -309,6 +313,10 @@ func (r FinalizeRequest) Validate() error {
 		return fmt.Errorf(ErrFmtFinalize, err)
 	}
 	return validateUploadedObjectSet(r.Objects, r.Customer, r.BundleRoot, ErrFmtFinalize)
+}
+
+func (r FinalizeRequest) HTTPIdempotencyKey() (core.HTTPIdempotencyKey, error) {
+	return core.ParseHTTPIdempotencyKey(r.Session.String())
 }
 
 // Field order is storage-only; MarshalJSON owns the signature-load-bearing order.

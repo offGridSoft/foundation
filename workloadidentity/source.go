@@ -4,22 +4,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/offGridSoft/foundation/v2026/core"
+	"github.com/offGridSoft/foundation/v2026/exchange"
 )
 
 const (
-	GoogleMetadataIdentityURL     = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity"
-	GoogleMetadataFlavorHeader    = "Metadata-Flavor"
-	GoogleMetadataFlavorValue     = "Google"
-	GoogleMetadataAudienceQuery   = "audience="
-	GoogleMetadataFullFormatQuery = "&format=full"
-	HTTPBudget                    = 5 * time.Second
-	ErrFmtSource                  = "workloadidentity.Source: %w"
+	GoogleMetadataIdentityURL   = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity"
+	GoogleMetadataFlavorHeader  = "Metadata-Flavor"
+	GoogleMetadataFlavorValue   = "Google"
+	GoogleMetadataAudienceQuery = "audience"
+	GoogleMetadataFormatQuery   = "format"
+	GoogleMetadataFullFormat    = "full"
+	HTTPBudget                  = 5 * time.Second
+	ErrFmtSource                = "workloadidentity.Source: %w"
 )
 
 type TokenSource interface {
@@ -51,43 +51,40 @@ func (s Source) Token(ctx context.Context) (Token, error) {
 	}
 	requestContext, cancel := context.WithTimeout(ctx, HTTPBudget)
 	defer cancel()
-	request, err := http.NewRequestWithContext(requestContext, http.MethodGet, s.metadataURL(), nil)
+	request := exchange.BoundedRequest[metadataIdentityTarget]{
+		Target: metadataIdentityTarget{},
+		Headers: core.HTTPHeaders{Values: []core.HTTPHeader{{
+			Name: GoogleMetadataFlavorHeader, Value: GoogleMetadataFlavorValue,
+		}}},
+		Query: core.HTTPQuery{Parameters: []core.HTTPQueryParameter{
+			{Name: GoogleMetadataAudienceQuery, Value: s.Audience.String()},
+			{Name: GoogleMetadataFormatQuery, Value: GoogleMetadataFullFormat},
+		}},
+		Semantics:      core.HTTPRequestSemantics{Method: core.HTTPMethodGet, Replay: core.HTTPReplaySingleAttempt},
+		ExpectedStatus: core.HTTPStatusOK,
+	}
+	policy := exchange.BoundedPolicy{
+		AttemptTimeout:    core.NewNanosecondsDuration(HTTPBudget),
+		RequestBodyLimit:  core.NewByteCount(1),
+		ResponseBodyLimit: core.NewByteCount(TokenMaxBytes),
+		Redirect:          core.HTTPRedirectReject,
+	}
+	response, err := exchange.SendBounded(requestContext, exchange.Client{HTTP: s.HTTP}, request, policy)
 	if err != nil {
 		return Token{}, wrap(ErrFmtSource, err)
 	}
-	request.Header.Set(GoogleMetadataFlavorHeader, GoogleMetadataFlavorValue)
-	client := *s.HTTP
-	client.CheckRedirect = refuseRedirect
-	response, err := client.Do(request)
-	if err != nil {
-		return Token{}, wrap(ErrFmtSource, err)
-	}
-	return parseResponse(response)
-}
-
-func parseResponse(response *http.Response) (Token, error) {
-	if response == nil || response.Body == nil {
-		return Token{}, fmt.Errorf(ErrFmtSource, ErrContract)
-	}
-	defer func() { _ = response.Body.Close() }()
-	if response.StatusCode != core.HTTPStatusOK {
-		return Token{}, fmt.Errorf(ErrFmtSource, ErrContract)
-	}
-	body, err := io.ReadAll(io.LimitReader(response.Body, TokenMaxBytes+1))
-	if err != nil || len(body) == 0 || len(body) > TokenMaxBytes {
-		return Token{}, fmt.Errorf(ErrFmtSource, ErrContract)
-	}
-	token, err := ParseToken(string(body))
+	token, err := ParseToken(string(response.Body))
 	if err != nil {
 		return Token{}, wrap(ErrFmtSource, err)
 	}
 	return token, nil
 }
 
-func (s Source) metadataURL() string {
-	return GoogleMetadataIdentityURL + "?" + GoogleMetadataAudienceQuery + url.QueryEscape(s.Audience.String()) + GoogleMetadataFullFormatQuery
-}
-func refuseRedirect(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
+type metadataIdentityTarget struct{}
+
+func (metadataIdentityTarget) Validate() error { return nil }
+
+func (metadataIdentityTarget) String() string { return GoogleMetadataIdentityURL }
 
 var _ core.Validatable = Source{}
 var _ TokenSource = Source{}

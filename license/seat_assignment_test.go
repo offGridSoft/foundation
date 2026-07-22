@@ -28,6 +28,27 @@ func TestBugSeatGeneratedScalarsAreCanonicalAndDistinct(t *testing.T) {
 	if seatOne == seatTwo || seatOne.Validate() != nil || seatTwo.Validate() != nil {
 		t.Fatalf("generated seat identities are invalid or equal")
 	}
+	member, err := NewBugSeatMemberID()
+	if err != nil {
+		t.Fatalf("NewBugSeatMemberID() error = %v", err)
+	}
+	invite, err := NewBugSeatInviteID()
+	if err != nil {
+		t.Fatalf("NewBugSeatInviteID() error = %v", err)
+	}
+	assignment, err := NewBugSeatAssignmentID()
+	if err != nil {
+		t.Fatalf("NewBugSeatAssignmentID() error = %v", err)
+	}
+	if err := member.Validate(); err != nil {
+		t.Fatalf("generated member Validate() error = %v", err)
+	}
+	if err := invite.Validate(); err != nil {
+		t.Fatalf("generated invite Validate() error = %v", err)
+	}
+	if err := assignment.Validate(); err != nil {
+		t.Fatalf("generated assignment Validate() error = %v", err)
+	}
 	token, err := NewBugSeatInviteToken()
 	if err != nil {
 		t.Fatalf("NewBugSeatInviteToken() error = %v", err)
@@ -42,6 +63,62 @@ func TestBugSeatGeneratedScalarsAreCanonicalAndDistinct(t *testing.T) {
 	parsed, err := ParseBugSeatInviteToken(token.String())
 	if err != nil || parsed != token {
 		t.Fatalf("ParseBugSeatInviteToken() = %v, %v", parsed, err)
+	}
+}
+
+func TestBugSeatIdentityWireMethodsPreserveExactTypedValueTable(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		run  func(*testing.T) error
+		name string
+	}{
+		{
+			name: "invite identity maximum entropy wire round trip",
+			run: func(t *testing.T) error {
+				t.Helper()
+				want := mustSeatInviteID(t, "a")
+				encoded, err := want.MarshalJSON()
+				if err != nil {
+					return err
+				}
+				var got BugSeatInviteID
+				if err := got.UnmarshalJSON(encoded); err != nil {
+					return err
+				}
+				if got != want || got.String() != want.String() || got.IsZero() {
+					return core.ErrLicenseContract
+				}
+				return nil
+			},
+		},
+		{
+			name: "assignment identity maximum entropy wire round trip",
+			run: func(t *testing.T) error {
+				t.Helper()
+				want := mustSeatAssignmentID(t, "f")
+				encoded, err := want.MarshalJSON()
+				if err != nil {
+					return err
+				}
+				var got BugSeatAssignmentID
+				if err := got.UnmarshalJSON(encoded); err != nil {
+					return err
+				}
+				if got != want || got.String() != want.String() || got.IsZero() {
+					return core.ErrLicenseContract
+				}
+				return nil
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if err := test.run(t); err != nil {
+				t.Fatalf("wire round trip error = %v, want nil", err)
+			}
+		})
 	}
 }
 

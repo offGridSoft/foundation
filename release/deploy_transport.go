@@ -79,6 +79,10 @@ func (r DeployPrepareRequest) Validate() error {
 	return err
 }
 
+func (r DeployPrepareRequest) HTTPIdempotencyKey() (core.HTTPIdempotencyKey, error) {
+	return core.ParseHTTPIdempotencyKey(r.RequestID.String())
+}
+
 func (r DeployPrepareRequest) validateStructure() error {
 	if r.Schema != core.SchemaReleaseDeployPrepareRequest {
 		return fmt.Errorf(ErrFmtDeployPrepareRequest, core.ErrReleaseContract)
@@ -193,6 +197,10 @@ type DeployFinalizeRequest struct {
 func (r DeployFinalizeRequest) Validate() error {
 	_, err := r.validatedJSON()
 	return err
+}
+
+func (r DeployFinalizeRequest) HTTPIdempotencyKey() (core.HTTPIdempotencyKey, error) {
+	return core.ParseHTTPIdempotencyKey(r.RequestID.String())
 }
 
 func (r DeployFinalizeRequest) validateStructure() error {

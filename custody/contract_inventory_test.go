@@ -26,14 +26,14 @@ type custodyContractInventory struct {
 	TimestampClient       custodyCapabilityWrapper[TimestampClient]
 	TimestampHTTPFailure  custodyTypedError[TimestampHTTPError]
 	// Transfer slice: the client drives open/upload/finalize/download over
-	// HTTP; upload input and the byte counter are internal flow on the
-	// streaming path, never wire payloads.
-	CustodyClient      custodyCapabilityWrapper[Client]
-	CustodyEndpoints   custodyCapabilityWrapper[Endpoints]
-	UploadInput        custodyInternalFlow[UploadArtifactInput]
-	UploadByteCounter  custodyInternalFlow[countingReader]
-	CustodyHTTPFailure custodyTypedError[CustodyHTTPError]
-	CustodyAPIFailure  custodyTypedError[CustodyAPIError]
+	// HTTP; upload input is an internal flow on the streaming path, never a
+	// wire payload. Exchange owns byte counting and bounded transfer mechanics.
+	CustodyClient       custodyCapabilityWrapper[Client]
+	CustodyEndpoints    custodyCapabilityWrapper[Endpoints]
+	UploadInput         custodyInternalFlow[UploadArtifactInput]
+	CustodyHTTPFailure  custodyTypedError[CustodyHTTPError]
+	CustodyAPIFailure   custodyTypedError[CustodyAPIError]
+	CustodyRetryFailure custodyTypedError[CustodyRetryExhaustedError]
 	// Retrieval slice: the download grant is the SSOT typed path shared by
 	// CLI fetch and portal download.
 	DownloadRequest custodyProtocolFact[DownloadRequest]

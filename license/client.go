@@ -1,29 +1,23 @@
 package license
 
 import (
-	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/offGridSoft/foundation/v2026/core"
+	"github.com/offGridSoft/foundation/v2026/exchange"
 )
 
 const (
+	CheckInRequestByteCap  = 128 << 10
 	CheckInResponseByteCap = 128 << 10
 	CheckInBudget          = 8 * time.Second
 	CheckInMinInterval     = 24 * time.Hour
 	WarnWindow             = 7 * 24 * time.Hour
 	ClockSkewAllowance     = 60 * time.Minute
-	CheckInMaxRetryAfter   = 24 * time.Hour
 )
 
 type CheckInAPIError struct {
@@ -67,22 +61,8 @@ func (e CheckInRetryExhaustedError) Unwrap() error {
 	return e.Cause
 }
 
-const (
-	checkInBackoffBase        = 100 * time.Millisecond
-	checkInBackoffMax         = 2 * time.Second
-	checkInBackoffMaxAttempts = 4
-)
-
-func DefaultCheckInBackoff() core.BackoffPolicy {
-	return core.BackoffPolicy{
-		Base:        checkInBackoffBase,
-		Max:         checkInBackoffMax,
-		MaxAttempts: checkInBackoffMaxAttempts,
-	}
-}
-
 type CheckInPayload interface {
-	core.Validatable
+	core.HTTPIdempotentBody
 	CheckInRequestNonce() CheckInNonce
 }
 
@@ -118,7 +98,7 @@ func (c Client[P, R]) Validate() error {
 	return nil
 }
 
-func (c Client[P, R]) Do(ctx context.Context, in P) (R, error) {
+func (c Client[P, R]) Do(ctx context.Context, input P) (R, error) {
 	var zero R
 	if ctx == nil {
 		return zero, fmt.Errorf(ErrFmtCheckInClient, errors.Join(core.ErrLicenseContract, core.ErrNilContext))
@@ -126,298 +106,101 @@ func (c Client[P, R]) Do(ctx context.Context, in P) (R, error) {
 	if err := c.Validate(); err != nil {
 		return zero, err
 	}
-	if err := in.Validate(); err != nil {
+	if err := input.Validate(); err != nil {
 		return zero, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, CheckInBudget)
-	defer cancel()
-	body, err := json.Marshal(in)
+	idempotencyKey, err := input.HTTPIdempotencyKey()
 	if err != nil {
 		return zero, transportError(err)
 	}
-	return c.roundTrip(ctx, body, in.CheckInRequestNonce())
-}
-
-func (c Client[P, R]) roundTrip(ctx context.Context, body []byte, nonce CheckInNonce) (R, error) {
-	var zero R
-	policy := c.backoffPolicy()
-	var lastErr error
-	var retryAfter time.Duration
-	var retryAfterHint time.Duration
-	for attempt := uint64(0); attempt < policy.MaxAttempts; attempt++ {
-		if attempt > 0 {
-			delay, err := policy.Delay(attempt-1, c.jitterFraction())
-			if err != nil {
-				return zero, transportError(err)
-			}
-			wait := maxDuration(delay, retryAfter)
-			if err := sleepContext(ctx, wait); err != nil {
-				return zero, transportError(err)
-			}
-		}
-		result := c.attempt(ctx, body, policy.Max)
-		retryAfter = result.RetryAfter
-		retryAfterHint = maxDuration(retryAfterHint, result.RetryAfterHint)
-		switch result.Outcome {
-		case core.HTTPOutcomeSuccess:
-			if verr := result.Response.Validate(); verr != nil {
-				return zero, verr
-			}
-			if verr := result.Response.VerifyRequestNonce(nonce); verr != nil {
-				return zero, verr
-			}
-			return result.Response, nil
-		case core.HTTPOutcomeRetryable:
-			lastErr = result.Err
-		default:
-			return zero, result.Err
-		}
-	}
-	if lastErr == nil {
-		lastErr = fmt.Errorf(ErrFmtCheckInTransport, core.ErrLicenseContract)
-	}
-	return zero, CheckInRetryExhaustedError{Cause: lastErr, RetryAfter: retryAfterHint}
-}
-
-type attemptResult[R CheckInResponseBody] struct {
-	Err            error
-	Response       R
-	RetryAfter     time.Duration
-	RetryAfterHint time.Duration
-	Outcome        core.HTTPOutcome
-}
-
-func (c Client[P, R]) attempt(ctx context.Context, body []byte, maxRetryAfterWait time.Duration) attemptResult[R] {
-	request, err := c.buildRequest(ctx, body)
+	requestContext, cancel := context.WithTimeout(ctx, CheckInBudget)
+	defer cancel()
+	response, err := exchange.SendJSON[P, R](
+		requestContext,
+		c.exchangeClient(),
+		c.exchangeRequest(input, idempotencyKey),
+		c.exchangePolicy(),
+	)
 	if err != nil {
-		return attemptResult[R]{Outcome: core.HTTPOutcomeTerminal, Err: err}
+		return zero, checkInExchangeError(response, err)
 	}
-	reply, err := c.do(request)
-	if err != nil {
-		return attemptResult[R]{Outcome: core.HTTPOutcomeRetryable, Err: transportError(err)}
+	decoded := *response.Envelope.Data
+	if err := decoded.Verify(c.Keyring); err != nil {
+		return zero, err
 	}
-	if reply == nil || reply.Body == nil {
-		return attemptResult[R]{
-			Outcome: core.HTTPOutcomeTerminal,
-			Err:     fmt.Errorf(ErrFmtCheckInTransport, core.ErrLicenseContract),
-		}
+	if err := decoded.VerifyRequestNonce(input.CheckInRequestNonce()); err != nil {
+		return zero, err
 	}
-	defer func() {
-		_ = reply.Body.Close() // Safe: the bounded body read owns the meaningful transport result.
-	}()
-	outcome := core.ClassifyHTTPStatus(reply.StatusCode)
-	if outcome != core.HTTPOutcomeSuccess {
-		retryAfter := parseRetryAfter(reply.Header.Get(core.HTTPHeaderRetryAfter), time.Now().UTC(), maxRetryAfterWait)
-		err = readFailureResponse[R](reply, reply.StatusCode, retryAfter.Hint)
-		return attemptResult[R]{
-			Outcome:        outcome,
-			RetryAfter:     retryAfter.Wait,
-			RetryAfterHint: retryAfter.Hint,
-			Err:            err,
-		}
-	}
-	decoded, err := readResponse[R](reply, c.Keyring)
-	if err != nil {
-		return attemptResult[R]{Outcome: core.HTTPOutcomeTerminal, Err: err}
-	}
-	return attemptResult[R]{Response: decoded, Outcome: core.HTTPOutcomeSuccess}
+	return decoded, nil
 }
 
-func (c Client[P, R]) do(request *http.Request) (*http.Response, error) {
-	client := *c.HTTP
-	client.CheckRedirect = rejectCheckInRedirect
-	return client.Do(request) // #nosec G704 -- request URL comes from typed CheckInEndpoint validation and redirects are rejected.
-}
-
-func rejectCheckInRedirect(*http.Request, []*http.Request) error {
-	return fmt.Errorf(ErrFmtCheckInTransport, core.ErrLicenseContract)
-}
-
-func (c Client[P, G]) buildRequest(ctx context.Context, body []byte) (*http.Request, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.Endpoint.String(), bytes.NewReader(body))
-	if err != nil {
-		return nil, transportError(err)
-	}
-	request.Header.Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
+func (c Client[P, R]) exchangeRequest(input P, key core.HTTPIdempotencyKey) exchange.Request[P] {
+	headers := core.HTTPHeaders{}
 	if !c.APIKey.IsZero() {
-		request.Header.Set(OffgridAPICallKeyHeader, c.APIKey.String())
+		headers.Values = []core.HTTPHeader{{Name: OffgridAPICallKeyHeader, Value: c.APIKey.String()}}
 	}
-	return request, nil
-}
-
-func readResponse[R CheckInResponseBody](reply *http.Response, keyring core.SigningKeyring) (R, error) {
-	var zero R
-	data, err := readCappedResponseBody(reply.Body)
-	if err != nil {
-		return zero, err
-	}
-	decoded, err := core.DecodeStrictJSON[core.APIEnvelope[R]](data)
-	if err != nil {
-		return zero, fmt.Errorf(ErrFmtCheckInResponse, errors.Join(core.ErrLicenseContract, err))
-	}
-	if err := decoded.ValidateSuccess(); err != nil {
-		return zero, fmt.Errorf(ErrFmtCheckInResponse, errors.Join(core.ErrLicenseContract, err))
-	}
-	if err := (*decoded.Data).Verify(keyring); err != nil {
-		return zero, err
-	}
-	return *decoded.Data, nil
-}
-
-func readFailureResponse[R CheckInResponseBody](reply *http.Response, statusCode int, retryAfter time.Duration) error {
-	data, err := readCappedResponseBody(reply.Body)
-	if err != nil {
-		return err
-	}
-	decoded, err := core.DecodeStrictJSON[core.APIEnvelope[R]](data)
-	if err != nil {
-		return CheckInHTTPError{
-			StatusCode: statusCode,
-			Cause:      fmt.Errorf(ErrFmtCheckInResponse, errors.Join(core.ErrLicenseContract, err)),
-		}
-	}
-	if err := decoded.ValidateFailure(); err != nil {
-		return fmt.Errorf(ErrFmtCheckInResponse, errors.Join(core.ErrLicenseContract, err))
-	}
-	return CheckInAPIError{
-		StatusCode: statusCode,
-		RequestID:  decoded.RequestID,
-		Body:       *decoded.Error,
-		RetryAfter: retryAfter,
+	return exchange.Request[P]{
+		Body: &input, Endpoint: c.Endpoint, Headers: headers,
+		Semantics: core.HTTPRequestSemantics{
+			Method: core.HTTPMethodPost, Replay: core.HTTPReplayIdempotent, IdempotencyKey: key,
+		},
+		ExpectedStatus: core.HTTPStatusOK,
 	}
 }
 
-func readCappedResponseBody(body io.Reader) ([]byte, error) {
-	if body == nil {
-		return nil, fmt.Errorf(ErrFmtCheckInResponse, core.ErrLicenseContract)
-	}
-	data, err := io.ReadAll(io.LimitReader(body, CheckInResponseByteCap+1))
-	if err != nil {
-		return nil, transportError(err)
-	}
-	if len(data) > CheckInResponseByteCap {
-		return nil, fmt.Errorf(ErrFmtCheckInResponse, core.ErrLicenseContract)
-	}
-	return data, nil
-}
-
-func (c Client[P, G]) jitterFraction() float64 {
+func (c Client[P, R]) exchangeClient() exchange.Client {
+	client := exchange.Client{HTTP: c.HTTP}
 	if c.Jitter != nil {
-		return conservativeJitterFraction(c.Jitter())
+		client.Jitter = checkInJitter(c.Jitter)
 	}
-	var raw [8]byte
-	if _, err := rand.Read(raw[:]); err != nil {
-		return 1
+	return client
+}
+
+func (c Client[P, R]) exchangePolicy() exchange.ClientPolicy {
+	backoff := c.backoffPolicy()
+	retry := core.DefaultHTTPRetryPolicy()
+	retry.Backoff = backoff
+	retry.RetryWaitLimit = backoff.Max
+	return exchange.ClientPolicy{
+		AttemptTimeout:    core.NewNanosecondsDuration(CheckInBudget),
+		RequestBodyLimit:  core.NewByteCount(CheckInRequestByteCap),
+		ResponseBodyLimit: core.NewByteCount(CheckInResponseByteCap),
+		Retry:             retry,
+		Redirect:          core.HTTPRedirectReject,
 	}
-	return conservativeJitterFraction(float64(binary.BigEndian.Uint64(raw[:])>>11) / float64(uint64(1)<<53))
 }
 
 func (c Client[P, R]) backoffPolicy() core.BackoffPolicy {
 	if c.Backoff == (core.BackoffPolicy{}) {
-		return DefaultCheckInBackoff()
+		return core.DefaultHTTPBackoffPolicy()
 	}
 	return c.Backoff
 }
 
-func conservativeJitterFraction(value float64) float64 {
-	if !(value > 0) {
-		return 1
+type checkInJitter func() float64
+
+func (j checkInJitter) Fraction() float64 { return j() }
+
+func checkInExchangeError[R core.Validatable](response exchange.Response[R], cause error) error {
+	if exhausted, ok := errors.AsType[exchange.RetryExhaustedError](cause); ok {
+		return CheckInRetryExhaustedError{
+			Cause:      checkInExchangeCause(response.Status, exhausted.Cause),
+			RetryAfter: exhausted.RetryAfter.Duration(),
+		}
 	}
-	if value > 1 {
-		return 1
+	return checkInExchangeCause(response.Status, cause)
+}
+
+func checkInExchangeCause(status core.HTTPStatusCode, cause error) error {
+	if apiError, ok := errors.AsType[exchange.ResponseError](cause); ok {
+		return CheckInAPIError{
+			StatusCode: apiError.Status.Int(), RequestID: apiError.RequestID,
+			Body: apiError.Body, RetryAfter: apiError.RetryAfter.Duration(),
+		}
 	}
-	return value
+	return CheckInHTTPError{StatusCode: status.Int(), Cause: cause}
 }
 
 func transportError(err error) error {
 	return fmt.Errorf(ErrFmtCheckInTransport, errors.Join(core.ErrLicenseContract, err))
-}
-
-func maxDuration(a, b time.Duration) time.Duration {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func sleepContext(ctx context.Context, d time.Duration) error {
-	if d <= 0 {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			return nil
-		}
-	}
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
-}
-
-type retryAfterDecision struct {
-	Wait time.Duration
-	Hint time.Duration
-}
-
-func parseRetryAfter(header string, now time.Time, maxWait time.Duration) retryAfterDecision {
-	header = strings.TrimSpace(header)
-	if header == "" {
-		return retryAfterDecision{}
-	}
-	if seconds, err := strconv.ParseInt(header, 10, 64); err == nil {
-		return retryAfterSeconds(seconds, maxWait)
-	}
-	if _, err := strconv.ParseUint(header, 10, 64); err == nil {
-		return retryAfterDecision{Wait: maxWait, Hint: CheckInMaxRetryAfter}
-	}
-	if allDecimalDigits(header) {
-		return retryAfterDecision{Wait: maxWait, Hint: CheckInMaxRetryAfter}
-	}
-	when, err := http.ParseTime(header)
-	if err != nil || !when.After(now) {
-		return retryAfterDecision{}
-	}
-	return clampRetryAfter(when.Sub(now), maxWait)
-}
-
-func allDecimalDigits(value string) bool {
-	if value == "" {
-		return false
-	}
-	for _, r := range value {
-		if r < '0' || r > '9' {
-			return false
-		}
-	}
-	return true
-}
-
-func clampRetryAfter(d time.Duration, maxWait time.Duration) retryAfterDecision {
-	if d > CheckInMaxRetryAfter {
-		d = CheckInMaxRetryAfter
-	}
-	return retryAfterDecision{Wait: minDuration(d, maxWait), Hint: d}
-}
-
-func retryAfterSeconds(seconds int64, maxWait time.Duration) retryAfterDecision {
-	if seconds <= 0 {
-		return retryAfterDecision{}
-	}
-	if seconds > int64(CheckInMaxRetryAfter/time.Second) {
-		return retryAfterDecision{Wait: maxWait, Hint: CheckInMaxRetryAfter}
-	}
-	d := time.Duration(seconds) * time.Second
-	return retryAfterDecision{Wait: minDuration(d, maxWait), Hint: d}
-}
-
-func minDuration(a, b time.Duration) time.Duration {
-	if a < b {
-		return a
-	}
-	return b
 }

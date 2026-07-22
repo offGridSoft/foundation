@@ -19,9 +19,9 @@ func TestValidateHostileContextStateTable(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name        string
-		makeContext func() (context.Context, context.CancelFunc)
 		wantErr     error
+		makeContext func() (context.Context, context.CancelFunc)
+		name        string
 	}{
 		{name: "nil interface is rejected by foundation identity", makeContext: func() (context.Context, context.CancelFunc) { return nil, func() {} }, wantErr: core.ErrNilContext},
 		{name: "background context is active", makeContext: func() (context.Context, context.CancelFunc) { return context.Background(), func() {} }},
@@ -64,8 +64,8 @@ func TestStateOfErrorHostileIdentityPrecedenceTable(t *testing.T) {
 
 	local := errors.New("local failure")
 	cases := []struct {
-		name string
 		err  error
+		name string
 		want ErrorState
 	}{
 		{name: "nil has no context identity", want: ErrorStateNone},
@@ -96,10 +96,10 @@ func TestErrorStateExhaustsClosedEnumAndRejectsFutureValues(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name    string
-		state   ErrorState
-		want    string
 		wantErr error
+		name    string
+		want    string
+		state   ErrorState
 	}{
 		{name: "zero value is rejected", state: ErrorStateUnknown, want: ErrorStateNameUnknown, wantErr: core.ErrContextContract},
 		{name: "no identity is valid", state: ErrorStateNone, want: ErrorStateNameNone},
@@ -138,10 +138,10 @@ func TestErrorStateHostileJSONBoundaryTable(t *testing.T) {
 		t.Fatalf("json.Marshal(deadline token) error = %v, want nil", err)
 	}
 	cases := []struct {
+		wantErr error
 		name    string
 		raw     []byte
 		want    ErrorState
-		wantErr error
 	}{
 		{name: "none token round trips", raw: noneJSON, want: ErrorStateNone},
 		{name: "cancelled token round trips", raw: cancelledJSON, want: ErrorStateCancelled},

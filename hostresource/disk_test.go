@@ -16,11 +16,11 @@ func TestDiskAssessmentHostileBoundaryTable(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
+		wantError error
 		name      string
 		capacity  DiskCapacity
 		policy    DiskPressurePolicy
 		wantState DiskPressureState
-		wantError error
 	}{
 		{name: "p01_disabled_zero_floor", capacity: DiskCapacity{FreeBytes: 50, TotalBytes: 100}, wantState: DiskPressureDisabled},
 		{name: "p02_healthy_one_above", capacity: DiskCapacity{FreeBytes: 51, TotalBytes: 100}, policy: DiskPressurePolicy{FloorBytes: 50}, wantState: DiskPressureHealthy},
@@ -214,11 +214,11 @@ func TestDiskArithmeticRejectsOverflowAndImpossibleSizes(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
+		wantError error
 		name      string
 		blocks    uint64
 		blockSize uint64
 		want      uint64
-		wantError error
 	}{
 		{name: "p01_zero_blocks", blocks: 0, blockSize: 4096, want: 0},
 		{name: "p02_one_byte", blocks: 1, blockSize: 1, want: 1},

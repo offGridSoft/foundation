@@ -145,10 +145,10 @@ func TestFuzzCorpusSelectionBoundaryAndOrderMatrix(t *testing.T) {
 
 	tests := []struct {
 		name        string
+		wantLast    string
 		positions   []int
 		wantEntries int
 		wantDropped uint64
-		wantLast    string
 	}{
 		{name: "neutral empty"},
 		{name: "below bound", positions: corpusPositions(127, false), wantEntries: 127, wantLast: "0000007e"},
@@ -304,9 +304,9 @@ func TestSelectFuzzCorpusDirectoryReaderFailureMatrix(t *testing.T) {
 
 	injected := errors.New("injected directory read failure")
 	tests := []struct {
-		name        string
 		reader      fs.ReadDirFile
 		wantErr     error
+		name        string
 		wantEntries int
 	}{
 		{name: "nil reader", wantErr: core.ErrFuzzContract},
@@ -350,8 +350,8 @@ func TestSelectFuzzCorpusDirectoryCanonicalBoundAcrossBatches(t *testing.T) {
 }
 
 type fuzzCorpusReadStep struct {
-	entries []fs.DirEntry
 	err     error
+	entries []fs.DirEntry
 }
 
 type fuzzCorpusDirectoryReader struct {

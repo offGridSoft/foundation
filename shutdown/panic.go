@@ -10,6 +10,11 @@ import (
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
+const (
+	panicDiagnosticUnavailable  = "panic diagnostic unavailable"
+	panicValueOmittedDiagnostic = "panic value omitted; inspect type"
+)
+
 type PanicTypeName string
 
 func ParsePanicTypeName(value string) (PanicTypeName, error) {
@@ -106,40 +111,66 @@ func (e ForcePanicError) Error() string {
 
 func (e ForcePanicError) Unwrap() error { return core.ErrShutdownForcePanic }
 
-func newStepPanicError(recovered any) StepPanicError {
-	return StepPanicError{Value: capturePanicValue(recovered), authentic: true}
+func newStepPanicError(value PanicValue) StepPanicError {
+	return StepPanicError{Value: value, authentic: true}
 }
 
-func newForcePanicError(recovered any) ForcePanicError {
-	return ForcePanicError{Value: capturePanicValue(recovered), authentic: true}
+func newForcePanicError(value PanicValue) ForcePanicError {
+	return ForcePanicError{Value: value, authentic: true}
 }
 
-func capturePanicValue(recovered any) PanicValue {
-	typeName := PanicTypeName(boundedPanicString(fmt.Sprintf("%T", recovered), core.ShutdownPanicTypeMaxRunes))
-	diagnostic := PanicDiagnostic(strconv.QuoteToASCII(boundedPanicText(recovered)))
-	return PanicValue{Type: typeName, Diagnostic: diagnostic}
-}
+type panicAction func() error
+type panicFailure func(PanicValue) error
 
-func boundedPanicText(recovered any) (text string) {
-	text = "panic diagnostic unavailable"
+func runCapturingPanic(action panicAction, result chan<- error, failure panicFailure) {
 	defer func() {
-		if recover() != nil {
-			text = "panic diagnostic unavailable"
+		recovered := recover()
+		if recovered == nil {
+			return
 		}
+		typeName := fmt.Sprintf("%T", recovered)
+		text := panicDiagnosticUnavailable
+		func() {
+			defer func() { _ = recover() }()
+			switch value := recovered.(type) {
+			case string:
+				text = value
+			case []byte:
+				text = string(value[:min(len(value), core.ShutdownPanicSourceMaxRunes*utf8.UTFMax)])
+			case error:
+				text = value.Error()
+			case fmt.Stringer:
+				text = value.String()
+			case bool, int, int8, int16, int32, int64,
+				uint, uint8, uint16, uint32, uint64, uintptr,
+				float32, float64, complex64, complex128:
+				text = fmt.Sprintf("%v", value)
+			default:
+				text = panicValueOmittedDiagnostic
+			}
+		}()
+		result <- failure(newPanicValue(typeName, text))
 	}()
-	switch value := recovered.(type) {
-	case string:
-		return boundedPanicString(value, core.ShutdownPanicSourceMaxRunes)
-	case []byte:
-		return boundedPanicString(string(value[:min(len(value), core.ShutdownPanicSourceMaxRunes*utf8.UTFMax)]), core.ShutdownPanicSourceMaxRunes)
-	case error:
-		return boundedPanicString(value.Error(), core.ShutdownPanicSourceMaxRunes)
-	case fmt.Stringer:
-		return boundedPanicString(value.String(), core.ShutdownPanicSourceMaxRunes)
-	case bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, uintptr, float32, float64, complex64, complex128:
-		return fmt.Sprintf("%v", value)
-	default:
-		return "panic value omitted; inspect type"
+	result <- action()
+}
+
+func newPanicValue(typeName, text string) PanicValue {
+	parsedType := PanicTypeName(boundedPanicString(typeName, core.ShutdownPanicTypeMaxRunes))
+	return PanicValue{Type: parsedType, Diagnostic: boundedPanicDiagnostic(text)}
+}
+
+// boundedPanicDiagnostic bounds the quoted form, not just the source: ASCII
+// quoting expands hostile runes up to ten to one, so a source-only bound can
+// exceed the diagnostic ceiling and invalidate an authentic capture.
+func boundedPanicDiagnostic(text string) PanicDiagnostic {
+	source := boundedPanicString(text, core.ShutdownPanicSourceMaxRunes)
+	for {
+		quoted := strconv.QuoteToASCII(source)
+		if utf8.RuneCountInString(quoted) <= core.ShutdownPanicDiagnosticMaxRunes {
+			return PanicDiagnostic(quoted)
+		}
+		_, size := utf8.DecodeLastRuneInString(source)
+		source = source[:len(source)-size]
 	}
 }
 

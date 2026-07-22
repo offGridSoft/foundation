@@ -99,8 +99,8 @@ func (r CommitResult) Validate() error {
 }
 
 type WriteOutcome struct {
-	Result   CommitResult
 	Recovery *Stage
+	Result   CommitResult
 }
 
 func (o WriteOutcome) Validate() error {

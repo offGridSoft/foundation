@@ -127,7 +127,7 @@ func writePrivateMaterial(path, material string) error {
 }
 
 func privateMaterialError(err error) error {
-	return fmt.Errorf("%w: %w", errPrivateMaterialFile, err)
+	return errors.Join(errPrivateMaterialFile, err)
 }
 
 func removePrivateMaterial(path string, cause error) error {

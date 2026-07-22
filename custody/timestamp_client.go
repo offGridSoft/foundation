@@ -1,22 +1,18 @@
 package custody
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/offGridSoft/foundation/v2026/core"
+	"github.com/offGridSoft/foundation/v2026/exchange"
 )
 
 const (
 	RFC3161HTTPBudget            = 15 * time.Second
-	RFC3161ContentTypeQuery      = "application/timestamp-query"
-	RFC3161ContentTypeReply      = "application/timestamp-reply"
 	TimestampAuthorityFreeTSAURL = "https://freetsa.org/tsr"
 )
 
@@ -105,34 +101,28 @@ func (c TimestampClient) TimestampWitnessCustody(ctx context.Context, bundleRoot
 }
 
 func (c TimestampClient) postTimestampQuery(ctx context.Context, query []byte) ([]byte, error) {
-	requestContext, cancel := context.WithTimeout(ctx, RFC3161HTTPBudget)
-	defer cancel()
-	httpRequest, err := http.NewRequestWithContext(requestContext, http.MethodPost, c.Endpoint.String(), bytes.NewReader(query))
+	request := exchange.BoundedRequest[core.APIEndpoint]{
+		Target:                      c.Endpoint,
+		Body:                        query,
+		Semantics:                   core.HTTPRequestSemantics{Method: core.HTTPMethodPost, Replay: core.HTTPReplaySingleAttempt},
+		ExpectedStatus:              core.HTTPStatusOK,
+		RequestContentType:          core.HTTPMediaTypeTimestampQuery,
+		ExpectedResponseContentType: core.HTTPMediaTypeTimestampReply,
+	}
+	policy := exchange.BoundedPolicy{
+		AttemptTimeout:    core.NewNanosecondsDuration(RFC3161HTTPBudget),
+		RequestBodyLimit:  core.NewByteCount(RFC3161DERMaximumBytes),
+		ResponseBodyLimit: core.NewByteCount(RFC3161DERMaximumBytes),
+		Redirect:          core.HTTPRedirectReject,
+	}
+	response, err := exchange.SendBounded(ctx, exchange.Client{HTTP: c.HTTP}, request, policy)
 	if err != nil {
-		return nil, TimestampHTTPError{Cause: err}
+		return nil, TimestampHTTPError{StatusCode: response.Status.Int(), Cause: err}
 	}
-	httpRequest.Header.Set(core.HTTPHeaderContentType, RFC3161ContentTypeQuery)
-	httpResponse, err := c.HTTP.Do(httpRequest)
-	if err != nil {
-		return nil, TimestampHTTPError{Cause: err}
+	if len(response.Body) == 0 {
+		return nil, TimestampHTTPError{StatusCode: response.Status.Int(), Cause: core.ErrCustodyContract}
 	}
-	if httpResponse == nil || httpResponse.Body == nil {
-		return nil, TimestampHTTPError{Cause: core.ErrCustodyContract}
-	}
-	defer func() { _ = httpResponse.Body.Close() }()
-	return readTimestampReply(httpResponse)
-}
-
-func readTimestampReply(httpResponse *http.Response) ([]byte, error) {
-	replyDER, err := io.ReadAll(io.LimitReader(httpResponse.Body, RFC3161DERMaximumBytes+1))
-	if err != nil || len(replyDER) == 0 || len(replyDER) > RFC3161DERMaximumBytes {
-		return nil, TimestampHTTPError{StatusCode: httpResponse.StatusCode, Cause: core.ErrCustodyContract}
-	}
-	contentType := httpResponse.Header.Get(core.HTTPHeaderContentType)
-	if httpResponse.StatusCode != core.HTTPStatusOK || !strings.HasPrefix(contentType, RFC3161ContentTypeReply) {
-		return nil, TimestampHTTPError{StatusCode: httpResponse.StatusCode, Cause: core.ErrCustodyContract}
-	}
-	return replyDER, nil
+	return response.Body, nil
 }
 
 func (c TimestampClient) buildProofFromReply(bundleRoot core.BLAKE3Hex, replyDER []byte) (TimestampProof, error) {

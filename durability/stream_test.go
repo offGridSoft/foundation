@@ -22,11 +22,11 @@ func TestReadBoundedExactLimitOverflowAndIngressTable(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 	cases := []struct {
-		name      string
 		ctx       context.Context
-		request   ReadRequest
-		want      string
 		wantError error
+		name      string
+		want      string
+		request   ReadRequest
 	}{
 		{name: "p01_exact_limit", ctx: context.Background(), request: ReadRequest{Path: path, MaximumBytes: core.NewByteCount(8)}, want: "12345678"},
 		{name: "p02_above_content", ctx: context.Background(), request: ReadRequest{Path: path, MaximumBytes: core.NewByteCount(9)}, want: "12345678"},
@@ -39,11 +39,11 @@ func TestReadBoundedExactLimitOverflowAndIngressTable(t *testing.T) {
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
 	cases = append(cases, struct {
-		name      string
 		ctx       context.Context
-		request   ReadRequest
-		want      string
 		wantError error
+		name      string
+		want      string
+		request   ReadRequest
 	}{name: "n06_cancelled", ctx: cancelled, request: ReadRequest{Path: path, MaximumBytes: core.NewByteCount(8)}, wantError: context.Canceled})
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

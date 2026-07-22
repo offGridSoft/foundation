@@ -28,3 +28,19 @@ func TestWitnessCustodyEndpointContractsTable(t *testing.T) {
 		})
 	}
 }
+
+func TestWitnessCustodyDefaultEndpointsBindProductionBaseAndClosedPaths(t *testing.T) {
+	t.Parallel()
+
+	got, err := WitnessCustodyEndpoints()
+	if err != nil {
+		t.Fatalf("WitnessCustodyEndpoints() error = %v, want nil", err)
+	}
+	want, err := WitnessCustodyEndpointsForBaseURL(core.OffgridAPIBaseURL)
+	if err != nil {
+		t.Fatalf("WitnessCustodyEndpointsForBaseURL() error = %v, want nil", err)
+	}
+	if got != want {
+		t.Fatalf("WitnessCustodyEndpoints() = %+v, want %+v", got, want)
+	}
+}

@@ -12,11 +12,11 @@ func TestHostResourceEnumsExhaustiveDomainAndJSONTable(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name    string
 		value   any
+		marshal func() ([]byte, error)
+		name    string
 		token   string
 		valid   bool
-		marshal func() ([]byte, error)
 	}{
 		{name: "disk_unknown", value: DiskPressureUnknown, token: DiskPressureNameUnknown, marshal: func() ([]byte, error) { return json.Marshal(DiskPressureUnknown) }},
 		{name: "disk_disabled", value: DiskPressureDisabled, token: DiskPressureNameDisabled, valid: true, marshal: func() ([]byte, error) { return json.Marshal(DiskPressureDisabled) }},

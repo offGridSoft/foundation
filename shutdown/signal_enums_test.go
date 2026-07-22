@@ -163,13 +163,18 @@ func TestSignalEnumsRejectMalformedJSONWithoutMutation(t *testing.T) {
 	var nilGrace *GraceExpiryAction
 	var nilReason *ForceReason
 	var nilOutcome *ForceOutcome
-	if !errors.Is(nilKind.UnmarshalJSON([]byte(`"interrupt"`)), core.ErrShutdownContract) ||
-		!errors.Is(nilSet.UnmarshalJSON([]byte(`"standard"`)), core.ErrShutdownContract) ||
-		!errors.Is(nilSecond.UnmarshalJSON([]byte(`"force"`)), core.ErrShutdownContract) ||
-		!errors.Is(nilGrace.UnmarshalJSON([]byte(`"force"`)), core.ErrShutdownContract) ||
-		!errors.Is(nilReason.UnmarshalJSON([]byte(`"grace-expired"`)), core.ErrShutdownContract) ||
-		!errors.Is(nilOutcome.UnmarshalJSON([]byte(`"panicked"`)), core.ErrShutdownContract) {
-		t.Fatal("nil signal enum receiver accepted JSON")
+	errorsByEnum := []error{
+		nilKind.UnmarshalJSON([]byte(`"interrupt"`)),
+		nilSet.UnmarshalJSON([]byte(`"standard"`)),
+		nilSecond.UnmarshalJSON([]byte(`"force"`)),
+		nilGrace.UnmarshalJSON([]byte(`"force"`)),
+		nilReason.UnmarshalJSON([]byte(`"grace-expired"`)),
+		nilOutcome.UnmarshalJSON([]byte(`"panicked"`)),
+	}
+	for index, gotErr := range errorsByEnum {
+		if !errors.Is(gotErr, core.ErrShutdownContract) {
+			t.Fatalf("nil signal enum receiver %d error = %v, want %v", index, gotErr, core.ErrShutdownContract)
+		}
 	}
 }
 

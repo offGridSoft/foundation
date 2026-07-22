@@ -100,6 +100,10 @@ func (r UpdateCheckRequest) Validate() error {
 	return validateUpdateBytes(encoded, ErrFmtUpdateCheck)
 }
 
+func (r UpdateCheckRequest) HTTPIdempotencyKey() (core.HTTPIdempotencyKey, error) {
+	return core.ParseHTTPIdempotencyKey(r.RequestID.String())
+}
+
 func (r UpdateCheckRequest) validateStructure() error {
 	if r.Schema != core.SchemaReleaseUpdateCheckRequest {
 		return fmt.Errorf(ErrFmtUpdateCheck, core.ErrReleaseContract)
@@ -533,6 +537,10 @@ type UpdateDiagnostic struct {
 	Phase              UpdatePhase           `json:"phase"`
 	Failure            UpdateFailure         `json:"failure"`
 	Rollback           RollbackOutcome       `json:"rollback"`
+}
+
+func (d UpdateDiagnostic) HTTPIdempotencyKey() (core.HTTPIdempotencyKey, error) {
+	return core.ParseHTTPIdempotencyKey(d.DiagnosticID.String())
 }
 
 func BuildUpdateDiagnostic(identity UpdateDiagnosticInput) (UpdateDiagnostic, error) {

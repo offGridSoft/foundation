@@ -12,8 +12,8 @@ func TestOperatingSystemSignalSetsAreExactOnUnix(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		set  SignalSet
 		want []os.Signal
+		set  SignalSet
 	}{
 		{set: SignalSetInteractive, want: []os.Signal{os.Interrupt}},
 		{set: SignalSetStandard, want: []os.Signal{os.Interrupt, syscall.SIGTERM}},

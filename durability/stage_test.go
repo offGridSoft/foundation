@@ -24,18 +24,18 @@ func TestStageCommitFailureMatrixPreservesExactCrashState(t *testing.T) {
 	errRemove := errors.New("remove failure")
 	errDirSync := errors.New("directory sync failure")
 	cases := []struct {
-		name            string
-		install         InstallMode
-		file            *fakeStageFile
-		filesystem      *fakeStageFilesystem
 		wantNewError    error
 		wantCommitError error
-		wantActivation  ActivationState
-		wantTemporary   TemporaryState
+		file            *fakeStageFile
+		filesystem      *fakeStageFilesystem
+		name            string
 		wantRename      int
 		wantLink        int
 		wantRemove      int
 		wantDirSync     int
+		install         InstallMode
+		wantActivation  ActivationState
+		wantTemporary   TemporaryState
 	}{
 		{name: "p01_replace_durable", install: InstallReplace, file: &fakeStageFile{}, filesystem: &fakeStageFilesystem{}, wantActivation: ActivationDurable, wantTemporary: TemporaryRemoved, wantRename: 1, wantDirSync: 1},
 		{name: "p02_create_durable", install: InstallCreate, file: &fakeStageFile{}, filesystem: &fakeStageFilesystem{}, wantActivation: ActivationDurable, wantTemporary: TemporaryRemoved, wantLink: 1, wantRemove: 1, wantDirSync: 1},
@@ -177,13 +177,13 @@ func TestStageWriteHostileCountAndLimitTable(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name        string
+		wantError   error
 		file        *fakeStageFile
-		maximum     uint64
+		name        string
 		data        []byte
+		maximum     uint64
 		wantN       int
 		wantWritten uint64
-		wantError   error
 	}{
 		{name: "p01_empty_at_zero_usage", file: &fakeStageFile{}, maximum: 1, data: []byte{}, wantN: 0},
 		{name: "p02_below_limit", file: &fakeStageFile{}, maximum: 10, data: []byte("abc"), wantN: 3, wantWritten: 3},
@@ -302,15 +302,15 @@ func TestWriteContractsRejectUnknownEnumsModesPathsAndSizes(t *testing.T) {
 }
 
 type fakeStageFile struct {
-	name            string
 	chmodErr        error
 	syncErr         error
 	closeErr        error
 	writeErr        error
+	name            string
 	writeN          int
-	writeConfigured bool
 	syncCalls       int
 	closeCalls      int
+	writeConfigured bool
 }
 
 func (f *fakeStageFile) Write(data []byte) (int, error) {

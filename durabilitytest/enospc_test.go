@@ -52,9 +52,9 @@ func TestENOSPCWriterUnderlyingFailuresAndInvalidCounts(t *testing.T) {
 
 	sentinel := errors.New("underlying EIO")
 	cases := []struct {
-		name      string
 		writer    io.Writer
 		wantError error
+		name      string
 		wantN     int
 	}{
 		{name: "n01_underlying_error_wins", writer: hostileWriter{n: 0, err: sentinel}, wantError: sentinel},
@@ -108,8 +108,8 @@ func TestENOSPCWriterConcurrentWritesNeverExceedCapacity(t *testing.T) {
 }
 
 type hostileWriter struct {
-	n   int
 	err error
+	n   int
 }
 
 func (w hostileWriter) Write([]byte) (int, error) { return w.n, w.err }

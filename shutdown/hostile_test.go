@@ -123,12 +123,12 @@ func TestPanicCaptureSurvivesPanickingFormatterAndBoundsHostileText(t *testing.T
 		t.Fatalf("hostile panic detail = %+v, want exact type and safe fallback", panicErr.Value)
 	}
 
-	oversized := newStepPanicError(string(make([]byte, core.ShutdownPanicSourceMaxRunes+100)))
+	oversized := newStepPanicError(newPanicValue("string", string(make([]byte, core.ShutdownPanicSourceMaxRunes+100))))
 	if oversized.Validate() != nil || len(oversized.Value.Diagnostic.String()) > core.ShutdownPanicDiagnosticMaxRunes {
 		t.Fatalf("oversized panic detail = %+v validate=%v, want bounded valid diagnostic", oversized.Value, oversized.Validate())
 	}
 	if !errors.Is((StepPanicError{}).Validate(), core.ErrShutdownContract) || !errors.Is((ForcePanicError{}).Validate(), core.ErrShutdownContract) {
-		t.Fatal("externally constructed zero panic errors were accepted as authentic")
+		t.Fatalf("zero panic validation = step %v force %v, want %v", (StepPanicError{}).Validate(), (ForcePanicError{}).Validate(), core.ErrShutdownContract)
 	}
 }
 
@@ -216,7 +216,7 @@ func TestWatchCombinedEscalationPolicyDeliversExactlyOneForce(t *testing.T) {
 		}
 		<-controller.Done()
 		if _, open := <-controller.Forced(); open {
-			t.Fatal("Forced() delivered a second result, want exactly one force then closed channel")
+			t.Fatalf("Forced() open after one result = %v, want false", open)
 		}
 	})
 

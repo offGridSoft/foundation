@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"net/http"
 	"time"
 
 	"github.com/offGridSoft/foundation/v2026/core"
+	"github.com/offGridSoft/foundation/v2026/exchange"
 )
 
 // DownloadGrantClockSkew tolerates clock drift when a consumer checks a
@@ -157,6 +157,10 @@ func (r DownloadRequest) Validate() error {
 		return fmt.Errorf(ErrFmtDownloadRequest, err)
 	}
 	return nil
+}
+
+func (r DownloadRequest) HTTPIdempotencyKey() (core.HTTPIdempotencyKey, error) {
+	return core.ParseHTTPIdempotencyKey(r.BundleRoot.String())
 }
 
 // DownloadTarget binds one signed retrieval URL to the content-addressed
@@ -383,6 +387,28 @@ func (c Client) RequestDownload(ctx context.Context, request DownloadRequest) (c
 // until DownloadArtifact returns nil; a non-nil error means the stream was
 // truncated, oversized, or failed content-address verification.
 func (c Client) DownloadArtifact(ctx context.Context, target DownloadTarget, dst io.Writer) error {
+	if err := c.validateDownloadArtifactCall(ctx, target, dst); err != nil {
+		return err
+	}
+	requestContext, cancel := context.WithTimeout(ctx, CustodyTransferHTTPBudget)
+	defer cancel()
+	hasher := sha256.New()
+	response, err := exchange.ReceiveStream(requestContext, exchange.Client{HTTP: c.HTTP}, exchange.StreamDownloadRequest[DownloadURL]{
+		Target:            target.URL,
+		Destination:       io.MultiWriter(dst, hasher),
+		ResponseBodyLimit: target.Size,
+		Semantics:         core.HTTPRequestSemantics{Method: core.HTTPMethodGet, Replay: core.HTTPReplaySingleAttempt},
+		ExpectedStatus:    core.HTTPStatusOK,
+	}, custodyTransferPolicy())
+	if err != nil {
+		return downloadArtifactResponseError(response, err)
+	}
+	var sum [sha256.Size]byte
+	hasher.Sum(sum[:0])
+	return verifyDownloadedArtifact(response, target, sum)
+}
+
+func (c Client) validateDownloadArtifactCall(ctx context.Context, target DownloadTarget, dst io.Writer) error {
 	if err := c.Validate(); err != nil {
 		return err
 	}
@@ -395,50 +421,28 @@ func (c Client) DownloadArtifact(ctx context.Context, target DownloadTarget, dst
 	if err := target.Validate(); err != nil {
 		return fmt.Errorf(ErrFmtDownloadArtifact, err)
 	}
-	requestContext, cancel := context.WithTimeout(ctx, CustodyTransferHTTPBudget)
-	defer cancel()
-	httpResponse, err := c.doDownloadGet(requestContext, target)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = httpResponse.Body.Close() }()
-	return verifyDownloadStream(httpResponse, target, dst)
+	return nil
 }
 
-func (c Client) doDownloadGet(ctx context.Context, target DownloadTarget) (*http.Response, error) {
-	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, target.URL.String(), nil)
-	if err != nil {
-		return nil, CustodyHTTPError{Cause: err}
+func downloadArtifactResponseError(response exchange.StreamResponse, cause error) error {
+	if errors.Is(cause, core.ErrExchangeBodyLimit) {
+		return fmt.Errorf(ErrFmtDownloadArtifact, errors.Join(core.ErrStorageVerification, custodyStreamError(response.Status, cause)))
 	}
-	httpResponse, err := c.HTTP.Do(httpRequest)
-	if err != nil {
-		return nil, CustodyHTTPError{Cause: err}
-	}
-	if httpResponse == nil || httpResponse.Body == nil {
-		return nil, CustodyHTTPError{Cause: core.ErrCustodyContract}
-	}
-	return httpResponse, nil
+	return custodyStreamError(response.Status, cause)
 }
 
-func verifyDownloadStream(httpResponse *http.Response, target DownloadTarget, dst io.Writer) error {
-	if httpResponse.StatusCode != core.HTTPStatusOK {
-		_, _ = io.Copy(io.Discard, io.LimitReader(httpResponse.Body, CustodyTransferResponseMaxBytes))
-		return CustodyHTTPError{StatusCode: httpResponse.StatusCode, Cause: core.ErrCustodyContract}
-	}
-	size, err := target.Size.Int64()
+func verifyDownloadedArtifact(response exchange.StreamResponse, target DownloadTarget, sum [sha256.Size]byte) error {
+	written, err := response.BytesWritten.Int64()
 	if err != nil {
 		return fmt.Errorf(ErrFmtDownloadArtifact, err)
 	}
-	hasher := sha256.New()
-	copied, err := io.Copy(io.MultiWriter(dst, hasher), io.LimitReader(httpResponse.Body, size+1))
+	expected, err := target.Size.Int64()
 	if err != nil {
-		return CustodyHTTPError{Cause: err}
+		return fmt.Errorf(ErrFmtDownloadArtifact, err)
 	}
-	if copied != size {
+	if written != expected {
 		return fmt.Errorf(ErrFmtDownloadArtifact, core.ErrStorageVerification)
 	}
-	var sum [sha256.Size]byte
-	hasher.Sum(sum[:0])
 	if core.NewSHA256Hex(sum) != target.SHA256 {
 		return fmt.Errorf(ErrFmtDownloadArtifact, core.ErrStorageVerification)
 	}

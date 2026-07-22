@@ -147,6 +147,10 @@ func (c BugCheckIn) CheckInRequestNonce() CheckInNonce {
 	return c.RequestNonce
 }
 
+func (c BugCheckIn) HTTPIdempotencyKey() (core.HTTPIdempotencyKey, error) {
+	return core.ParseHTTPIdempotencyKey(c.RequestNonce.String())
+}
+
 func (c BugCheckIn) validateIdentity() error {
 	if err := c.DeveloperKey.Validate(); err != nil {
 		return checkInPayloadError(err)
@@ -236,6 +240,10 @@ func validateLeaseProgressionReference(id core.LeaseID, generation LeaseGenerati
 
 func (c WitnessCheckIn) CheckInRequestNonce() CheckInNonce {
 	return c.RequestNonce
+}
+
+func (c WitnessCheckIn) HTTPIdempotencyKey() (core.HTTPIdempotencyKey, error) {
+	return core.ParseHTTPIdempotencyKey(c.RequestNonce.String())
 }
 
 func checkInPayloadError(err error) error {

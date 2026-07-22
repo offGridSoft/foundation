@@ -1,10 +1,8 @@
 package custody
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"hash"
@@ -12,10 +10,10 @@ import (
 	"math"
 	"net/http"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/offGridSoft/foundation/v2026/core"
+	"github.com/offGridSoft/foundation/v2026/exchange"
 )
 
 const (
@@ -49,6 +47,20 @@ func (e CustodyAPIError) Unwrap() error { return core.ErrCustodyContract }
 type CustodyHTTPError struct {
 	Cause      error
 	StatusCode int
+}
+
+type CustodyRetryExhaustedError struct {
+	Cause      error
+	RetryAfter core.NanosecondsDuration
+	Attempts   uint64
+}
+
+func (e CustodyRetryExhaustedError) Error() string {
+	return fmt.Sprintf("custody retry exhausted after %d attempts: %v", e.Attempts, e.Cause)
+}
+
+func (e CustodyRetryExhaustedError) Unwrap() error {
+	return errors.Join(core.ErrCustodyContract, core.ErrExchangeRetryExhausted, e.Cause)
 }
 
 func (e CustodyHTTPError) Error() string {
@@ -222,50 +234,47 @@ func (c Client) UploadArtifact(ctx context.Context, input UploadArtifactInput) (
 	requestContext, cancel := context.WithTimeout(ctx, CustodyTransferHTTPBudget)
 	defer cancel()
 	hasher := sha256.New()
-	size, err := input.Artifact.Size.Int64()
+	response, err := exchange.SendStream(requestContext, exchange.Client{HTTP: c.HTTP}, exchange.StreamUploadRequest[core.SignedUploadURL]{
+		Target:         input.Target.URL,
+		Body:           io.TeeReader(input.Body, hasher),
+		ContentLength:  input.Artifact.Size,
+		Headers:        uploadHTTPHeaders(input.Target.Headers),
+		Semantics:      core.HTTPRequestSemantics{Method: core.HTTPMethodPut, Replay: core.HTTPReplaySingleAttempt},
+		ExpectedStatus: core.HTTPStatusOK,
+		CaptureHeaders: exchange.HeaderSelection{Names: []string{GCSGenerationHeaderName}},
+	}, custodyTransferPolicy())
+	if err != nil {
+		return UploadedObject{}, custodyStreamError(response.Status, err)
+	}
+	streamed, err := response.BytesWritten.Int64()
 	if err != nil {
 		return UploadedObject{}, fmt.Errorf(ErrFmtUploadArtifact, err)
 	}
-	stream := &countingReader{reader: io.TeeReader(io.LimitReader(input.Body, size+1), hasher)}
-	httpResponse, err := c.doUploadPut(requestContext, input, stream, size)
-	if err != nil {
-		return UploadedObject{}, err
-	}
-	defer func() { _ = httpResponse.Body.Close() }()
-	if err := drainTransferResponse(httpResponse); err != nil {
-		return UploadedObject{}, err
-	}
-	return uploadedObjectFromResponse(input, httpResponse, stream.count, hasher)
+	generation, _ := response.Headers.Get(GCSGenerationHeaderName)
+	return uploadedObjectFromResponse(input, generation, streamed, hasher)
 }
 
-func (c Client) doUploadPut(ctx context.Context, input UploadArtifactInput, body io.Reader, size int64) (*http.Response, error) {
-	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPut, input.Target.URL.String(), body)
-	if err != nil {
-		return nil, CustodyHTTPError{Cause: err}
+func uploadHTTPHeaders(headers []core.UploadHeader) core.HTTPHeaders {
+	values := make([]core.HTTPHeader, len(headers))
+	for index, header := range headers {
+		values[index] = core.HTTPHeader(header)
 	}
-	httpRequest.ContentLength = size
-	for _, header := range input.Target.Headers {
-		httpRequest.Header.Set(header.Name, header.Value)
-	}
-	httpResponse, err := c.HTTP.Do(httpRequest)
-	if err != nil {
-		return nil, CustodyHTTPError{Cause: err}
-	}
-	if httpResponse == nil || httpResponse.Body == nil {
-		return nil, CustodyHTTPError{Cause: core.ErrCustodyContract}
-	}
-	return httpResponse, nil
+	return core.HTTPHeaders{Values: values}
 }
 
-func drainTransferResponse(httpResponse *http.Response) error {
-	_, err := io.Copy(io.Discard, io.LimitReader(httpResponse.Body, CustodyTransferResponseMaxBytes))
-	if err != nil || httpResponse.StatusCode != core.HTTPStatusOK {
-		return CustodyHTTPError{StatusCode: httpResponse.StatusCode, Cause: core.ErrCustodyContract}
+func custodyTransferPolicy() exchange.StreamPolicy {
+	return exchange.StreamPolicy{
+		AttemptTimeout: core.NewNanosecondsDuration(CustodyTransferHTTPBudget),
+		ErrorBodyLimit: core.NewByteCount(CustodyTransferResponseMaxBytes),
+		Redirect:       core.HTTPRedirectReject,
 	}
-	return nil
 }
 
-func uploadedObjectFromResponse(input UploadArtifactInput, httpResponse *http.Response, streamed int64, hasher hash.Hash) (UploadedObject, error) {
+func custodyStreamError(status core.HTTPStatusCode, cause error) error {
+	return CustodyHTTPError{StatusCode: status.Int(), Cause: cause}
+}
+
+func uploadedObjectFromResponse(input UploadArtifactInput, generationValue string, streamed int64, hasher hash.Hash) (UploadedObject, error) {
 	expected, err := input.Artifact.Size.Int64()
 	if err != nil {
 		return UploadedObject{}, fmt.Errorf(ErrFmtUploadArtifact, err)
@@ -278,7 +287,7 @@ func uploadedObjectFromResponse(input UploadArtifactInput, httpResponse *http.Re
 	if core.NewSHA256Hex(sum) != input.Artifact.SHA256 {
 		return UploadedObject{}, fmt.Errorf(ErrFmtUploadArtifact, core.ErrStorageVerification)
 	}
-	generation, err := ParseGeneration(httpResponse.Header.Get(GCSGenerationHeaderName))
+	generation, err := ParseGeneration(generationValue)
 	if err != nil {
 		return UploadedObject{}, fmt.Errorf(ErrFmtUploadArtifact, err)
 	}
@@ -297,18 +306,7 @@ func uploadedObjectFromResponse(input UploadArtifactInput, httpResponse *http.Re
 	return object, nil
 }
 
-type countingReader struct {
-	reader io.Reader
-	count  int64
-}
-
-func (r *countingReader) Read(p []byte) (int, error) {
-	n, err := r.reader.Read(p)
-	r.count += int64(n)
-	return n, err
-}
-
-func custodyPost[Request core.Validatable, Response core.Validatable](
+func custodyPost[Request core.HTTPIdempotentBody, Response core.Validatable](
 	ctx context.Context,
 	httpClient *http.Client,
 	endpoint core.APIEndpoint,
@@ -318,50 +316,52 @@ func custodyPost[Request core.Validatable, Response core.Validatable](
 	if ctx == nil {
 		return zero, fmt.Errorf(ErrFmtClient, errors.Join(core.ErrCustodyContract, core.ErrNilContext))
 	}
-	body, err := json.Marshal(request)
+	key, err := request.HTTPIdempotencyKey()
 	if err != nil {
 		return zero, CustodyHTTPError{Cause: err}
 	}
 	requestContext, cancel := context.WithTimeout(ctx, CustodyAPIHTTPBudget)
 	defer cancel()
-	httpRequest, err := http.NewRequestWithContext(requestContext, http.MethodPost, endpoint.String(), bytes.NewReader(body))
+	exchangeRequest := exchange.Request[Request]{
+		Body: &request, Endpoint: endpoint,
+		Semantics: core.HTTPRequestSemantics{
+			Method: core.HTTPMethodPost, Replay: core.HTTPReplayIdempotent, IdempotencyKey: key,
+		},
+		ExpectedStatus: core.HTTPStatusOK,
+	}
+	exchangeResponse, err := exchange.SendJSON[Request, Response](
+		requestContext, exchange.Client{HTTP: httpClient}, exchangeRequest, custodyAPIClientPolicy(),
+	)
 	if err != nil {
-		return zero, CustodyHTTPError{Cause: err}
+		return zero, custodyExchangeError(exchangeResponse, err)
 	}
-	httpRequest.Header.Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
-	httpResponse, err := httpClient.Do(httpRequest)
-	if err != nil {
-		return zero, CustodyHTTPError{Cause: err}
-	}
-	if httpResponse == nil || httpResponse.Body == nil {
-		return zero, CustodyHTTPError{Cause: core.ErrCustodyContract}
-	}
-	defer func() { _ = httpResponse.Body.Close() }()
-	contentType := httpResponse.Header.Get(core.HTTPHeaderContentType)
-	responseBody, err := io.ReadAll(io.LimitReader(httpResponse.Body, core.StrictJSONMaxBytes+1))
-	if err != nil || len(responseBody) == 0 || len(responseBody) > core.StrictJSONMaxBytes {
-		return zero, CustodyHTTPError{StatusCode: httpResponse.StatusCode, Cause: core.ErrCustodyContract}
-	}
-	return decodeCustodyHTTPResponse[Response](httpResponse.StatusCode, contentType, responseBody)
+	return *exchangeResponse.Envelope.Data, nil
 }
 
-func decodeCustodyHTTPResponse[Response core.Validatable](statusCode int, contentType string, responseBody []byte) (Response, error) {
-	var zero Response
-	if !strings.HasPrefix(contentType, core.HTTPContentTypeJSON) {
-		return zero, CustodyHTTPError{StatusCode: statusCode, Cause: core.ErrCustodyContract}
+func custodyAPIClientPolicy() exchange.ClientPolicy {
+	return exchange.ClientPolicy{
+		AttemptTimeout:    core.NewNanosecondsDuration(CustodyAPIHTTPBudget),
+		RequestBodyLimit:  core.NewByteCount(core.StrictJSONMaxBytes),
+		ResponseBodyLimit: core.NewByteCount(core.StrictJSONMaxBytes),
+		Retry:             core.DefaultHTTPRetryPolicy(),
+		Redirect:          core.HTTPRedirectReject,
 	}
-	envelope, err := core.DecodeStrictJSON[core.APIEnvelope[Response]](responseBody)
-	if err != nil {
-		return zero, CustodyHTTPError{StatusCode: statusCode, Cause: err}
-	}
-	if statusCode != core.HTTPStatusOK {
-		if err := envelope.ValidateFailure(); err != nil {
-			return zero, CustodyHTTPError{StatusCode: statusCode, Cause: err}
+}
+
+func custodyExchangeError[Response core.Validatable](response exchange.Response[Response], cause error) error {
+	if exhausted, ok := errors.AsType[exchange.RetryExhaustedError](cause); ok {
+		return CustodyRetryExhaustedError{
+			Cause:      custodyExchangeCause(response.Status, exhausted.Cause),
+			RetryAfter: exhausted.RetryAfter,
+			Attempts:   exhausted.Attempts,
 		}
-		return zero, CustodyAPIError{StatusCode: statusCode, RequestID: envelope.RequestID, Body: *envelope.Error}
 	}
-	if err := envelope.ValidateSuccess(); err != nil {
-		return zero, CustodyHTTPError{StatusCode: statusCode, Cause: err}
+	return custodyExchangeCause(response.Status, cause)
+}
+
+func custodyExchangeCause(status core.HTTPStatusCode, cause error) error {
+	if apiError, ok := errors.AsType[exchange.ResponseError](cause); ok {
+		return CustodyAPIError{StatusCode: apiError.Status.Int(), RequestID: apiError.RequestID, Body: apiError.Body}
 	}
-	return *envelope.Data, nil
+	return CustodyHTTPError{StatusCode: status.Int(), Cause: cause}
 }

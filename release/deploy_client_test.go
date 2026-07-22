@@ -24,16 +24,16 @@ func TestDeployClientPrepareHostileHTTPTable(t *testing.T) {
 		wantAPI     bool
 		accept      bool
 	}{
-		{name: "valid signed response", contentType: core.HTTPContentTypeJSON, status: core.HTTPStatusOK, body: prepareSuccessEnvelope, accept: true},
-		{name: "foreign plan signature", contentType: core.HTTPContentTypeJSON, status: core.HTTPStatusOK, body: prepareSuccessEnvelope, mutate: func(t *testing.T, chain *deployTransportChain) {
+		{name: "valid signed response", contentType: core.HTTPContentTypeJSON, status: core.HTTPStatusOK.Int(), body: prepareSuccessEnvelope, accept: true},
+		{name: "foreign plan signature", contentType: core.HTTPContentTypeJSON, status: core.HTTPStatusOK.Int(), body: prepareSuccessEnvelope, mutate: func(t *testing.T, chain *deployTransportChain) {
 			chain.prepareResponse.Plan = signDeployBody(t, chain.foreignSigner, chain.prepareResponse.Plan.Body)
 		}},
-		{name: "wrong media type", contentType: "text/plain", status: core.HTTPStatusOK, body: prepareSuccessEnvelope},
-		{name: "trailing json", contentType: core.HTTPContentTypeJSON, status: core.HTTPStatusOK, body: func(t *testing.T, chain deployTransportChain) []byte {
+		{name: "wrong media type", contentType: "text/plain", status: core.HTTPStatusOK.Int(), body: prepareSuccessEnvelope},
+		{name: "trailing json", contentType: core.HTTPContentTypeJSON, status: core.HTTPStatusOK.Int(), body: func(t *testing.T, chain deployTransportChain) []byte {
 			return append(prepareSuccessEnvelope(t, chain), []byte("{}")...)
 		}},
-		{name: "duplicate envelope field", contentType: core.HTTPContentTypeJSON, status: core.HTTPStatusOK, body: duplicatePrepareEnvelopeField},
-		{name: "oversized response", contentType: core.HTTPContentTypeJSON, status: core.HTTPStatusOK, body: func(*testing.T, deployTransportChain) []byte {
+		{name: "duplicate envelope field", contentType: core.HTTPContentTypeJSON, status: core.HTTPStatusOK.Int(), body: duplicatePrepareEnvelopeField},
+		{name: "oversized response", contentType: core.HTTPContentTypeJSON, status: core.HTTPStatusOK.Int(), body: func(*testing.T, deployTransportChain) []byte {
 			return bytes.Repeat([]byte{' '}, core.StrictJSONMaxBytes+1)
 		}},
 		{name: "typed api refusal", contentType: core.HTTPContentTypeJSON, status: http.StatusBadRequest, body: prepareFailureEnvelope, wantAPI: true},
@@ -147,15 +147,15 @@ func TestDeployClientPublicationHostileHTTPTable(t *testing.T) {
 		wantAPI bool
 		otherID bool
 	}{
-		{name: "exact persisted publication", status: core.HTTPStatusOK, accept: true},
-		{name: "foreign release manifest signature", status: core.HTTPStatusOK, mutate: func(t *testing.T, chain *deployTransportChain) {
+		{name: "exact persisted publication", status: core.HTTPStatusOK.Int(), accept: true},
+		{name: "foreign release manifest signature", status: core.HTTPStatusOK.Int(), mutate: func(t *testing.T, chain *deployTransportChain) {
 			chain.finalizeResponse.Manifest = signDeployBody(t, chain.foreignSigner, chain.finalizeResponse.Manifest.Body)
 		}},
-		{name: "foreign receipt signature", status: core.HTTPStatusOK, mutate: func(t *testing.T, chain *deployTransportChain) {
+		{name: "foreign receipt signature", status: core.HTTPStatusOK.Int(), mutate: func(t *testing.T, chain *deployTransportChain) {
 			chain.finalizeResponse.Receipt = signDeployBody(t, chain.foreignSigner, chain.finalizeResponse.Receipt.Body)
 		}},
-		{name: "status response release id mismatch", status: core.HTTPStatusOK, otherID: true},
-		{name: "not published", status: core.HTTPStatusNotFound, wantAPI: true},
+		{name: "status response release id mismatch", status: core.HTTPStatusOK.Int(), otherID: true},
+		{name: "not published", status: core.HTTPStatusNotFound.Int(), wantAPI: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -175,7 +175,7 @@ func TestDeployClientPublicationHostileHTTPTable(t *testing.T) {
 				}
 				w.Header().Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
 				w.WriteHeader(tc.status)
-				if tc.status == core.HTTPStatusOK {
+				if tc.status == core.HTTPStatusOK.Int() {
 					_, _ = w.Write(finalizeSuccessEnvelope(t, chain))
 					return
 				}

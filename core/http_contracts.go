@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -11,24 +12,30 @@ import (
 )
 
 const (
-	HTTPHeaderContentType               = "Content-Type"
-	HTTPHeaderAccept                    = "Accept"
-	HTTPHeaderAuthorization             = "Authorization"
-	HTTPHeaderRetryAfter                = "Retry-After"
-	HTTPContentTypeJSON                 = "application/json"
-	HTTPAuthorizationBearerPrefix       = "Bearer "
-	URLSchemeHTTP                       = "http"
-	URLSchemeHTTPS                      = "https"
-	HostLocalhost                       = "localhost"
-	HTTPSURLDefaultMaxRunes             = 2048
-	HTTPHeaderNameMaxRunes              = 256
-	HTTPHeaderValueMaxRunes             = 8192
-	BackoffMaxDuration                  = 24 * time.Hour
-	HTTPStatusOK                        = 200
-	HTTPStatusNotFound                  = 404
-	HTTPStatusTooManyRequests           = 429
-	HTTPStatusInternalServerError       = 500
-	HTTPStatusServerErrorUpperExclusive = 600
+	HTTPHeaderContentType                  = "Content-Type"
+	HTTPHeaderAccept                       = "Accept"
+	HTTPHeaderAuthorization                = "Authorization"
+	HTTPHeaderRetryAfter                   = "Retry-After"
+	HTTPHeaderContentLength                = "Content-Length"
+	HTTPHeaderContentEncoding              = "Content-Encoding"
+	HTTPHeaderAcceptEncoding               = "Accept-Encoding"
+	HTTPContentTypeJSON                    = "application/json"
+	HTTPContentTypeOctetStream             = "application/octet-stream"
+	HTTPContentTypeTextPlain               = "text/plain"
+	HTTPContentTypeTimestampQuery          = "application/timestamp-query"
+	HTTPContentTypeTimestampReply          = "application/timestamp-reply"
+	HTTPContentEncodingIdentity            = "identity"
+	HTTPAuthorizationBearerPrefix          = "Bearer "
+	URLSchemeHTTP                          = "http"
+	URLSchemeHTTPS                         = "https"
+	HostLocalhost                          = "localhost"
+	HTTPSURLDefaultMaxRunes                = 2048
+	HTTPHeaderNameMaxRunes                 = 256
+	HTTPHeaderValueMaxRunes                = 8192
+	BackoffMaxDuration                     = 24 * time.Hour
+	HTTPRetryDefaultBase                   = 100 * time.Millisecond
+	HTTPRetryDefaultMaximum                = 2 * time.Second
+	HTTPRetryDefaultMaximumAttempts uint64 = 4
 )
 
 type HTTPSURLPolicy struct {
@@ -188,52 +195,103 @@ func (o *HTTPOutcome) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func ClassifyHTTPStatus(status int) HTTPOutcome {
-	// Offgrid API success responses are pinned to HTTP 200 with an APIEnvelope.
-	switch {
-	case status == HTTPStatusOK:
-		return HTTPOutcomeSuccess
-	case status == HTTPStatusTooManyRequests:
-		return HTTPOutcomeRetryable
-	case status >= HTTPStatusInternalServerError && status < HTTPStatusServerErrorUpperExclusive:
-		return HTTPOutcomeRetryable
-	default:
-		return HTTPOutcomeTerminal
+type BackoffPolicy struct {
+	Base        NanosecondsDuration
+	Max         NanosecondsDuration
+	MaxAttempts uint64
+}
+
+func DefaultHTTPBackoffPolicy() BackoffPolicy {
+	return BackoffPolicy{
+		Base:        NewNanosecondsDuration(HTTPRetryDefaultBase),
+		Max:         NewNanosecondsDuration(HTTPRetryDefaultMaximum),
+		MaxAttempts: HTTPRetryDefaultMaximumAttempts,
 	}
 }
 
-type BackoffPolicy struct {
-	Base        time.Duration
-	Max         time.Duration
-	MaxAttempts uint64
+// HTTPRetryPolicy is the transport-neutral retry contract used by Go clients,
+// browser policy projections, and durable delivery adapters. Status
+// classification remains in HTTPRetryableStatusCodes so no consumer can widen
+// the retry set independently.
+type HTTPRetryPolicy struct {
+	Backoff           BackoffPolicy
+	MaximumRetryAfter NanosecondsDuration
+	RetryWaitLimit    NanosecondsDuration
+}
+
+func DefaultHTTPRetryPolicy() HTTPRetryPolicy {
+	return HTTPRetryPolicy{
+		Backoff:           DefaultHTTPBackoffPolicy(),
+		MaximumRetryAfter: NewNanosecondsDuration(BackoffMaxDuration),
+		RetryWaitLimit:    NewNanosecondsDuration(HTTPRetryDefaultMaximum),
+	}
+}
+
+func httpRetryPolicyError(cause error) error {
+	return fmt.Errorf(ErrFmtHTTPRetryPolicy, errors.Join(ErrExchangeContract, cause))
+}
+
+func (p HTTPRetryPolicy) Validate() error {
+	if err := p.Backoff.Validate(); err != nil {
+		return httpRetryPolicyError(err)
+	}
+	if err := validateHTTPRetryDuration(p.MaximumRetryAfter); err != nil {
+		return httpRetryPolicyError(err)
+	}
+	if err := validateHTTPRetryDuration(p.RetryWaitLimit); err != nil {
+		return httpRetryPolicyError(err)
+	}
+	if p.RetryWaitLimit.Duration() > p.MaximumRetryAfter.Duration() {
+		return httpRetryPolicyError(ErrFoundationContract)
+	}
+	return nil
+}
+
+func validateHTTPRetryDuration(value NanosecondsDuration) error {
+	if err := value.Validate(); err != nil {
+		return err
+	}
+	if value.IsZero() || value.Duration() > BackoffMaxDuration {
+		return ErrExchangeContract
+	}
+	return nil
 }
 
 func (p BackoffPolicy) Validate() error {
 	if p.MaxAttempts < 1 {
 		return fmt.Errorf(ErrFmtBackoffAttempts, ErrFoundationContract)
 	}
-	if p.Base <= 0 || p.Max < p.Base || p.Max > BackoffMaxDuration {
+	if err := p.Base.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtBackoffWindow, err)
+	}
+	if err := p.Max.Validate(); err != nil {
+		return fmt.Errorf(ErrFmtBackoffWindow, err)
+	}
+	base := p.Base.Duration()
+	maximum := p.Max.Duration()
+	if base <= 0 || maximum < base || maximum > BackoffMaxDuration {
 		return fmt.Errorf(ErrFmtBackoffWindow, ErrFoundationContract)
 	}
 	return nil
 }
 
-func (p BackoffPolicy) Delay(attempt uint64, jitterFrac float64) (time.Duration, error) {
+func (p BackoffPolicy) Delay(attempt uint64, jitterFrac float64) (NanosecondsDuration, error) {
 	if err := p.Validate(); err != nil {
-		return 0, err
+		return NanosecondsDuration{}, err
 	}
 	if attempt >= p.MaxAttempts {
-		return 0, fmt.Errorf(ErrFmtBackoffAttempts, ErrFoundationContract)
+		return NanosecondsDuration{}, fmt.Errorf(ErrFmtBackoffAttempts, ErrFoundationContract)
 	}
 	if !(jitterFrac >= 0 && jitterFrac <= 1) {
-		return 0, fmt.Errorf(ErrFmtBackoffWindow, ErrFoundationContract)
+		return NanosecondsDuration{}, fmt.Errorf(ErrFmtBackoffWindow, ErrFoundationContract)
 	}
-	ceiling := p.Base
-	for i := uint64(0); i < attempt && ceiling < p.Max; i++ {
+	ceiling := p.Base.Duration()
+	maximum := p.Max.Duration()
+	for i := uint64(0); i < attempt && ceiling < maximum; i++ {
 		ceiling *= 2
 	}
-	if ceiling > p.Max {
-		ceiling = p.Max
+	if ceiling > maximum {
+		ceiling = maximum
 	}
-	return time.Duration(jitterFrac * float64(ceiling)), nil
+	return NewNanosecondsDuration(time.Duration(jitterFrac * float64(ceiling))), nil
 }

@@ -1,15 +1,13 @@
 package release
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 
 	"github.com/offGridSoft/foundation/v2026/core"
+	"github.com/offGridSoft/foundation/v2026/exchange"
 	"github.com/offGridSoft/foundation/v2026/workloadidentity"
 )
 
@@ -80,7 +78,34 @@ func (c ReleaseDataClient) Fetch(ctx context.Context, request ReleaseDataRequest
 	if err := request.Validate(); err != nil || request.Product != c.Product {
 		return ReleaseDataResponse{}, fmt.Errorf(ErrFmtReleaseDataClient, core.ErrReleaseContract)
 	}
-	response, err := releaseDataPost(ctx, c, request)
+	if ctx == nil {
+		return ReleaseDataResponse{}, fmt.Errorf(ErrFmtReleaseDataClient, errors.Join(core.ErrReleaseContract, core.ErrNilContext))
+	}
+	idempotencyKey, err := request.HTTPIdempotencyKey()
+	if err != nil {
+		return ReleaseDataResponse{}, DeployHTTPError{Cause: err}
+	}
+	bearer, err := c.Token.BearerValue()
+	if err != nil {
+		return ReleaseDataResponse{}, err
+	}
+	requestContext, cancel := context.WithTimeout(ctx, ReleaseAPIHTTPBudget)
+	defer cancel()
+	exchangeRequest := exchange.Request[ReleaseDataRequest]{
+		Body:     &request,
+		Endpoint: c.Endpoint,
+		Headers: core.HTTPHeaders{Values: []core.HTTPHeader{{
+			Name: core.HTTPHeaderAuthorization, Value: bearer,
+		}}},
+		Semantics: core.HTTPRequestSemantics{
+			Method: core.HTTPMethodPost, Replay: core.HTTPReplayIdempotent, IdempotencyKey: idempotencyKey,
+		},
+		ExpectedStatus: core.HTTPStatusOK,
+	}
+	exchangeResponse, err := exchange.SendJSON[ReleaseDataRequest, ReleaseDataResponse](
+		requestContext, exchange.Client{HTTP: c.HTTP}, exchangeRequest, releaseAPIClientPolicy(),
+	)
+	response, err := deployExchangeResult(exchangeResponse, err)
 	if err != nil {
 		return ReleaseDataResponse{}, err
 	}
@@ -90,61 +115,7 @@ func (c ReleaseDataClient) Fetch(ctx context.Context, request ReleaseDataRequest
 	return response, nil
 }
 
-func releaseDataPost(ctx context.Context, client ReleaseDataClient, request ReleaseDataRequest) (ReleaseDataResponse, error) {
-	if ctx == nil {
-		return ReleaseDataResponse{}, fmt.Errorf(ErrFmtReleaseDataClient, errors.Join(core.ErrReleaseContract, core.ErrNilContext))
-	}
-	body, err := json.Marshal(request)
-	if err != nil {
-		return ReleaseDataResponse{}, DeployHTTPError{Cause: err}
-	}
-	requestContext, cancel := context.WithTimeout(ctx, ReleaseAPIHTTPBudget)
-	defer cancel()
-	httpRequest, err := http.NewRequestWithContext(requestContext, http.MethodPost, client.Endpoint.String(), bytes.NewReader(body))
-	if err != nil {
-		return ReleaseDataResponse{}, DeployHTTPError{Cause: err}
-	}
-	bearer, err := client.Token.BearerValue()
-	if err != nil {
-		return ReleaseDataResponse{}, err
-	}
-	httpRequest.Header.Set(core.HTTPHeaderAuthorization, bearer)
-	httpRequest.Header.Set(core.HTTPHeaderAccept, core.HTTPContentTypeJSON)
-	httpRequest.Header.Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
-	return executeReleaseDataRequest(client.HTTP, httpRequest)
-}
-
 var (
 	_ core.Validatable = ReleaseDataSource{}
 	_ core.Validatable = ReleaseDataClient{}
 )
-
-func executeReleaseDataRequest(client *http.Client, request *http.Request) (ReleaseDataResponse, error) {
-	boundedClient := *client
-	boundedClient.CheckRedirect = refuseReleaseDataRedirect
-	httpResponse, err := boundedClient.Do(request)
-	if err != nil {
-		return ReleaseDataResponse{}, DeployHTTPError{Cause: err}
-	}
-	return readReleaseDataResponse(httpResponse)
-}
-
-func refuseReleaseDataRedirect(_ *http.Request, _ []*http.Request) error {
-	return http.ErrUseLastResponse
-}
-
-func readReleaseDataResponse(httpResponse *http.Response) (ReleaseDataResponse, error) {
-	if httpResponse == nil || httpResponse.Body == nil {
-		return ReleaseDataResponse{}, DeployHTTPError{Cause: core.ErrReleaseContract}
-	}
-	defer func() { _ = httpResponse.Body.Close() }()
-	responseBody, err := io.ReadAll(io.LimitReader(httpResponse.Body, core.StrictJSONMaxBytes+1))
-	if err != nil || len(responseBody) == 0 || len(responseBody) > core.StrictJSONMaxBytes {
-		return ReleaseDataResponse{}, DeployHTTPError{StatusCode: httpResponse.StatusCode, Cause: core.ErrReleaseContract}
-	}
-	return decodeDeployHTTPResponse[ReleaseDataResponse](
-		httpResponse.StatusCode,
-		httpResponse.Header.Get(core.HTTPHeaderContentType),
-		responseBody,
-	)
-}

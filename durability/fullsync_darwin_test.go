@@ -14,8 +14,8 @@ func TestDarwinFullSyncFallbackClassifierHostileErrnoTable(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name string
 		err  error
+		name string
 		want bool
 	}{
 		{name: "p01_einval", err: syscall.EINVAL, want: true},
@@ -59,10 +59,10 @@ func TestRetryInterruptedFcntlExhaustsInterruptsAndPreservesTerminalErrno(t *tes
 	t.Parallel()
 
 	cases := []struct {
+		wantErr   error
 		name      string
 		sequence  []syscall.Errno
 		wantCalls int
-		wantErr   error
 	}{
 		{name: "immediate success", sequence: []syscall.Errno{0}, wantCalls: 1},
 		{name: "one interrupt then success", sequence: []syscall.Errno{syscall.EINTR, 0}, wantCalls: 2},

@@ -13,11 +13,11 @@ func TestMemoryAssessmentHostileBoundaryTable(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name      string
-		snapshot  MemorySnapshot
-		limit     MemoryLimit
-		wantState MemoryPressureState
 		wantError error
+		name      string
+		limit     MemoryLimit
+		snapshot  MemorySnapshot
+		wantState MemoryPressureState
 	}{
 		{name: "p01_zero_usage_healthy", snapshot: MemorySnapshot{}, limit: MemoryLimit{LimitBytes: 100, TriggerPercent: 90}, wantState: MemoryPressureHealthy},
 		{name: "p02_one_below", snapshot: MemorySnapshot{ManagedBytes: 89}, limit: MemoryLimit{LimitBytes: 100, TriggerPercent: 90}, wantState: MemoryPressureHealthy},

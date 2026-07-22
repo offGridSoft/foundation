@@ -1,7 +1,6 @@
 package peachfuzz
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +8,7 @@ import (
 	"time"
 
 	"github.com/offGridSoft/foundation/v2026/core"
+	"github.com/offGridSoft/foundation/v2026/exchange"
 	"github.com/offGridSoft/foundation/v2026/workloadidentity"
 )
 
@@ -171,7 +171,7 @@ func validSnapshotClient(t *testing.T, server *httptest.Server) SnapshotClient {
 func writeClientEnvelope[T core.APIBody](t *testing.T, w http.ResponseWriter, body T) {
 	t.Helper()
 	envelope := core.APIEnvelope[T]{Data: &body, RequestID: core.NewAPIRequestID("peachfuzz-client-test")}
-	if err := json.NewEncoder(w).Encode(envelope); err != nil {
-		t.Errorf("Encode() error = %v", err)
+	if err := exchange.WriteJSON(w, exchange.ServerResponse[T]{Status: core.HTTPStatusOK, Envelope: envelope}); err != nil {
+		t.Errorf("WriteJSON() error = %v", err)
 	}
 }
