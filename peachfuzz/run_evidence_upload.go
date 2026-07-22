@@ -29,7 +29,29 @@ const (
 // uint8 domain is valid, so callers cannot construct an out-of-range shard.
 type RunEvidenceDigestShard uint8
 
+func (s RunEvidenceDigestShard) IsValid() bool { return true }
+
 func (s RunEvidenceDigestShard) Validate() error { return nil }
+
+func (s RunEvidenceDigestShard) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.String())
+}
+
+func (s *RunEvidenceDigestShard) UnmarshalJSON(data []byte) error {
+	if s == nil {
+		return runEvidenceUploadError(ErrContract)
+	}
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return runEvidenceUploadError(err)
+	}
+	parsed, err := ParseRunEvidenceDigestShard(value)
+	if err != nil {
+		return err
+	}
+	*s = parsed
+	return nil
+}
 
 func (s RunEvidenceDigestShard) String() string {
 	const radix = 16
@@ -74,10 +96,14 @@ func (d RunEvidenceUploadDisposition) String() string {
 }
 
 func (d RunEvidenceUploadDisposition) Validate() error {
-	if d <= RunEvidenceUploadDispositionUnknown || d > RunEvidenceUploadDispositionPresent {
+	if !d.IsValid() {
 		return runEvidenceUploadError(ErrContract)
 	}
 	return nil
+}
+
+func (d RunEvidenceUploadDisposition) IsValid() bool {
+	return d > RunEvidenceUploadDispositionUnknown && d <= RunEvidenceUploadDispositionPresent
 }
 
 func (d RunEvidenceUploadDisposition) MarshalJSON() ([]byte, error) {

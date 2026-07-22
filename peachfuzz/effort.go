@@ -23,7 +23,11 @@ func NewEffortNanoseconds(value core.NanosecondsDuration) (EffortNanoseconds, er
 	if err := value.Validate(); err != nil {
 		return EffortNanoseconds{}, effortNanosecondsError(err)
 	}
-	return EffortNanoseconds{Low: uint64(value.Nanoseconds())}, nil
+	nanoseconds := value.Nanoseconds()
+	if nanoseconds < 0 {
+		return EffortNanoseconds{}, effortNanosecondsError(core.ErrNumericOverflow)
+	}
+	return EffortNanoseconds{Low: uint64(nanoseconds)}, nil
 }
 
 func NewEffortNanosecondsParts(high, low uint64) EffortNanoseconds {
@@ -57,7 +61,7 @@ func (e EffortNanoseconds) Decimal() string {
 		quotientHigh, remainderHigh := bits.Div64(0, high, 10)
 		quotientLow, remainder := bits.Div64(remainderHigh, low, 10)
 		index--
-		digits[index] = byte(remainder) + '0'
+		digits[index] = "0123456789"[remainder]
 		high, low = quotientHigh, quotientLow
 	}
 	return string(digits[index:])

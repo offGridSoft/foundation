@@ -14,6 +14,7 @@ const (
 	jsonFieldCPUNanos                 = "cpu_nanos"
 	jsonFieldEndUnixNanos             = "end_unix_nanos"
 	jsonFieldFuzzTarget               = "fuzz_target"
+	jsonFieldFuzzEvidence             = "fuzz_evidence"
 	jsonFieldMachine                  = "machine"
 	jsonFieldKnown                    = "known"
 	jsonFieldOutcome                  = "outcome"
@@ -29,24 +30,25 @@ const (
 // accounting atom: one machine seals one value under one globally unique
 // RunID, and no machine reports or mutates an aggregate.
 type RunEvidence struct {
-	Project                  ProjectID                `json:"project"`
 	PackagePath              PackageImportPath        `json:"package_path"`
 	FuzzTarget               FuzzTargetName           `json:"fuzz_target"`
 	Commit                   CommitSHA                `json:"commit"`
 	Machine                  MachineID                `json:"machine"`
 	RunID                    RunID                    `json:"run_id"`
+	Project                  ProjectID                `json:"project"`
+	FuzzEvidence             FuzzEvidence             `json:"fuzz_evidence"`
 	End                      core.UnixNanoTime        `json:"end_unix_nanos"`
+	Executions               ExecutionObservation     `json:"executions"`
 	Start                    core.UnixNanoTime        `json:"start_unix_nanos"`
 	CPU                      core.NanosecondsDuration `json:"cpu_nanos"`
-	Executions               ExecutionObservation     `json:"executions"`
 	CandidateSightings       uint32                   `json:"candidate_sightings"`
 	UniqueCandidatesRetained uint32                   `json:"unique_candidates_retained"`
-	Outcome                  RunOutcome               `json:"outcome"`
 	Schema                   core.SchemaID            `json:"schema"`
+	Outcome                  RunOutcome               `json:"outcome"`
 }
 
 func (e RunEvidence) Validate() error {
-	checks := []error{e.RunID.Validate(), e.Project.Validate(), e.PackagePath.Validate(), e.FuzzTarget.Validate(), e.Commit.Validate(), e.Machine.Validate(), e.Outcome.Validate(), e.Start.Validate(), e.End.Validate(), e.CPU.Validate(), e.Executions.Validate(), e.Schema.Validate()}
+	checks := []error{e.RunID.Validate(), e.Project.Validate(), e.PackagePath.Validate(), e.FuzzTarget.Validate(), e.Commit.Validate(), e.Machine.Validate(), e.Outcome.Validate(), e.Start.Validate(), e.End.Validate(), e.CPU.Validate(), e.Executions.Validate(), e.FuzzEvidence.Validate(), e.Schema.Validate()}
 	for _, err := range checks {
 		if err != nil {
 			return fmt.Errorf(ErrFmtRunEvidence, errors.Join(ErrContract, err))
@@ -84,6 +86,7 @@ func appendRunEvidenceJSON(dst []byte, e RunEvidence) ([]byte, error) {
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldEndUnixNanos, e.End)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCPUNanos, e.CPU)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldExecutions, e.Executions)
+	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldFuzzEvidence, e.FuzzEvidence)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldCandidateSightings, e.CandidateSightings)
 	dst, err = core.AppendJSONFieldAfterComma(dst, err, jsonFieldUniqueCandidatesRetained, e.UniqueCandidatesRetained)
 	if err != nil {

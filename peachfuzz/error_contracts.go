@@ -16,6 +16,8 @@ const (
 	ErrFmtIdentity                = "peachfuzz.%s: %w"
 	ErrFmtOutcome                 = "peachfuzz.RunOutcome: %w"
 	ErrFmtRunEvidence             = "peachfuzz.RunEvidence: %w"
+	ErrFmtFuzzSidecarRef          = "peachfuzz.FuzzSidecarRef: %w"
+	ErrFmtFuzzEvidence            = "peachfuzz.FuzzEvidence: %w"
 	ErrFmtSignedRunEvidence       = "peachfuzz.SignedRunEvidence: %w"
 	ErrFmtRunEvidenceUpload       = "peachfuzz.RunEvidenceUpload: %w"
 	ErrFmtMachineEvidenceIdentity = "peachfuzz.MachineEvidenceIdentity: %w"

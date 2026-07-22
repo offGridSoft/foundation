@@ -400,5 +400,9 @@ func validRunEvidence(t *testing.T) RunEvidence {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return RunEvidence{RunID: runID, Project: project, PackagePath: packagePath, FuzzTarget: fuzz, Commit: commit, Machine: machine, Outcome: RunOutcomeCompleted, Start: foundationcore.UnixNanoTimeFromInt64(1), End: foundationcore.UnixNanoTimeFromInt64(2), CPU: foundationcore.NanosecondsDurationFromInt64(1), Executions: ExecutionObservation{Count: 3, Known: true}, Schema: foundationcore.SchemaPeachfuzzRunEvidence}
+	evidence, err := NewEmptyFuzzEvidence()
+	if err != nil {
+		t.Fatalf("NewEmptyFuzzEvidence() error = %v", err)
+	}
+	return RunEvidence{RunID: runID, Project: project, PackagePath: packagePath, FuzzTarget: fuzz, Commit: commit, Machine: machine, Outcome: RunOutcomeCompleted, Start: foundationcore.UnixNanoTimeFromInt64(1), End: foundationcore.UnixNanoTimeFromInt64(2), CPU: foundationcore.NanosecondsDurationFromInt64(1), Executions: ExecutionObservation{Count: 3, Known: true}, FuzzEvidence: evidence, Schema: foundationcore.SchemaPeachfuzzRunEvidence}
 }

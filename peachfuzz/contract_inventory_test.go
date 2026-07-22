@@ -12,6 +12,14 @@ var (
 	_ foundationcore.Validatable   = RunOutcomeUnknown
 	_ foundationcore.Validatable   = RunEvidence{}
 	_ foundationcore.Validatable   = ExecutionObservation{}
+	_ foundationcore.Validatable   = FuzzSidecarKindUnknown
+	_ foundationcore.Validatable   = FuzzSidecarStateUnknown
+	_ foundationcore.Validatable   = FuzzSidecarRef{}
+	_ foundationcore.Validatable   = FuzzEvidence{}
+	_ foundationcore.Validatable   = FuzzArtifactKindUnknown
+	_ foundationcore.Validatable   = FuzzArtifactIndexStateUnknown
+	_ foundationcore.Validatable   = FuzzArtifact{}
+	_ foundationcore.Validatable   = FuzzArtifactIndex{}
 	_ foundationcore.CanonicalBody = RunEvidence{}
 	_ foundationcore.Validatable   = SignedRunEvidence{}
 	_ foundationcore.Validatable   = MachineEvidenceIdentity{}

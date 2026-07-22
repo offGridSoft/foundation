@@ -4,13 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
 const (
-	NanosPerCoreSecond = int64(time.Second)
+	NanosPerCoreSecond = 1_000_000_000
 	NanosPerCoreMinute = 60 * NanosPerCoreSecond
 	NanosPerCoreHour   = 60 * NanosPerCoreMinute
 	NanosPerCoreDay    = 24 * NanosPerCoreHour
@@ -20,8 +19,8 @@ const (
 	CoreHoursFormat    = "%s.%01d core-hours"
 	CoreMinutesFormat  = "%s.%01d core-minutes"
 	CoreSecondsFormat  = "%s.%01d core-seconds"
-	CoreYearsScale     = int64(100)
-	CoreSubYearScale   = int64(10)
+	CoreYearsScale     = 100
+	CoreSubYearScale   = 10
 )
 
 type effortDisplayUnit uint8
@@ -185,13 +184,13 @@ func HumanizeEffort(effort EffortNanoseconds) (string, error) {
 		return "", fmt.Errorf(ErrFmtProjectSnapshot, errors.Join(ErrContract, err))
 	}
 	switch {
-	case effort.High != 0 || effort.Low >= uint64(NanosPerCoreYear):
+	case effort.High != 0 || effort.Low >= NanosPerCoreYear:
 		return formatTruncatedEffort(effort, effortDisplayUnitYears)
-	case effort.Low >= uint64(NanosPerCoreDay):
+	case effort.Low >= NanosPerCoreDay:
 		return formatTruncatedEffort(effort, effortDisplayUnitDays)
-	case effort.Low >= uint64(NanosPerCoreHour):
+	case effort.Low >= NanosPerCoreHour:
 		return formatTruncatedEffort(effort, effortDisplayUnitHours)
-	case effort.Low >= uint64(NanosPerCoreMinute):
+	case effort.Low >= NanosPerCoreMinute:
 		return formatTruncatedEffort(effort, effortDisplayUnitMinutes)
 	default:
 		return formatTruncatedEffort(effort, effortDisplayUnitSeconds)
@@ -203,15 +202,15 @@ func formatTruncatedEffort(effort EffortNanoseconds, unit effortDisplayUnit) (st
 	if err != nil {
 		return "", err
 	}
-	whole, remainder, err := effort.quotientRemainder(uint64(divisor))
+	whole, remainder, err := effort.quotientRemainder(divisor)
 	if err != nil {
 		return "", err
 	}
-	fraction := remainder * uint64(scale) / uint64(divisor)
+	fraction := remainder * scale / divisor
 	return fmt.Sprintf(format, whole.Decimal(), fraction), nil
 }
 
-func (u effortDisplayUnit) contract() (int64, int64, string, error) {
+func (u effortDisplayUnit) contract() (uint64, uint64, string, error) {
 	switch u {
 	case effortDisplayUnitYears:
 		return NanosPerCoreYear, CoreYearsScale, CoreYearsFormat, nil

@@ -102,10 +102,10 @@ const (
 	SchemaTokenCustodyDownloadGrant               = ProductTokenWitness + "-custody-download-grant-" + ContractVersionToken
 	SchemaTokenReleaseDataRequest                 = "offgrid-release-data-request-" + ContractVersionToken
 	SchemaTokenReleaseDataResponse                = "offgrid-release-data-response-" + ContractVersionToken
-	SchemaTokenPeachfuzzRunEvidence               = ProductTokenPeachfuzz + "-run-evidence-" + ContractVersionToken
-	SchemaTokenPeachfuzzRunEvidenceUploadRequest  = ProductTokenPeachfuzz + "-run-evidence-upload-request-" + ContractVersionToken
-	SchemaTokenPeachfuzzRunEvidenceUploadGrant    = ProductTokenPeachfuzz + "-run-evidence-upload-grant-" + ContractVersionToken
-	SchemaTokenPeachfuzzRunEvidenceUploadResponse = ProductTokenPeachfuzz + "-run-evidence-upload-response-" + ContractVersionToken
+	SchemaTokenPeachfuzzRunEvidence               = ProductTokenPeachfuzz + "-" + PeachfuzzRunEvidenceProtocolName + "-" + ContractVersionToken
+	SchemaTokenPeachfuzzRunEvidenceUploadRequest  = ProductTokenPeachfuzz + "-" + PeachfuzzRunEvidenceProtocolName + "-upload-request-" + ContractVersionToken
+	SchemaTokenPeachfuzzRunEvidenceUploadGrant    = ProductTokenPeachfuzz + "-" + PeachfuzzRunEvidenceProtocolName + "-upload-grant-" + ContractVersionToken
+	SchemaTokenPeachfuzzRunEvidenceUploadResponse = ProductTokenPeachfuzz + "-" + PeachfuzzRunEvidenceProtocolName + "-upload-response-" + ContractVersionToken
 )
 
 func schemaNames() [SchemaPeachfuzzRunEvidenceUploadResponse + 1]string {
