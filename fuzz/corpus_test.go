@@ -1,4 +1,4 @@
-package peachfuzz
+package fuzz
 
 import (
 	"encoding/json"
@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/offGridSoft/foundation/v2026/core"
 )
 
 func TestFuzzCorpusEntryNameBoundaryTable(t *testing.T) {
@@ -40,7 +42,7 @@ func TestFuzzCorpusEntryNameBoundaryTable(t *testing.T) {
 				t.Fatalf("ParseFuzzCorpusEntryName(%q) error = %v, wantErr %t", tc.value, err, tc.wantErr)
 			}
 			if tc.wantErr {
-				if !errors.Is(err, ErrContract) {
+				if !errors.Is(err, core.ErrFuzzContract) {
 					t.Fatalf("ParseFuzzCorpusEntryName(%q) error = %v, want errors.Is ErrContract", tc.value, err)
 				}
 				return
@@ -85,7 +87,7 @@ func TestFuzzCorpusEntryNameRejectsMalformedJSONAndNilReceiver(t *testing.T) {
 				if !errors.As(err, &syntaxError) {
 					t.Fatalf("json.Unmarshal(%s) error = %v, want json.SyntaxError", tc.data, err)
 				}
-			} else if !errors.Is(err, ErrContract) {
+			} else if !errors.Is(err, core.ErrFuzzContract) {
 				t.Fatalf("json.Unmarshal(%s) error = %v, want errors.Is ErrContract", tc.data, err)
 			}
 			if candidate != original {
@@ -94,10 +96,10 @@ func TestFuzzCorpusEntryNameRejectsMalformedJSONAndNilReceiver(t *testing.T) {
 		})
 	}
 	var target *FuzzCorpusEntryName
-	if err := target.UnmarshalJSON([]byte(`"0123abcd"`)); !errors.Is(err, ErrContract) {
+	if err := target.UnmarshalJSON([]byte(`"0123abcd"`)); !errors.Is(err, core.ErrFuzzContract) {
 		t.Fatalf("nil UnmarshalJSON() error = %v, want errors.Is ErrContract", err)
 	}
-	if _, err := json.Marshal(FuzzCorpusEntryName{}); !errors.Is(err, ErrContract) {
+	if _, err := json.Marshal(FuzzCorpusEntryName{}); !errors.Is(err, core.ErrFuzzContract) {
 		t.Fatalf("json.Marshal(zero) error = %v, want errors.Is ErrContract", err)
 	}
 }
@@ -106,7 +108,7 @@ func TestFuzzCorpusSelectionRetainsCanonicalBoundedPrefix(t *testing.T) {
 	t.Parallel()
 
 	var selection FuzzCorpusSelection
-	for position := FuzzArtifactIndexMaxEntries + 1; position >= 0; position-- {
+	for position := CorpusSelectionMaxEntries + 1; position >= 0; position-- {
 		name, err := ParseFuzzCorpusEntryName(fmt.Sprintf("%08x", position))
 		if err != nil {
 			t.Fatalf("ParseFuzzCorpusEntryName(%d) error = %v", position, err)
@@ -126,8 +128,8 @@ func TestFuzzCorpusSelectionRetainsCanonicalBoundedPrefix(t *testing.T) {
 	if err := selection.Validate(); err != nil {
 		t.Fatalf("selection.Validate() error = %v", err)
 	}
-	if len(entries) != FuzzArtifactIndexMaxEntries || entries[0].String() != "00000000" || entries[len(entries)-1].String() != "0000007f" {
-		t.Fatalf("selection = %d entries %s..%s, want %d entries 00000000..0000007f", len(entries), entries[0], entries[len(entries)-1], FuzzArtifactIndexMaxEntries)
+	if len(entries) != CorpusSelectionMaxEntries || entries[0].String() != "00000000" || entries[len(entries)-1].String() != "0000007f" {
+		t.Fatalf("selection = %d entries %s..%s, want %d entries 00000000..0000007f", len(entries), entries[0], entries[len(entries)-1], CorpusSelectionMaxEntries)
 	}
 	if selection.Dropped() != 2 {
 		t.Fatalf("selection.Dropped() = %d, want two over-bound candidates", selection.Dropped())
@@ -190,7 +192,7 @@ func TestFuzzCorpusSelectionRejectsHostileStateTable(t *testing.T) {
 		name      string
 		selection FuzzCorpusSelection
 	}{
-		{name: "entry above bound", selection: FuzzCorpusSelection{entries: corpusNames(t, FuzzArtifactIndexMaxEntries+1)}},
+		{name: "entry above bound", selection: FuzzCorpusSelection{entries: corpusNames(t, CorpusSelectionMaxEntries+1)}},
 		{name: "zero entry", selection: FuzzCorpusSelection{entries: []FuzzCorpusEntryName{{}}}},
 		{name: "duplicate entry", selection: FuzzCorpusSelection{entries: []FuzzCorpusEntryName{valid[0], valid[0]}}},
 		{name: "descending entries", selection: FuzzCorpusSelection{entries: []FuzzCorpusEntryName{valid[1], valid[0]}}},
@@ -198,18 +200,18 @@ func TestFuzzCorpusSelectionRejectsHostileStateTable(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if err := tc.selection.Validate(); !errors.Is(err, ErrContract) {
+			if err := tc.selection.Validate(); !errors.Is(err, core.ErrFuzzContract) {
 				t.Fatalf("selection.Validate() error = %v, want errors.Is ErrContract", err)
 			}
 		})
 	}
 
 	var nilSelection *FuzzCorpusSelection
-	if err := nilSelection.Observe(valid[0]); !errors.Is(err, ErrContract) {
+	if err := nilSelection.Observe(valid[0]); !errors.Is(err, core.ErrFuzzContract) {
 		t.Fatalf("nil Observe() error = %v, want errors.Is ErrContract", err)
 	}
 	var selection FuzzCorpusSelection
-	if err := selection.Observe(FuzzCorpusEntryName{}); !errors.Is(err, ErrContract) {
+	if err := selection.Observe(FuzzCorpusEntryName{}); !errors.Is(err, core.ErrFuzzContract) {
 		t.Fatalf("Observe(zero) error = %v, want errors.Is ErrContract", err)
 	}
 }
@@ -218,12 +220,12 @@ func TestFuzzCorpusSelectionDuplicateAndSaturationRatchets(t *testing.T) {
 	t.Parallel()
 
 	var selection FuzzCorpusSelection
-	for _, name := range corpusNames(t, FuzzArtifactIndexMaxEntries) {
+	for _, name := range corpusNames(t, CorpusSelectionMaxEntries) {
 		if err := selection.Observe(name); err != nil {
 			t.Fatalf("Observe(%s) error = %v", name, err)
 		}
 	}
-	retained := selection.Entries()[FuzzArtifactIndexMaxEntries/2]
+	retained := selection.Entries()[CorpusSelectionMaxEntries/2]
 	if err := selection.Observe(retained); err != nil {
 		t.Fatalf("Observe(retained duplicate) error = %v", err)
 	}
@@ -307,9 +309,9 @@ func TestSelectFuzzCorpusDirectoryReaderFailureMatrix(t *testing.T) {
 		wantErr     error
 		wantEntries int
 	}{
-		{name: "nil reader", wantErr: ErrContract},
-		{name: "empty batch without terminal error", reader: &fuzzCorpusDirectoryReader{steps: []fuzzCorpusReadStep{{}}}, wantErr: ErrContract},
-		{name: "nil directory entry", reader: &fuzzCorpusDirectoryReader{steps: []fuzzCorpusReadStep{{entries: []fs.DirEntry{nil}, err: io.EOF}}}, wantErr: ErrContract},
+		{name: "nil reader", wantErr: core.ErrFuzzContract},
+		{name: "empty batch without terminal error", reader: &fuzzCorpusDirectoryReader{steps: []fuzzCorpusReadStep{{}}}, wantErr: core.ErrFuzzContract},
+		{name: "nil directory entry", reader: &fuzzCorpusDirectoryReader{steps: []fuzzCorpusReadStep{{entries: []fs.DirEntry{nil}, err: io.EOF}}}, wantErr: core.ErrFuzzContract},
 		{name: "partial entries preserve source error", reader: &fuzzCorpusDirectoryReader{steps: []fuzzCorpusReadStep{{entries: []fs.DirEntry{fuzzCorpusDirEntry{name: "00000000"}}, err: injected}}}, wantErr: injected, wantEntries: 1},
 	}
 	for _, tc := range tests {
@@ -329,7 +331,7 @@ func TestSelectFuzzCorpusDirectoryReaderFailureMatrix(t *testing.T) {
 func TestSelectFuzzCorpusDirectoryCanonicalBoundAcrossBatches(t *testing.T) {
 	t.Parallel()
 
-	entries := make([]fs.DirEntry, FuzzArtifactIndexMaxEntries+1)
+	entries := make([]fs.DirEntry, CorpusSelectionMaxEntries+1)
 	for position := range entries {
 		entries[position] = fuzzCorpusDirEntry{name: fmt.Sprintf("%08x", len(entries)-position-1)}
 	}
@@ -342,8 +344,8 @@ func TestSelectFuzzCorpusDirectoryCanonicalBoundAcrossBatches(t *testing.T) {
 		t.Fatalf("SelectFuzzCorpusDirectory() error = %v", err)
 	}
 	got := selection.Entries()
-	if len(got) != FuzzArtifactIndexMaxEntries || got[0].String() != "00000000" || got[len(got)-1].String() != "0000007f" || selection.Dropped() != 1 {
-		t.Fatalf("selection = (%d entries %s..%s, dropped %d), want canonical first %d and one drop", len(got), got[0], got[len(got)-1], selection.Dropped(), FuzzArtifactIndexMaxEntries)
+	if len(got) != CorpusSelectionMaxEntries || got[0].String() != "00000000" || got[len(got)-1].String() != "0000007f" || selection.Dropped() != 1 {
+		t.Fatalf("selection = (%d entries %s..%s, dropped %d), want canonical first %d and one drop", len(got), got[0], got[len(got)-1], selection.Dropped(), CorpusSelectionMaxEntries)
 	}
 }
 
@@ -368,7 +370,7 @@ func (r *fuzzCorpusDirectoryReader) ReadDir(_ int) ([]fs.DirEntry, error) {
 
 func (r *fuzzCorpusDirectoryReader) Read(_ []byte) (int, error) { return 0, io.EOF }
 func (r *fuzzCorpusDirectoryReader) Close() error               { return nil }
-func (r *fuzzCorpusDirectoryReader) Stat() (fs.FileInfo, error) { return nil, ErrContract }
+func (r *fuzzCorpusDirectoryReader) Stat() (fs.FileInfo, error) { return nil, core.ErrFuzzContract }
 
 type fuzzCorpusDirEntry struct {
 	name string
@@ -378,4 +380,4 @@ type fuzzCorpusDirEntry struct {
 func (e fuzzCorpusDirEntry) Name() string               { return e.name }
 func (e fuzzCorpusDirEntry) IsDir() bool                { return e.mode.IsDir() }
 func (e fuzzCorpusDirEntry) Type() fs.FileMode          { return e.mode.Type() }
-func (e fuzzCorpusDirEntry) Info() (fs.FileInfo, error) { return nil, ErrContract }
+func (e fuzzCorpusDirEntry) Info() (fs.FileInfo, error) { return nil, core.ErrFuzzContract }

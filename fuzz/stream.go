@@ -1,4 +1,4 @@
-package peachfuzz
+package fuzz
 
 // GoFuzzDataDirectoryName is the Go toolchain's shared directory token for
 // both persisted testdata fuzz corpora and entries beneath GOCACHE.

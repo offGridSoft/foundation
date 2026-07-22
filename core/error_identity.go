@@ -7,6 +7,7 @@ import (
 
 var (
 	ErrFoundationContract              = errors.New("foundation contract violation")
+	ErrFuzzContract                    = fmt.Errorf("fuzz contract violation: %w", ErrFoundationContract)
 	ErrLicenseContract                 = fmt.Errorf("license contract violation: %w", ErrFoundationContract)
 	ErrCheckInNonce                    = fmt.Errorf("check-in nonce contract violation: %w", ErrLicenseContract)
 	ErrLeaseGeneration                 = fmt.Errorf("lease generation contract violation: %w", ErrLicenseContract)

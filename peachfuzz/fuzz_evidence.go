@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/offGridSoft/foundation/v2026/core"
+	foundationfuzz "github.com/offGridSoft/foundation/v2026/fuzz"
 )
 
 // FuzzSidecarKind is the closed identity of one fuzz-evidence sidecar. The
@@ -323,7 +324,6 @@ const (
 const (
 	fuzzArtifactKindNameCorpus  = "fuzz-corpus"
 	fuzzArtifactKindNameCrasher = "fuzz-crasher"
-	FuzzArtifactIndexMaxEntries = 128
 )
 
 func (k FuzzArtifactKind) String() string {
@@ -500,7 +500,7 @@ func (i FuzzArtifactIndex) headerValid() bool {
 	for range i.Entries {
 		count++
 	}
-	bounded := len(i.Entries) <= FuzzArtifactIndexMaxEntries && i.Count == count
+	bounded := len(i.Entries) <= foundationfuzz.CorpusSelectionMaxEntries && i.Count == count
 	complete := i.State != FuzzArtifactIndexStateComplete || i.Dropped == 0
 	partial := i.State != FuzzArtifactIndexStatePartial || i.Dropped != 0
 	return bounded && complete && partial

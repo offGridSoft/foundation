@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	foundationcore "github.com/offGridSoft/foundation/v2026/core"
+	foundationfuzz "github.com/offGridSoft/foundation/v2026/fuzz"
 )
 
 func TestFuzzSidecarRefHostileStateTable(t *testing.T) {
@@ -155,7 +156,7 @@ func TestFuzzArtifactIndexRejectsHostileContradictions(t *testing.T) {
 
 func TestFuzzArtifactIndexPinsEntryAndArithmeticBounds(t *testing.T) {
 	t.Parallel()
-	entries := make([]FuzzArtifact, FuzzArtifactIndexMaxEntries+1)
+	entries := make([]FuzzArtifact, foundationfuzz.CorpusSelectionMaxEntries+1)
 	for position := range entries {
 		entries[position] = FuzzArtifact{Digest: foundationcore.NewSHA256Hex(sha256.Sum256([]byte{byte(position), byte(position >> 8)})), Bytes: 1}
 	}

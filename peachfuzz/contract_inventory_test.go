@@ -20,9 +20,6 @@ var (
 	_ foundationcore.Validatable   = FuzzArtifactIndexStateUnknown
 	_ foundationcore.Validatable   = FuzzArtifact{}
 	_ foundationcore.Validatable   = FuzzArtifactIndex{}
-	_ foundationcore.Validatable   = FuzzCorpusEntryName{}
-	_ foundationcore.Validatable   = FuzzCorpusSelection{}
-	_ foundationcore.Validatable   = FuzzCorpusDirectorySelection{}
 	_ foundationcore.CanonicalBody = RunEvidence{}
 	_ foundationcore.Validatable   = SignedRunEvidence{}
 	_ foundationcore.Validatable   = MachineEvidenceIdentity{}

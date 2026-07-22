@@ -1,4 +1,4 @@
-package peachfuzz
+package fuzz
 
 import (
 	"encoding/json"
@@ -8,12 +8,16 @@ import (
 	"io/fs"
 	"math"
 	"sort"
+
+	"github.com/offGridSoft/foundation/v2026/core"
 )
 
 const (
 	FuzzCorpusEntryNameMinBytes      = 8
 	FuzzCorpusEntryNameMaxBytes      = 64
 	FuzzCorpusDirectoryReadBatchSize = 64
+	CorpusSelectionMaxEntries        = 128
+	ErrFmtContract                   = "fuzz: %w"
 )
 
 // FuzzCorpusEntryName is one Go-toolchain corpus filename. Go names corpus
@@ -22,11 +26,11 @@ type FuzzCorpusEntryName struct{ value string }
 
 func ParseFuzzCorpusEntryName(value string) (FuzzCorpusEntryName, error) {
 	if len(value) < FuzzCorpusEntryNameMinBytes || len(value) > FuzzCorpusEntryNameMaxBytes {
-		return FuzzCorpusEntryName{}, fmt.Errorf(ErrFmtFuzzEvidence, ErrContract)
+		return FuzzCorpusEntryName{}, fmt.Errorf(ErrFmtContract, core.ErrFuzzContract)
 	}
 	for _, item := range []byte(value) {
 		if (item < '0' || item > '9') && (item < 'a' || item > 'f') {
-			return FuzzCorpusEntryName{}, fmt.Errorf(ErrFmtFuzzEvidence, ErrContract)
+			return FuzzCorpusEntryName{}, fmt.Errorf(ErrFmtContract, core.ErrFuzzContract)
 		}
 	}
 	return FuzzCorpusEntryName{value: value}, nil
@@ -48,11 +52,11 @@ func (n FuzzCorpusEntryName) MarshalJSON() ([]byte, error) {
 
 func (n *FuzzCorpusEntryName) UnmarshalJSON(data []byte) error {
 	if n == nil {
-		return fmt.Errorf(ErrFmtFuzzEvidence, ErrContract)
+		return fmt.Errorf(ErrFmtContract, core.ErrFuzzContract)
 	}
 	var value string
 	if err := json.Unmarshal(data, &value); err != nil {
-		return fmt.Errorf(ErrFmtFuzzEvidence, errors.Join(ErrContract, err))
+		return fmt.Errorf(ErrFmtContract, errors.Join(core.ErrFuzzContract, err))
 	}
 	parsed, err := ParseFuzzCorpusEntryName(value)
 	if err != nil {
@@ -72,7 +76,7 @@ type FuzzCorpusSelection struct {
 
 func (s *FuzzCorpusSelection) Observe(name FuzzCorpusEntryName) error {
 	if s == nil {
-		return fmt.Errorf(ErrFmtFuzzEvidence, ErrContract)
+		return fmt.Errorf(ErrFmtContract, core.ErrFuzzContract)
 	}
 	if err := name.Validate(); err != nil {
 		return err
@@ -83,7 +87,7 @@ func (s *FuzzCorpusSelection) Observe(name FuzzCorpusEntryName) error {
 	if position < len(s.entries) && s.entries[position] == name {
 		return nil
 	}
-	if len(s.entries) < FuzzArtifactIndexMaxEntries {
+	if len(s.entries) < CorpusSelectionMaxEntries {
 		s.entries = append(s.entries, FuzzCorpusEntryName{})
 		copy(s.entries[position+1:], s.entries[position:])
 		s.entries[position] = name
@@ -107,15 +111,15 @@ func (s FuzzCorpusSelection) Entries() []FuzzCorpusEntryName {
 func (s FuzzCorpusSelection) Dropped() uint64 { return s.dropped }
 
 func (s FuzzCorpusSelection) Validate() error {
-	if len(s.entries) > FuzzArtifactIndexMaxEntries {
-		return fmt.Errorf(ErrFmtFuzzEvidence, ErrContract)
+	if len(s.entries) > CorpusSelectionMaxEntries {
+		return fmt.Errorf(ErrFmtContract, core.ErrFuzzContract)
 	}
 	for position, entry := range s.entries {
 		if err := entry.Validate(); err != nil {
 			return err
 		}
 		if position != 0 && s.entries[position-1].String() >= entry.String() {
-			return fmt.Errorf(ErrFmtFuzzEvidence, ErrContract)
+			return fmt.Errorf(ErrFmtContract, core.ErrFuzzContract)
 		}
 	}
 	return nil
@@ -151,12 +155,12 @@ func (s FuzzCorpusDirectorySelection) Validate() error {
 func SelectFuzzCorpusDirectory(directory fs.ReadDirFile) (FuzzCorpusDirectorySelection, error) {
 	var result FuzzCorpusDirectorySelection
 	if directory == nil {
-		return result, fmt.Errorf(ErrFmtFuzzEvidence, ErrContract)
+		return result, fmt.Errorf(ErrFmtContract, core.ErrFuzzContract)
 	}
 	for {
 		entries, readErr := directory.ReadDir(FuzzCorpusDirectoryReadBatchSize)
 		if len(entries) == 0 && readErr == nil {
-			return result, fmt.Errorf(ErrFmtFuzzEvidence, ErrContract)
+			return result, fmt.Errorf(ErrFmtContract, core.ErrFuzzContract)
 		}
 		if err := result.observe(entries); err != nil {
 			return result, err
@@ -173,7 +177,7 @@ func SelectFuzzCorpusDirectory(directory fs.ReadDirFile) (FuzzCorpusDirectorySel
 func (s *FuzzCorpusDirectorySelection) observe(entries []fs.DirEntry) error {
 	for _, entry := range entries {
 		if entry == nil {
-			return fmt.Errorf(ErrFmtFuzzEvidence, ErrContract)
+			return fmt.Errorf(ErrFmtContract, core.ErrFuzzContract)
 		}
 		name, parseErr := ParseFuzzCorpusEntryName(entry.Name())
 		if parseErr != nil || entry.IsDir() {

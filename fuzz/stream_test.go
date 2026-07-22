@@ -1,4 +1,4 @@
-package peachfuzz
+package fuzz
 
 import "testing"
 
