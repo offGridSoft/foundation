@@ -108,7 +108,7 @@ func TestFuzzCorpusSelectionRetainsCanonicalBoundedPrefix(t *testing.T) {
 	t.Parallel()
 
 	var selection FuzzCorpusSelection
-	for position := CorpusSelectionMaxEntries + 1; position >= 0; position-- {
+	for position := ArtifactIndexMaxEntries + 1; position >= 0; position-- {
 		name, err := ParseFuzzCorpusEntryName(fmt.Sprintf("%08x", position))
 		if err != nil {
 			t.Fatalf("ParseFuzzCorpusEntryName(%d) error = %v", position, err)
@@ -128,8 +128,8 @@ func TestFuzzCorpusSelectionRetainsCanonicalBoundedPrefix(t *testing.T) {
 	if err := selection.Validate(); err != nil {
 		t.Fatalf("selection.Validate() error = %v", err)
 	}
-	if len(entries) != CorpusSelectionMaxEntries || entries[0].String() != "00000000" || entries[len(entries)-1].String() != "0000007f" {
-		t.Fatalf("selection = %d entries %s..%s, want %d entries 00000000..0000007f", len(entries), entries[0], entries[len(entries)-1], CorpusSelectionMaxEntries)
+	if len(entries) != ArtifactIndexMaxEntries || entries[0].String() != "00000000" || entries[len(entries)-1].String() != "0000007f" {
+		t.Fatalf("selection = %d entries %s..%s, want %d entries 00000000..0000007f", len(entries), entries[0], entries[len(entries)-1], ArtifactIndexMaxEntries)
 	}
 	if selection.Dropped() != 2 {
 		t.Fatalf("selection.Dropped() = %d, want two over-bound candidates", selection.Dropped())
@@ -192,7 +192,7 @@ func TestFuzzCorpusSelectionRejectsHostileStateTable(t *testing.T) {
 		name      string
 		selection FuzzCorpusSelection
 	}{
-		{name: "entry above bound", selection: FuzzCorpusSelection{entries: corpusNames(t, CorpusSelectionMaxEntries+1)}},
+		{name: "entry above bound", selection: FuzzCorpusSelection{entries: corpusNames(t, ArtifactIndexMaxEntries+1)}},
 		{name: "zero entry", selection: FuzzCorpusSelection{entries: []FuzzCorpusEntryName{{}}}},
 		{name: "duplicate entry", selection: FuzzCorpusSelection{entries: []FuzzCorpusEntryName{valid[0], valid[0]}}},
 		{name: "descending entries", selection: FuzzCorpusSelection{entries: []FuzzCorpusEntryName{valid[1], valid[0]}}},
@@ -220,12 +220,12 @@ func TestFuzzCorpusSelectionDuplicateAndSaturationRatchets(t *testing.T) {
 	t.Parallel()
 
 	var selection FuzzCorpusSelection
-	for _, name := range corpusNames(t, CorpusSelectionMaxEntries) {
+	for _, name := range corpusNames(t, ArtifactIndexMaxEntries) {
 		if err := selection.Observe(name); err != nil {
 			t.Fatalf("Observe(%s) error = %v", name, err)
 		}
 	}
-	retained := selection.Entries()[CorpusSelectionMaxEntries/2]
+	retained := selection.Entries()[ArtifactIndexMaxEntries/2]
 	if err := selection.Observe(retained); err != nil {
 		t.Fatalf("Observe(retained duplicate) error = %v", err)
 	}
@@ -331,7 +331,7 @@ func TestSelectFuzzCorpusDirectoryReaderFailureMatrix(t *testing.T) {
 func TestSelectFuzzCorpusDirectoryCanonicalBoundAcrossBatches(t *testing.T) {
 	t.Parallel()
 
-	entries := make([]fs.DirEntry, CorpusSelectionMaxEntries+1)
+	entries := make([]fs.DirEntry, ArtifactIndexMaxEntries+1)
 	for position := range entries {
 		entries[position] = fuzzCorpusDirEntry{name: fmt.Sprintf("%08x", len(entries)-position-1)}
 	}
@@ -344,8 +344,8 @@ func TestSelectFuzzCorpusDirectoryCanonicalBoundAcrossBatches(t *testing.T) {
 		t.Fatalf("SelectFuzzCorpusDirectory() error = %v", err)
 	}
 	got := selection.Entries()
-	if len(got) != CorpusSelectionMaxEntries || got[0].String() != "00000000" || got[len(got)-1].String() != "0000007f" || selection.Dropped() != 1 {
-		t.Fatalf("selection = (%d entries %s..%s, dropped %d), want canonical first %d and one drop", len(got), got[0], got[len(got)-1], selection.Dropped(), CorpusSelectionMaxEntries)
+	if len(got) != ArtifactIndexMaxEntries || got[0].String() != "00000000" || got[len(got)-1].String() != "0000007f" || selection.Dropped() != 1 {
+		t.Fatalf("selection = (%d entries %s..%s, dropped %d), want canonical first %d and one drop", len(got), got[0], got[len(got)-1], selection.Dropped(), ArtifactIndexMaxEntries)
 	}
 }
 

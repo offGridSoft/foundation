@@ -16,7 +16,7 @@ const (
 	FuzzCorpusEntryNameMinBytes      = 8
 	FuzzCorpusEntryNameMaxBytes      = 64
 	FuzzCorpusDirectoryReadBatchSize = 64
-	CorpusSelectionMaxEntries        = 128
+	ArtifactIndexMaxEntries          = 128
 	ErrFmtContract                   = "fuzz: %w"
 )
 
@@ -87,7 +87,7 @@ func (s *FuzzCorpusSelection) Observe(name FuzzCorpusEntryName) error {
 	if position < len(s.entries) && s.entries[position] == name {
 		return nil
 	}
-	if len(s.entries) < CorpusSelectionMaxEntries {
+	if len(s.entries) < ArtifactIndexMaxEntries {
 		s.entries = append(s.entries, FuzzCorpusEntryName{})
 		copy(s.entries[position+1:], s.entries[position:])
 		s.entries[position] = name
@@ -111,7 +111,7 @@ func (s FuzzCorpusSelection) Entries() []FuzzCorpusEntryName {
 func (s FuzzCorpusSelection) Dropped() uint64 { return s.dropped }
 
 func (s FuzzCorpusSelection) Validate() error {
-	if len(s.entries) > CorpusSelectionMaxEntries {
+	if len(s.entries) > ArtifactIndexMaxEntries {
 		return fmt.Errorf(ErrFmtContract, core.ErrFuzzContract)
 	}
 	for position, entry := range s.entries {

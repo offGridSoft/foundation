@@ -1,6 +1,9 @@
 package peachfuzz
 
-import foundationcore "github.com/offGridSoft/foundation/v2026/core"
+import (
+	foundationcore "github.com/offGridSoft/foundation/v2026/core"
+	foundationfuzz "github.com/offGridSoft/foundation/v2026/fuzz"
+)
 
 var (
 	_ foundationcore.Validatable   = ProjectID{}
@@ -16,7 +19,7 @@ var (
 	_ foundationcore.Validatable   = FuzzSidecarStateUnknown
 	_ foundationcore.Validatable   = FuzzSidecarRef{}
 	_ foundationcore.Validatable   = FuzzEvidence{}
-	_ foundationcore.Validatable   = FuzzArtifactKindUnknown
+	_ foundationcore.Validatable   = foundationfuzz.ArtifactKindUnknown
 	_ foundationcore.Validatable   = FuzzArtifactIndexStateUnknown
 	_ foundationcore.Validatable   = FuzzArtifact{}
 	_ foundationcore.Validatable   = FuzzArtifactIndex{}

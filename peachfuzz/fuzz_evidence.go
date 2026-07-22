@@ -313,64 +313,6 @@ type FuzzEvidence struct {
 	CrasherIndex FuzzSidecarRef `json:"crasher_index"`
 }
 
-type FuzzArtifactKind uint8
-
-const (
-	FuzzArtifactKindUnknown FuzzArtifactKind = iota
-	FuzzArtifactKindCorpus
-	FuzzArtifactKindCrasher
-)
-
-const (
-	fuzzArtifactKindNameCorpus  = "fuzz-corpus"
-	fuzzArtifactKindNameCrasher = "fuzz-crasher"
-)
-
-func (k FuzzArtifactKind) String() string {
-	switch k {
-	case FuzzArtifactKindCorpus:
-		return fuzzArtifactKindNameCorpus
-	case FuzzArtifactKindCrasher:
-		return fuzzArtifactKindNameCrasher
-	default:
-		return fuzzSidecarUnknownName
-	}
-}
-
-func (k FuzzArtifactKind) Validate() error {
-	if !k.IsValid() {
-		return fmt.Errorf(ErrFmtFuzzEvidence, ErrContract)
-	}
-	return nil
-}
-
-func (k FuzzArtifactKind) IsValid() bool {
-	return k == FuzzArtifactKindCorpus || k == FuzzArtifactKindCrasher
-}
-
-func (k FuzzArtifactKind) MarshalJSON() ([]byte, error) {
-	if err := k.Validate(); err != nil {
-		return nil, err
-	}
-	return json.Marshal(k.String())
-}
-
-func (k *FuzzArtifactKind) UnmarshalJSON(data []byte) error {
-	var value string
-	if err := json.Unmarshal(data, &value); err != nil {
-		return fmt.Errorf(ErrFmtFuzzEvidence, errors.Join(ErrContract, err))
-	}
-	switch value {
-	case fuzzArtifactKindNameCorpus:
-		*k = FuzzArtifactKindCorpus
-	case fuzzArtifactKindNameCrasher:
-		*k = FuzzArtifactKindCrasher
-	default:
-		return fmt.Errorf(ErrFmtFuzzEvidence, ErrContract)
-	}
-	return nil
-}
-
 type FuzzArtifactIndexState uint8
 
 const (
@@ -454,15 +396,15 @@ func (a FuzzArtifact) Validate() error {
 // expressed with content identities rather than bundle filesystem metadata.
 // Entries are canonical digest order so identical evidence has identical JSON.
 type FuzzArtifactIndex struct {
-	Entries    []FuzzArtifact         `json:"entries"`
-	TotalBytes uint64                 `json:"total_bytes"`
-	Dropped    uint64                 `json:"dropped"`
-	Count      uint64                 `json:"count"`
-	Kind       FuzzArtifactKind       `json:"kind"`
-	State      FuzzArtifactIndexState `json:"state"`
+	Entries    []FuzzArtifact              `json:"entries"`
+	TotalBytes uint64                      `json:"total_bytes"`
+	Dropped    uint64                      `json:"dropped"`
+	Count      uint64                      `json:"count"`
+	Kind       foundationfuzz.ArtifactKind `json:"kind"`
+	State      FuzzArtifactIndexState      `json:"state"`
 }
 
-func NewFuzzArtifactIndex(kind FuzzArtifactKind, entries []FuzzArtifact, dropped uint64, enumerationFailed bool) (FuzzArtifactIndex, error) {
+func NewFuzzArtifactIndex(kind foundationfuzz.ArtifactKind, entries []FuzzArtifact, dropped uint64, enumerationFailed bool) (FuzzArtifactIndex, error) {
 	canonical := append([]FuzzArtifact(nil), entries...)
 	slices.SortFunc(canonical, func(left, right FuzzArtifact) int {
 		return strings.Compare(left.Digest.String(), right.Digest.String())
@@ -487,7 +429,7 @@ func NewFuzzArtifactIndex(kind FuzzArtifactKind, entries []FuzzArtifact, dropped
 
 func (i FuzzArtifactIndex) Validate() error {
 	if err := errors.Join(i.Kind.Validate(), i.State.Validate()); err != nil {
-		return err
+		return fmt.Errorf(ErrFmtFuzzEvidence, errors.Join(ErrContract, err))
 	}
 	if !i.headerValid() {
 		return fmt.Errorf(ErrFmtFuzzEvidence, ErrContract)
@@ -500,7 +442,7 @@ func (i FuzzArtifactIndex) headerValid() bool {
 	for range i.Entries {
 		count++
 	}
-	bounded := len(i.Entries) <= foundationfuzz.CorpusSelectionMaxEntries && i.Count == count
+	bounded := len(i.Entries) <= foundationfuzz.ArtifactIndexMaxEntries && i.Count == count
 	complete := i.State != FuzzArtifactIndexStateComplete || i.Dropped == 0
 	partial := i.State != FuzzArtifactIndexStatePartial || i.Dropped != 0
 	return bounded && complete && partial

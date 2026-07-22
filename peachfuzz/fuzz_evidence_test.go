@@ -101,7 +101,7 @@ func TestFuzzArtifactIndexCanonicalizesAndRoundTrips(t *testing.T) {
 	t.Parallel()
 	first := FuzzArtifact{Digest: foundationcore.NewSHA256Hex(sha256.Sum256([]byte("first"))), Bytes: 11}
 	second := FuzzArtifact{Digest: foundationcore.NewSHA256Hex(sha256.Sum256([]byte("second"))), Bytes: 13}
-	index, err := NewFuzzArtifactIndex(FuzzArtifactKindCorpus, []FuzzArtifact{second, first}, 0, false)
+	index, err := NewFuzzArtifactIndex(foundationfuzz.ArtifactKindCorpus, []FuzzArtifact{second, first}, 0, false)
 	if err != nil {
 		t.Fatalf("NewFuzzArtifactIndex() error = %v", err)
 	}
@@ -126,7 +126,7 @@ func TestFuzzArtifactIndexRejectsHostileContradictions(t *testing.T) {
 	t.Parallel()
 	first := FuzzArtifact{Digest: foundationcore.NewSHA256Hex(sha256.Sum256([]byte("first"))), Bytes: 11}
 	second := FuzzArtifact{Digest: foundationcore.NewSHA256Hex(sha256.Sum256([]byte("second"))), Bytes: 13}
-	valid, err := NewFuzzArtifactIndex(FuzzArtifactKindCrasher, []FuzzArtifact{first, second}, 1, false)
+	valid, err := NewFuzzArtifactIndex(foundationfuzz.ArtifactKindCrasher, []FuzzArtifact{first, second}, 1, false)
 	if err != nil {
 		t.Fatalf("NewFuzzArtifactIndex() error = %v", err)
 	}
@@ -134,7 +134,7 @@ func TestFuzzArtifactIndexRejectsHostileContradictions(t *testing.T) {
 		mutate func(*FuzzArtifactIndex)
 		name   string
 	}{
-		{name: "unknown kind", mutate: func(index *FuzzArtifactIndex) { index.Kind = FuzzArtifactKindUnknown }},
+		{name: "unknown kind", mutate: func(index *FuzzArtifactIndex) { index.Kind = foundationfuzz.ArtifactKindUnknown }},
 		{name: "count lie", mutate: func(index *FuzzArtifactIndex) { index.Count++ }},
 		{name: "byte total lie", mutate: func(index *FuzzArtifactIndex) { index.TotalBytes++ }},
 		{name: "completeness lie", mutate: func(index *FuzzArtifactIndex) { index.State = FuzzArtifactIndexStateComplete }},
@@ -156,25 +156,25 @@ func TestFuzzArtifactIndexRejectsHostileContradictions(t *testing.T) {
 
 func TestFuzzArtifactIndexPinsEntryAndArithmeticBounds(t *testing.T) {
 	t.Parallel()
-	entries := make([]FuzzArtifact, foundationfuzz.CorpusSelectionMaxEntries+1)
+	entries := make([]FuzzArtifact, foundationfuzz.ArtifactIndexMaxEntries+1)
 	for position := range entries {
 		entries[position] = FuzzArtifact{Digest: foundationcore.NewSHA256Hex(sha256.Sum256([]byte{byte(position), byte(position >> 8)})), Bytes: 1}
 	}
-	if _, err := NewFuzzArtifactIndex(FuzzArtifactKindCorpus, entries, 0, false); !errors.Is(err, ErrContract) {
+	if _, err := NewFuzzArtifactIndex(foundationfuzz.ArtifactKindCorpus, entries, 0, false); !errors.Is(err, ErrContract) {
 		t.Fatalf("entry-limit constructor error = %v, want errors.Is(..., %v)", err, ErrContract)
 	}
 	overflow := []FuzzArtifact{
 		{Digest: foundationcore.NewSHA256Hex(sha256.Sum256([]byte("large"))), Bytes: math.MaxUint64},
 		{Digest: foundationcore.NewSHA256Hex(sha256.Sum256([]byte("overflow"))), Bytes: 1},
 	}
-	if _, err := NewFuzzArtifactIndex(FuzzArtifactKindCorpus, overflow, 0, false); !errors.Is(err, ErrContract) {
+	if _, err := NewFuzzArtifactIndex(foundationfuzz.ArtifactKindCorpus, overflow, 0, false); !errors.Is(err, ErrContract) {
 		t.Fatalf("total-overflow constructor error = %v, want errors.Is(..., %v)", err, ErrContract)
 	}
 }
 
 func TestFuzzArtifactIndexMakesEnumerationFailureExplicit(t *testing.T) {
 	t.Parallel()
-	index, err := NewFuzzArtifactIndex(FuzzArtifactKindCorpus, nil, 0, true)
+	index, err := NewFuzzArtifactIndex(foundationfuzz.ArtifactKindCorpus, nil, 0, true)
 	if err != nil {
 		t.Fatalf("NewFuzzArtifactIndex() error = %v", err)
 	}
