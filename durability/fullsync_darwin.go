@@ -28,11 +28,22 @@ func fullSyncPlatform(file *os.File) error {
 }
 
 func fullSyncFcntl(file *os.File, command uintptr) error {
-	_, _, errno := syscall.Syscall(syscall.SYS_FCNTL, file.Fd(), command, 0)
-	if errno == 0 {
-		return nil
+	return retryInterruptedFcntl(func() syscall.Errno {
+		_, _, errno := syscall.Syscall(syscall.SYS_FCNTL, file.Fd(), command, 0)
+		return errno
+	})
+}
+
+func retryInterruptedFcntl(call func() syscall.Errno) error {
+	for {
+		errno := call()
+		if errno == 0 {
+			return nil
+		}
+		if errno != syscall.EINTR {
+			return errno
+		}
 	}
-	return errno
 }
 
 func isFcntlUnsupported(err error) bool {

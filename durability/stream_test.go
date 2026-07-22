@@ -83,3 +83,33 @@ func TestContextReaderCancellationAndUnderlyingIdentity(t *testing.T) {
 type hostileReader struct{ err error }
 
 func (r hostileReader) Read([]byte) (int, error) { return 0, r.err }
+
+func TestContextReaderStopsStreamWhenContextDiesMidRead(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	source := &cancellingReader{cancel: cancel}
+	data, err := io.ReadAll(ContextReader{Context: ctx, Reader: source})
+	if !errors.Is(err, context.Canceled) || string(data) != "a" {
+		t.Fatalf("io.ReadAll(mid-stream cancel) = (%q,%v), want first chunk then context.Canceled", data, err)
+	}
+	if source.reads != 1 {
+		t.Fatalf("underlying reads = %d, want exactly 1 before cancellation stopped the stream", source.reads)
+	}
+}
+
+type cancellingReader struct {
+	cancel context.CancelFunc
+	reads  int
+}
+
+func (r *cancellingReader) Read(data []byte) (int, error) {
+	r.reads++
+	if len(data) == 0 {
+		return 0, nil
+	}
+	data[0] = 'a'
+	r.cancel()
+	return 1, nil
+}

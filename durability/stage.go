@@ -98,6 +98,55 @@ func (r CommitResult) Validate() error {
 	return r.Temporary.Validate()
 }
 
+type WriteOutcome struct {
+	Result   CommitResult
+	Recovery *Stage
+}
+
+func (o WriteOutcome) Validate() error {
+	if err := o.Result.Validate(); err != nil {
+		return err
+	}
+	recoveryRequired := writeRecoveryRequired(o.Result)
+	if recoveryRequired != (o.Recovery != nil) {
+		return core.ErrDurabilityContract
+	}
+	if o.Recovery != nil && o.Recovery.result != o.Result {
+		return core.ErrDurabilityContract
+	}
+	return nil
+}
+
+func (o *WriteOutcome) Recover(ctx context.Context) error {
+	if o == nil || o.Recovery == nil || o.Validate() != nil {
+		return core.ErrDurabilityContract
+	}
+	if err := contextcheck.Validate(ctx); err != nil {
+		return err
+	}
+	var err error
+	if o.Result.Activation == ActivationNotActivated {
+		err = o.Recovery.Abort()
+		o.Result = o.Recovery.result
+	} else {
+		o.Result, err = o.Recovery.Commit(ctx)
+	}
+	if !writeRecoveryRequired(o.Result) {
+		o.Recovery = nil
+	}
+	return err
+}
+
+func writeRecoveryRequired(result CommitResult) bool {
+	if result.Activation == ActivationDirectorySyncRequired {
+		return true
+	}
+	if result.Activation == ActivationDurable {
+		return result.Temporary != TemporaryRemoved
+	}
+	return result.Activation == ActivationNotActivated && result.Temporary != TemporaryRemoved
+}
+
 type stageFile interface {
 	io.Writer
 	Chmod(fs.FileMode) error
@@ -130,13 +179,6 @@ func (operatingSystem) CreateTemp(directory, pattern string) (stageFile, error) 
 	if err != nil {
 		return nil, err
 	}
-	owned := false
-	defer func() {
-		if !owned {
-			_ = file.Close()
-		}
-	}()
-	owned = true
 	return operatingFile{File: file}, nil
 }
 func (operatingSystem) Link(oldPath, newPath string) error { return os.Link(oldPath, newPath) }
@@ -190,7 +232,7 @@ func newStage(ctx context.Context, request WriteRequest, filesystem stageFilesys
 		open: true,
 	}
 	if err := file.Chmod(request.Mode); err != nil {
-		return nil, errors.Join(fmt.Errorf("set durable stage mode: %w", err), stage.Abort())
+		return stage, errors.Join(fmt.Errorf("set durable stage mode: %w", err), stage.Abort())
 	}
 	return stage, nil
 }
@@ -367,17 +409,34 @@ func (s *Stage) Abort() error {
 	return closeErr
 }
 
-func Write(ctx context.Context, request WriteRequest, source io.Reader) (CommitResult, error) {
+func Write(ctx context.Context, request WriteRequest, source io.Reader) (WriteOutcome, error) {
+	return write(ctx, request, source, operatingSystem{})
+}
+
+func write(ctx context.Context, request WriteRequest, source io.Reader, filesystem stageFilesystem) (WriteOutcome, error) {
 	if source == nil {
-		return CommitResult{}, core.ErrDurabilityContract
+		return WriteOutcome{}, core.ErrDurabilityContract
 	}
-	stage, err := NewStage(ctx, request)
+	stage, err := newStage(ctx, request, filesystem)
 	if err != nil {
-		return CommitResult{}, err
+		if stage != nil {
+			return newWriteOutcome(stage), err
+		}
+		return WriteOutcome{}, err
 	}
 	buffer := make([]byte, core.DurableCopyBufferBytes)
 	if _, err := io.CopyBuffer(stage, ContextReader{Context: ctx, Reader: source}, buffer); err != nil {
-		return stage.result, errors.Join(fmt.Errorf("stream durable stage: %w", err), stage.Abort())
+		writeErr := errors.Join(fmt.Errorf("stream durable stage: %w", err), stage.Abort())
+		return newWriteOutcome(stage), writeErr
 	}
-	return stage.Commit(ctx)
+	_, err = stage.Commit(ctx)
+	return newWriteOutcome(stage), err
+}
+
+func newWriteOutcome(stage *Stage) WriteOutcome {
+	outcome := WriteOutcome{Result: stage.result}
+	if writeRecoveryRequired(stage.result) {
+		outcome.Recovery = stage
+	}
+	return outcome
 }

@@ -336,8 +336,8 @@ func (c *Controller) force(request WatchRequest, forceRequest ForceRequest) {
 
 func callForceAction(ctx context.Context, action ForceAction, request ForceRequest, result chan<- error) {
 	defer func() {
-		if recover() != nil {
-			result <- core.ErrShutdownForcePanic
+		if recovered := recover(); recovered != nil {
+			result <- newForcePanicError(recovered)
 		}
 	}()
 	result <- action(ctx, request)
@@ -350,7 +350,8 @@ func forceResultFromError(ctx context.Context, request ForceRequest, err error) 
 	if err == nil {
 		return ForceResult{Request: request, Outcome: ForceOutcomeCompleted}
 	}
-	if errors.Is(err, core.ErrShutdownForcePanic) {
+	var panicErr ForcePanicError
+	if errors.As(err, &panicErr) && panicErr.Validate() == nil {
 		return ForceResult{Request: request, Outcome: ForceOutcomePanicked, Err: err}
 	}
 	if errors.Is(err, context.DeadlineExceeded) {

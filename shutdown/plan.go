@@ -198,7 +198,8 @@ func runStep(root context.Context, budget core.NanosecondsDuration, step Step) S
 			return timedOutStepResult(root, step.ID)
 		}
 		if err != nil {
-			if errors.Is(err, core.ErrShutdownStepPanic) {
+			var panicErr StepPanicError
+			if errors.As(err, &panicErr) && panicErr.Validate() == nil {
 				return newStepResult(step.ID, StepOutcomePanicked, err)
 			}
 			return newStepResult(step.ID, StepOutcomeFailed, errors.Join(core.ErrShutdownStepFailure, err))
@@ -211,8 +212,8 @@ func runStep(root context.Context, budget core.NanosecondsDuration, step Step) S
 
 func callStep(ctx context.Context, step Step, result chan<- error) {
 	defer func() {
-		if recover() != nil {
-			result <- core.ErrShutdownStepPanic
+		if recovered := recover(); recovered != nil {
+			result <- newStepPanicError(recovered)
 		}
 	}()
 	result <- step.Run(ctx)

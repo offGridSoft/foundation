@@ -57,7 +57,19 @@ func TestSignalPolicyRejectsEveryIncoherentBoundary(t *testing.T) {
 func TestWatchFiltersUnknownSignalAndCancelsWithTypedCause(t *testing.T) {
 	t.Parallel()
 
-	signals := make(chan os.Signal, 2)
+	unknownSignals := make(chan os.Signal, 1)
+	unknownController, err := Watch(WatchRequest{Parent: t.Context(), Signals: unknownSignals, Policy: defaultSignalPolicy()})
+	if err != nil {
+		t.Fatalf("Watch(unknown filter) error = %v", err)
+	}
+	unknownSignals <- unknownOperatingSystemSignal{}
+	close(unknownSignals)
+	<-unknownController.Done()
+	if !errors.Is(context.Cause(unknownController.Context()), core.ErrShutdownSignalSourceClosed) {
+		t.Fatalf("unknown then closed cause = %v, want ErrShutdownSignalSourceClosed proving unknown was filtered", context.Cause(unknownController.Context()))
+	}
+
+	signals := make(chan os.Signal, 1)
 	released := make(chan struct{}, 1)
 	request := WatchRequest{
 		Parent:  t.Context(),
@@ -67,12 +79,6 @@ func TestWatchFiltersUnknownSignalAndCancelsWithTypedCause(t *testing.T) {
 	controller, err := newController(request, func() { released <- struct{}{} })
 	if err != nil {
 		t.Fatalf("newController() error = %v", err)
-	}
-	signals <- unknownOperatingSystemSignal{}
-	select {
-	case <-controller.Context().Done():
-		t.Fatalf("unknown signal cancelled controller with cause %v", context.Cause(controller.Context()))
-	case <-time.After(10 * time.Millisecond):
 	}
 	signals <- firstSupportedOperatingSystemSignal()
 	<-controller.Context().Done()

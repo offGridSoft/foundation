@@ -54,3 +54,41 @@ func TestDarwinFullSyncFallbackClassifierHostileErrnoTable(t *testing.T) {
 		t.Fatalf("errors.Is(wrapped ENOSPC, ENOSPC) = false, want true")
 	}
 }
+
+func TestRetryInterruptedFcntlExhaustsInterruptsAndPreservesTerminalErrno(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		sequence  []syscall.Errno
+		wantCalls int
+		wantErr   error
+	}{
+		{name: "immediate success", sequence: []syscall.Errno{0}, wantCalls: 1},
+		{name: "one interrupt then success", sequence: []syscall.Errno{syscall.EINTR, 0}, wantCalls: 2},
+		{name: "three interrupts then success", sequence: []syscall.Errno{syscall.EINTR, syscall.EINTR, syscall.EINTR, 0}, wantCalls: 4},
+		{name: "immediate input output failure", sequence: []syscall.Errno{syscall.EIO}, wantCalls: 1, wantErr: syscall.EIO},
+		{name: "interrupt then input output failure", sequence: []syscall.Errno{syscall.EINTR, syscall.EIO}, wantCalls: 2, wantErr: syscall.EIO},
+		{name: "interrupt then no space failure", sequence: []syscall.Errno{syscall.EINTR, syscall.ENOSPC}, wantCalls: 2, wantErr: syscall.ENOSPC},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			calls := 0
+			err := retryInterruptedFcntl(func() syscall.Errno {
+				errno := testCase.sequence[calls]
+				calls++
+				return errno
+			})
+			if calls != testCase.wantCalls {
+				t.Fatalf("retryInterruptedFcntl() calls = %d, want %d", calls, testCase.wantCalls)
+			}
+			if testCase.wantErr == nil && err != nil {
+				t.Fatalf("retryInterruptedFcntl() error = %v, want nil", err)
+			}
+			if testCase.wantErr != nil && !errors.Is(err, testCase.wantErr) {
+				t.Fatalf("retryInterruptedFcntl() error = %v, want errors.Is %v", err, testCase.wantErr)
+			}
+		})
+	}
+}

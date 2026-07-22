@@ -188,16 +188,19 @@ func measureTree(ctx context.Context, request TreeUsageRequest, walk walkDirecto
 		return TreeUsage{}, err
 	}
 	root := request.Root.String()
-	if _, err := os.Stat(root); err != nil {
+	info, err := os.Lstat(root)
+	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) && request.MissingPolicy == MissingPathIsEmpty {
 			return TreeUsage{}, nil
 		}
-		return TreeUsage{}, err
+		return TreeUsage{}, fmt.Errorf("stat filesystem tree root: %w", err)
+	}
+	if info.Mode()&fs.ModeSymlink != 0 || !info.IsDir() {
+		return TreeUsage{}, fmt.Errorf("filesystem tree root is not a directory: %w", core.ErrHostResourceContract)
 	}
 	usage := TreeUsage{}
-	err := walk(root, treeVisitor(ctx, &usage))
-	if err != nil {
-		return TreeUsage{}, fmt.Errorf("measure filesystem tree: %w", err)
+	if walkErr := walk(root, treeVisitor(ctx, &usage)); walkErr != nil {
+		return TreeUsage{}, fmt.Errorf("measure filesystem tree: %w", walkErr)
 	}
 	return usage, usage.Validate()
 }

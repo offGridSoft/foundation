@@ -61,8 +61,11 @@ func ReadBounded(ctx context.Context, request ReadRequest) ([]byte, error) {
 		return nil, err
 	}
 	maximum, _ := request.MaximumBytes.Int64()
+	if err := requireRegularFile(request.Path.String()); err != nil {
+		return nil, err
+	}
 	closed := false
-	file, err := os.Open(request.Path.String())
+	file, err := openBoundedFile(request.Path.String())
 	if err != nil {
 		return nil, fmt.Errorf("open bounded durable file: %w", err)
 	}
@@ -71,6 +74,11 @@ func ReadBounded(ctx context.Context, request ReadRequest) ([]byte, error) {
 			_ = file.Close()
 		}
 	}()
+	if err := requireOpenRegularFile(file); err != nil {
+		closeErr := file.Close()
+		closed = true
+		return nil, errors.Join(err, closeErr)
+	}
 	data, readErr := io.ReadAll(io.LimitReader(ContextReader{Context: ctx, Reader: file}, maximum+1))
 	closeErr := file.Close()
 	closed = true
@@ -81,4 +89,26 @@ func ReadBounded(ctx context.Context, request ReadRequest) ([]byte, error) {
 		return nil, core.ErrDurableSizeLimit
 	}
 	return data, nil
+}
+
+func requireRegularFile(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("stat bounded durable file: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("bounded durable file is not a regular file: %w", core.ErrDurabilityContract)
+	}
+	return nil
+}
+
+func requireOpenRegularFile(file *os.File) error {
+	info, err := file.Stat()
+	if err != nil {
+		return fmt.Errorf("stat open bounded durable file: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("bounded durable file is not a regular file: %w", core.ErrDurabilityContract)
+	}
+	return nil
 }

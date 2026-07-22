@@ -218,9 +218,9 @@ func TestWriteRealFilesystemReplaceCreateLimitAndCancellation(t *testing.T) {
 	dir := t.TempDir()
 	target, _ := core.ParseAbsoluteFilePath(filepath.Join(dir, "evidence"))
 	request := WriteRequest{Target: target, Mode: 0o640, Install: InstallReplace, MaximumBytes: core.NewByteCount(8)}
-	result, err := Write(t.Context(), request, bytes.NewBufferString("new-data"))
-	if err != nil || result.Activation != ActivationDurable || result.Temporary != TemporaryRemoved {
-		t.Fatalf("Write(real replace) = (%+v,%v), want durable/removed", result, err)
+	outcome, err := Write(t.Context(), request, bytes.NewBufferString("new-data"))
+	if err != nil || outcome.Validate() != nil || outcome.Result.Activation != ActivationDurable || outcome.Result.Temporary != TemporaryRemoved || outcome.Recovery != nil {
+		t.Fatalf("Write(real replace) = (%+v,%v), want durable/removed without recovery", outcome, err)
 	}
 	data, err := os.ReadFile(target.String())
 	if err != nil || string(data) != "new-data" {
