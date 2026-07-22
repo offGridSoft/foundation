@@ -35,6 +35,7 @@ var (
 	ErrIPNetworkContract               = fmt.Errorf("ip network contract violation: %w", ErrFoundationContract)
 	ErrTestSerialContract              = fmt.Errorf("test serial contract violation: %w", ErrFoundationContract)
 	ErrDoctrineContract                = fmt.Errorf("doctrine contract violation: %w", ErrFoundationContract)
+	ErrContextContract                 = fmt.Errorf("context contract violation: %w", ErrFoundationContract)
 	ErrPeachfuzzContributionRegression = fmt.Errorf("peachfuzz contribution regression: %w", ErrFoundationContract)
 	ErrNilContext                      = fmt.Errorf("nil context: %w", ErrFoundationContract)
 	ErrNumericOverflow                 = fmt.Errorf("numeric overflow: %w", ErrFoundationContract)

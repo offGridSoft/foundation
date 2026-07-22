@@ -1200,7 +1200,7 @@ func TestDecodeStrictJSONRejectsResourceExhaustionShapes(t *testing.T) {
 func TestSpecializedContractIdentitiesPreserveRootClassification(t *testing.T) {
 	t.Parallel()
 
-	identities := []error{ErrLicenseContract, ErrCustodyContract, ErrReleaseContract, ErrJSONContract, ErrNilContext}
+	identities := []error{ErrLicenseContract, ErrCustodyContract, ErrReleaseContract, ErrJSONContract, ErrContextContract, ErrNilContext}
 	for _, identity := range identities {
 		if !errors.Is(identity, ErrFoundationContract) {
 			t.Fatalf("errors.Is(%v, ErrFoundationContract) = false", identity)
