@@ -27,10 +27,14 @@ const (
 	FoundationModulePath                  = "github.com/offGridSoft/foundation/" + ContractVersionToken
 	FoundationCorePackagePath             = FoundationModulePath + "/core"
 	FoundationCustodyPackagePath          = FoundationModulePath + "/custody"
+	FoundationDurabilityPackagePath       = FoundationModulePath + "/durability"
+	FoundationDurabilityTestPackagePath   = FoundationModulePath + "/durabilitytest"
+	FoundationHostResourcePackagePath     = FoundationModulePath + "/hostresource"
 	FoundationLicensePackagePath          = FoundationModulePath + "/license"
 	FoundationPeachfuzzPackagePath        = FoundationModulePath + "/peachfuzz"
 	ProductTokenPeachfuzz                 = "peachfuzz"
 	FoundationReleasePackagePath          = FoundationModulePath + "/release"
+	FoundationShutdownPackagePath         = FoundationModulePath + "/shutdown"
 	FoundationTestSerialPackagePath       = FoundationModulePath + "/testserial"
 	FoundationWorkloadIdentityPackagePath = FoundationModulePath + "/workloadidentity"
 )
