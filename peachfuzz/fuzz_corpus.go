@@ -4,13 +4,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"math"
 	"sort"
 )
 
 const (
-	FuzzCorpusEntryNameMinBytes = 8
-	FuzzCorpusEntryNameMaxBytes = 64
+	FuzzCorpusEntryNameMinBytes      = 8
+	FuzzCorpusEntryNameMaxBytes      = 64
+	FuzzCorpusDirectoryReadBatchSize = 64
 )
 
 // FuzzCorpusEntryName is one Go-toolchain corpus filename. Go names corpus
@@ -113,6 +116,77 @@ func (s FuzzCorpusSelection) Validate() error {
 		}
 		if position != 0 && s.entries[position-1].String() >= entry.String() {
 			return fmt.Errorf(ErrFmtFuzzEvidence, ErrContract)
+		}
+	}
+	return nil
+}
+
+// FuzzCorpusDirectorySelection is the bounded result of streaming one Go
+// fuzz-cache directory. Invalid names and subdirectories are neutral because
+// they are not Go corpus entries. Valid non-regular entries and valid entries
+// beyond the canonical retained prefix are explicit drops.
+type FuzzCorpusDirectorySelection struct {
+	selection         FuzzCorpusSelection
+	nonRegularDropped uint64
+}
+
+func (s FuzzCorpusDirectorySelection) Entries() []FuzzCorpusEntryName {
+	return s.selection.Entries()
+}
+
+func (s FuzzCorpusDirectorySelection) Dropped() uint64 {
+	if math.MaxUint64-s.nonRegularDropped < s.selection.Dropped() {
+		return math.MaxUint64
+	}
+	return s.nonRegularDropped + s.selection.Dropped()
+}
+
+func (s FuzzCorpusDirectorySelection) Validate() error {
+	return s.selection.Validate()
+}
+
+// SelectFuzzCorpusDirectory streams a Go fuzz-cache directory with bounded
+// memory and returns its deterministic corpus-entry prefix. The caller owns
+// and closes directory.
+func SelectFuzzCorpusDirectory(directory fs.ReadDirFile) (FuzzCorpusDirectorySelection, error) {
+	var result FuzzCorpusDirectorySelection
+	if directory == nil {
+		return result, fmt.Errorf(ErrFmtFuzzEvidence, ErrContract)
+	}
+	for {
+		entries, readErr := directory.ReadDir(FuzzCorpusDirectoryReadBatchSize)
+		if len(entries) == 0 && readErr == nil {
+			return result, fmt.Errorf(ErrFmtFuzzEvidence, ErrContract)
+		}
+		if err := result.observe(entries); err != nil {
+			return result, err
+		}
+		if errors.Is(readErr, io.EOF) {
+			return result, result.Validate()
+		}
+		if readErr != nil {
+			return result, readErr
+		}
+	}
+}
+
+func (s *FuzzCorpusDirectorySelection) observe(entries []fs.DirEntry) error {
+	for _, entry := range entries {
+		if entry == nil {
+			return fmt.Errorf(ErrFmtFuzzEvidence, ErrContract)
+		}
+		name, parseErr := ParseFuzzCorpusEntryName(entry.Name())
+		if parseErr != nil || entry.IsDir() {
+			continue
+		}
+		if !entry.Type().IsRegular() {
+			if s.nonRegularDropped != math.MaxUint64 {
+				s.nonRegularDropped++
+			}
+			continue
+		}
+		if err := s.selection.Observe(name); err != nil {
+			return err
 		}
 	}
 	return nil

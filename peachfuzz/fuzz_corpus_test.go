@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"math"
 	"slices"
 	"strings"
@@ -265,3 +267,115 @@ func corpusNames(t *testing.T, count int) []FuzzCorpusEntryName {
 	}
 	return names
 }
+
+func TestSelectFuzzCorpusDirectoryHostileEntryMatrix(t *testing.T) {
+	t.Parallel()
+
+	reader := &fuzzCorpusDirectoryReader{steps: []fuzzCorpusReadStep{{
+		entries: []fs.DirEntry{
+			fuzzCorpusDirEntry{name: "00000003"},
+			fuzzCorpusDirEntry{name: "not-corpus"},
+			fuzzCorpusDirEntry{name: "00000001", mode: fs.ModeDir},
+			fuzzCorpusDirEntry{name: "00000002", mode: fs.ModeSymlink},
+			fuzzCorpusDirEntry{name: "00000000"},
+		},
+		err: io.EOF,
+	}}}
+	selection, err := SelectFuzzCorpusDirectory(reader)
+	if err != nil {
+		t.Fatalf("SelectFuzzCorpusDirectory() error = %v", err)
+	}
+	entries := selection.Entries()
+	want := corpusNames(t, 1)
+	third, parseErr := ParseFuzzCorpusEntryName("00000003")
+	if parseErr != nil {
+		t.Fatalf("ParseFuzzCorpusEntryName(third) error = %v", parseErr)
+	}
+	want = append(want, third)
+	if !slices.Equal(entries, want) || selection.Dropped() != 1 {
+		t.Fatalf("selection = (%v, dropped %d), want (%v, dropped 1)", entries, selection.Dropped(), want)
+	}
+}
+
+func TestSelectFuzzCorpusDirectoryReaderFailureMatrix(t *testing.T) {
+	t.Parallel()
+
+	injected := errors.New("injected directory read failure")
+	tests := []struct {
+		name        string
+		reader      fs.ReadDirFile
+		wantErr     error
+		wantEntries int
+	}{
+		{name: "nil reader", wantErr: ErrContract},
+		{name: "empty batch without terminal error", reader: &fuzzCorpusDirectoryReader{steps: []fuzzCorpusReadStep{{}}}, wantErr: ErrContract},
+		{name: "nil directory entry", reader: &fuzzCorpusDirectoryReader{steps: []fuzzCorpusReadStep{{entries: []fs.DirEntry{nil}, err: io.EOF}}}, wantErr: ErrContract},
+		{name: "partial entries preserve source error", reader: &fuzzCorpusDirectoryReader{steps: []fuzzCorpusReadStep{{entries: []fs.DirEntry{fuzzCorpusDirEntry{name: "00000000"}}, err: injected}}}, wantErr: injected, wantEntries: 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			selection, err := SelectFuzzCorpusDirectory(tc.reader)
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("SelectFuzzCorpusDirectory() error = %v, want errors.Is %v", err, tc.wantErr)
+			}
+			if got := len(selection.Entries()); got != tc.wantEntries {
+				t.Fatalf("len(selection.Entries()) = %d, want %d after reader failure", got, tc.wantEntries)
+			}
+		})
+	}
+}
+
+func TestSelectFuzzCorpusDirectoryCanonicalBoundAcrossBatches(t *testing.T) {
+	t.Parallel()
+
+	entries := make([]fs.DirEntry, FuzzArtifactIndexMaxEntries+1)
+	for position := range entries {
+		entries[position] = fuzzCorpusDirEntry{name: fmt.Sprintf("%08x", len(entries)-position-1)}
+	}
+	reader := &fuzzCorpusDirectoryReader{steps: []fuzzCorpusReadStep{
+		{entries: entries[:FuzzCorpusDirectoryReadBatchSize]},
+		{entries: entries[FuzzCorpusDirectoryReadBatchSize:], err: io.EOF},
+	}}
+	selection, err := SelectFuzzCorpusDirectory(reader)
+	if err != nil {
+		t.Fatalf("SelectFuzzCorpusDirectory() error = %v", err)
+	}
+	got := selection.Entries()
+	if len(got) != FuzzArtifactIndexMaxEntries || got[0].String() != "00000000" || got[len(got)-1].String() != "0000007f" || selection.Dropped() != 1 {
+		t.Fatalf("selection = (%d entries %s..%s, dropped %d), want canonical first %d and one drop", len(got), got[0], got[len(got)-1], selection.Dropped(), FuzzArtifactIndexMaxEntries)
+	}
+}
+
+type fuzzCorpusReadStep struct {
+	entries []fs.DirEntry
+	err     error
+}
+
+type fuzzCorpusDirectoryReader struct {
+	steps []fuzzCorpusReadStep
+	next  int
+}
+
+func (r *fuzzCorpusDirectoryReader) ReadDir(_ int) ([]fs.DirEntry, error) {
+	if r.next >= len(r.steps) {
+		return nil, io.EOF
+	}
+	step := r.steps[r.next]
+	r.next++
+	return step.entries, step.err
+}
+
+func (r *fuzzCorpusDirectoryReader) Read(_ []byte) (int, error) { return 0, io.EOF }
+func (r *fuzzCorpusDirectoryReader) Close() error               { return nil }
+func (r *fuzzCorpusDirectoryReader) Stat() (fs.FileInfo, error) { return nil, ErrContract }
+
+type fuzzCorpusDirEntry struct {
+	name string
+	mode fs.FileMode
+}
+
+func (e fuzzCorpusDirEntry) Name() string               { return e.name }
+func (e fuzzCorpusDirEntry) IsDir() bool                { return e.mode.IsDir() }
+func (e fuzzCorpusDirEntry) Type() fs.FileMode          { return e.mode.Type() }
+func (e fuzzCorpusDirEntry) Info() (fs.FileInfo, error) { return nil, ErrContract }
