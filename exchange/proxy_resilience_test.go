@@ -127,7 +127,7 @@ func TestSendStreamEarlyServerRejectionPreservesStatusError(t *testing.T) {
 	}
 	client := Client{HTTP: &http.Client{Transport: earlyRejectTransport{bodyBytesToRead: 2, status: http.StatusForbidden}}}
 	_, gotErr := SendStream(t.Context(), client, StreamUploadRequest[core.APIEndpoint]{
-		Target: endpoint, Body: strings.NewReader("artifact"), ContentLength: core.NewByteCount(8),
+		Target: endpoint, Body: strings.NewReader("artifact"), ContentLength: core.NewByteLength(8),
 		Semantics:      core.HTTPRequestSemantics{Method: core.HTTPMethodPut, Replay: core.HTTPReplaySingleAttempt},
 		ExpectedStatus: core.HTTPStatusOK,
 	}, streamTestPolicy())

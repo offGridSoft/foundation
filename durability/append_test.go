@@ -66,13 +66,13 @@ func TestOpenAppendRealFilesystemBoundaryTable(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name          string
-		initial       []byte
-		maximum       uint64
-		write         []byte
 		wantOpenError error
 		wantWriteErr  error
+		name          string
+		initial       []byte
+		write         []byte
 		want          []byte
+		maximum       uint64
 	}{
 		{name: "p01 create empty then zero write", maximum: 1, write: nil, want: nil},
 		{name: "p02 create and fill exactly", maximum: 4, write: []byte("abcd"), want: []byte("abcd")},
@@ -154,9 +154,9 @@ func TestOpenAppendRejectsContextAndNonRegularTargets(t *testing.T) {
 	cancelled, cancel := context.WithCancel(t.Context())
 	cancel()
 	contextTests := []struct {
-		name    string
 		ctx     context.Context
 		wantErr error
+		name    string
 	}{
 		{name: "nil", ctx: nil, wantErr: core.ErrNilContext},
 		{name: "cancelled", ctx: cancelled, wantErr: context.Canceled},
@@ -222,12 +222,12 @@ func TestAppendWriterFailureLattice(t *testing.T) {
 	errStat := errors.New("stat failure")
 	errWrite := errors.New("write failure")
 	tests := []struct {
-		name      string
+		wantError error
 		file      *fakeAppendFile
+		name      string
 		data      []byte
 		maximum   uint64
 		wantN     int
-		wantError error
 	}{
 		{name: "p01 empty", file: newFakeAppendFile(0), maximum: 1},
 		{name: "p02 exact", file: newFakeAppendFile(1), data: []byte("x"), maximum: 2, wantN: 1},
@@ -320,11 +320,11 @@ func TestAppendWriterSerializesConcurrentRecords(t *testing.T) {
 }
 
 type fakeAppendFile struct {
-	info     fakeAppendFileInfo
 	statErr  error
 	writeErr error
 	syncErr  error
 	closeErr error
+	info     fakeAppendFileInfo
 	writeN   int
 }
 

@@ -237,7 +237,7 @@ func (c Client) UploadArtifact(ctx context.Context, input UploadArtifactInput) (
 	response, err := exchange.SendStream(requestContext, exchange.Client{HTTP: c.HTTP}, exchange.StreamUploadRequest[core.SignedUploadURL]{
 		Target:         input.Target.URL,
 		Body:           io.TeeReader(input.Body, hasher),
-		ContentLength:  input.Artifact.Size,
+		ContentLength:  core.NewByteLength(input.Artifact.Size.Uint64()),
 		Headers:        uploadHTTPHeaders(input.Target.Headers),
 		Semantics:      core.HTTPRequestSemantics{Method: core.HTTPMethodPut, Replay: core.HTTPReplaySingleAttempt},
 		ExpectedStatus: core.HTTPStatusOK,

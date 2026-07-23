@@ -322,12 +322,32 @@ func TestBoundedAndStreamRealNetworkLayerTable(t *testing.T) {
 		defer server.Close()
 		endpoint := mustBoundedEndpoint(t, server.URL)
 		response, err := SendStream(t.Context(), Client{HTTP: server.Client()}, StreamUploadRequest[core.APIEndpoint]{
-			Target: endpoint, Body: strings.NewReader("artifact"), ContentLength: core.NewByteCount(8),
+			Target: endpoint, Body: strings.NewReader("artifact"), ContentLength: core.NewByteLength(8),
 			Semantics:      core.HTTPRequestSemantics{Method: core.HTTPMethodPut, Replay: core.HTTPReplaySingleAttempt},
 			ExpectedStatus: core.HTTPStatusOK, CaptureHeaders: HeaderSelection{Names: []string{"X-Generation"}},
 		}, streamTestPolicy())
 		if err != nil || response.BytesWritten.Uint64() != 8 {
 			t.Fatalf("SendStream() = (%+v, %v), want eight bytes", response, err)
+		}
+	})
+
+	t.Run("stream upload accepts exact empty body", func(t *testing.T) {
+		t.Parallel()
+		server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			body, err := io.ReadAll(request.Body)
+			if err != nil || len(body) != 0 || request.ContentLength != 0 {
+				t.Errorf("empty upload = bytes:%d length:%d error:%v, want 0/0/nil", len(body), request.ContentLength, err)
+			}
+		}))
+		defer server.Close()
+		endpoint := mustBoundedEndpoint(t, server.URL)
+		response, err := SendStream(t.Context(), Client{HTTP: server.Client()}, StreamUploadRequest[core.APIEndpoint]{
+			Target: endpoint, Body: strings.NewReader(""), ContentLength: core.NewByteLength(0),
+			Semantics:      core.HTTPRequestSemantics{Method: core.HTTPMethodPut, Replay: core.HTTPReplaySingleAttempt},
+			ExpectedStatus: core.HTTPStatusOK,
+		}, streamTestPolicy())
+		if err != nil || response.BytesWritten.Uint64() != 0 {
+			t.Fatalf("SendStream(empty) = (%+v, %v), want zero bytes and nil", response, err)
 		}
 	})
 
@@ -339,7 +359,7 @@ func TestBoundedAndStreamRealNetworkLayerTable(t *testing.T) {
 		defer server.Close()
 		endpoint := mustBoundedEndpoint(t, server.URL)
 		_, err := SendStream(t.Context(), Client{HTTP: server.Client()}, StreamUploadRequest[core.APIEndpoint]{
-			Target: endpoint, Body: strings.NewReader("ab"), ContentLength: core.NewByteCount(1),
+			Target: endpoint, Body: strings.NewReader("ab"), ContentLength: core.NewByteLength(1),
 			Semantics:      core.HTTPRequestSemantics{Method: core.HTTPMethodPut, Replay: core.HTTPReplaySingleAttempt},
 			ExpectedStatus: core.HTTPStatusOK,
 		}, streamTestPolicy())
@@ -419,7 +439,7 @@ func TestBoundedAndStreamRealNetworkLayerTable(t *testing.T) {
 		policy := streamTestPolicy()
 		policy.ErrorBodyLimit = core.NewByteCount(1)
 		_, err := SendStream(t.Context(), Client{HTTP: server.Client()}, StreamUploadRequest[core.APIEndpoint]{
-			Target: endpoint, Body: strings.NewReader("a"), ContentLength: core.NewByteCount(1),
+			Target: endpoint, Body: strings.NewReader("a"), ContentLength: core.NewByteLength(1),
 			Semantics: core.HTTPRequestSemantics{Method: core.HTTPMethodPut, Replay: core.HTTPReplaySingleAttempt}, ExpectedStatus: core.HTTPStatusOK,
 		}, policy)
 		statusErr, hasStatus := errors.AsType[StatusError](err)

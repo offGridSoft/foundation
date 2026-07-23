@@ -256,7 +256,7 @@ type StreamUploadRequest[Target RequestTarget] struct {
 	Semantics      core.HTTPRequestSemantics
 	Headers        core.HTTPHeaders
 	CaptureHeaders HeaderSelection
-	ContentLength  core.ByteCount
+	ContentLength  core.ByteLength
 	ExpectedStatus core.HTTPStatusCode
 }
 
@@ -284,7 +284,7 @@ func (r StreamUploadRequest[Target]) Validate() error {
 type StreamResponse struct {
 	Headers      core.HTTPHeaders
 	Status       core.HTTPStatusCode
-	BytesWritten core.ByteCount
+	BytesWritten core.ByteLength
 }
 
 func SendStream[Target RequestTarget](ctx context.Context, client Client, request StreamUploadRequest[Target], policy StreamPolicy) (StreamResponse, error) {
@@ -299,7 +299,11 @@ func SendStream[Target RequestTarget](ctx context.Context, client Client, reques
 		return zero, requestError(err)
 	}
 	counter := &streamCounter{reader: io.LimitReader(request.Body, length+1)}
-	httpRequest, err := http.NewRequestWithContext(requestContext, request.Semantics.Method.String(), request.Target.String(), counter)
+	var body io.Reader = counter
+	if length == 0 {
+		body = http.NoBody
+	}
+	httpRequest, err := http.NewRequestWithContext(requestContext, request.Semantics.Method.String(), request.Target.String(), body)
 	if err != nil {
 		return zero, requestError(err)
 	}
@@ -450,7 +454,7 @@ func readStreamDownloadResponse[Target RequestTarget](ctx context.Context, respo
 		return result, err
 	}
 	if written > 0 {
-		result.BytesWritten = core.NewByteCount(uint64(written))
+		result.BytesWritten = core.NewByteLength(uint64(written))
 	}
 	return result, nil
 }
