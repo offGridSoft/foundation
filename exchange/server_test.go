@@ -22,6 +22,8 @@ const (
 	receiveFixtureBodyLimit    = 256
 )
 
+var errReceiveClose = errors.New("receive body close failure")
+
 type receiveFixture struct {
 	Name  string `json:"name"`
 	Count int    `json:"count"`
@@ -79,6 +81,7 @@ func TestReceiveJSONHostileBoundaryTable(t *testing.T) {
 		{name: "maximum integer rejects far above semantic ceiling", setup: receiveRequest(`{"name":"a","count":` + intWire(math.MaxInt) + `}`), wantErr: core.ErrExchangeRequest},
 		{name: "trailing object rejects request smuggling", setup: receiveRequest(`{"name":"a","count":1}{"name":"b","count":2}`), wantErr: core.ErrExchangeRequest},
 		{name: "body one byte above byte limit rejects streaming overflow", setup: receiveRequest(strings.Repeat(" ", receiveFixtureBodyLimit+1)), wantErr: core.ErrExchangeBodyLimit},
+		{name: "outer HTTP maximum reader preserves body limit identity", setup: requestWithHTTPMaximumReaderOverflow, wantErr: core.ErrExchangeBodyLimit},
 		{name: "declared length one above limit rejects before read", setup: requestWithDeclaredLength(receiveFixtureBodyLimit + 1), wantErr: core.ErrExchangeBodyLimit},
 		{name: "declared maximum length rejects far above limit", setup: requestWithDeclaredLength(math.MaxInt64), wantErr: core.ErrExchangeBodyLimit},
 		{name: "nil body rejects missing stream", setup: requestWithNilBody, wantErr: core.ErrExchangeRequest},
@@ -106,6 +109,69 @@ func TestReceiveJSONHostileBoundaryTable(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReceiveJSONClosesBodyExactlyOnceAndPreservesCloseFailure(t *testing.T) {
+	t.Parallel()
+
+	semantics := core.HTTPRouteSemantics{Method: core.HTTPMethodPost, Replay: core.HTTPReplaySingleAttempt}
+	policy := ServerPolicy{RequestBodyLimit: core.NewByteCount(receiveFixtureBodyLimit)}
+	cases := []struct {
+		readErr  error
+		closeErr error
+		wantErr  error
+		name     string
+		body     string
+	}{
+		{name: "valid body closes once", body: `{"name":"valid","count":1}`},
+		{name: "decode failure still closes once", body: `{`, wantErr: core.ErrExchangeRequest},
+		{name: "read failure closes once and preserves read identity", readErr: io.ErrUnexpectedEOF, wantErr: io.ErrUnexpectedEOF},
+		{name: "close failure rejects otherwise valid body", body: `{"name":"valid","count":1}`, closeErr: errReceiveClose, wantErr: errReceiveClose},
+		{name: "read and close failures preserve both identities", readErr: io.ErrUnexpectedEOF, closeErr: errReceiveClose, wantErr: errReceiveClose},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			body := &receiveCloseProbe{Reader: strings.NewReader(tc.body), ReadErr: tc.readErr, CloseErr: tc.closeErr}
+			request := httptest.NewRequest(http.MethodPost, "https://api.offgridsoftware.ca/v1/exchange", nil)
+			request.Body = body
+			request.ContentLength = -1
+			request.Header.Set(core.HTTPHeaderContentType, core.HTTPContentTypeJSON)
+			got, gotErr := ReceiveJSON[receiveFixture](request, semantics, policy)
+			if !errors.Is(gotErr, tc.wantErr) {
+				t.Fatalf("ReceiveJSON() error = %v, want %v", gotErr, tc.wantErr)
+			}
+			if tc.readErr != nil && !errors.Is(gotErr, tc.readErr) {
+				t.Fatalf("ReceiveJSON() error = %v, want read identity %v", gotErr, tc.readErr)
+			}
+			if body.CloseCount != 1 {
+				t.Fatalf("ReceiveJSON() body close count = %d, want 1", body.CloseCount)
+			}
+			if gotErr != nil && got != (Received[receiveFixture]{}) {
+				t.Fatalf("ReceiveJSON() rejected result = %+v, want zero value", got)
+			}
+		})
+	}
+}
+
+type receiveCloseProbe struct {
+	Reader     *strings.Reader
+	ReadErr    error
+	CloseErr   error
+	CloseCount int
+}
+
+func (p *receiveCloseProbe) Read(data []byte) (int, error) {
+	if p.ReadErr != nil {
+		return 0, p.ReadErr
+	}
+	return p.Reader.Read(data)
+}
+
+func (p *receiveCloseProbe) Close() error {
+	p.CloseCount++
+	return p.CloseErr
 }
 
 func receiveRequest(body string) func(*testing.T) *http.Request {
@@ -136,6 +202,14 @@ func requestWithDeclaredLength(length int64) func(*testing.T) *http.Request {
 		request.Body = io.NopCloser(bodyReadMustNotRun{})
 		return request
 	}
+}
+
+func requestWithHTTPMaximumReaderOverflow(t *testing.T) *http.Request {
+	t.Helper()
+	request := receiveRequest(strings.Repeat(" ", receiveFixtureBodyLimit+1))(t)
+	request.ContentLength = -1
+	request.Body = http.MaxBytesReader(httptest.NewRecorder(), request.Body, receiveFixtureBodyLimit)
+	return request
 }
 
 type bodyReadMustNotRun struct{}

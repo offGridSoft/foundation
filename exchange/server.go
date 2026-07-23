@@ -57,6 +57,83 @@ func ReceiveJSON[T core.Validatable](request *http.Request, route core.HTTPRoute
 	return decodeReceivedJSON[T](request, key, limit)
 }
 
+// JSONProjector completes a decoded wire structure with typed request state
+// before the owning body validates the complete ingress value. Typical
+// projections copy path, query, or authenticated principal values into Body.
+type JSONProjector[Body any, BodyPtr interface {
+	*Body
+	core.Validatable
+}] func(context.Context, *http.Request, BodyPtr) error
+
+// ReceiveProjectedJSON decodes a strict bounded JSON object, applies one typed
+// structure-to-structure projection, and validates the completed body. The
+// unvalidated intermediate never crosses this package boundary.
+func ReceiveProjectedJSON[Body any, BodyPtr interface {
+	*Body
+	core.Validatable
+}](request *http.Request, route core.HTTPRouteSemantics, policy ServerPolicy, project JSONProjector[Body, BodyPtr]) (Received[BodyPtr], error) {
+	var zero Received[BodyPtr]
+	if project == nil {
+		return zero, requestError(core.ErrFoundationContract)
+	}
+	key, limit, err := validateReceiveJSONCall(request, route, policy)
+	if err != nil {
+		return zero, err
+	}
+	data, err := readRequestBody(request, limit)
+	if err != nil {
+		return zero, err
+	}
+	body, err := core.DecodeStrictJSONStructure[Body](data)
+	if err != nil {
+		return zero, requestError(err)
+	}
+	bodyPtr := BodyPtr(&body)
+	if err := project(request.Context(), request, bodyPtr); err != nil {
+		return zero, requestError(err)
+	}
+	if err := bodyPtr.Validate(); err != nil {
+		return zero, requestError(err)
+	}
+	received := Received[BodyPtr]{Body: bodyPtr, IdempotencyKey: key}
+	if err := received.Validate(); err != nil {
+		return zero, err
+	}
+	return received, nil
+}
+
+// ReceiveNoBody validates the complete HTTP metadata boundary for a route
+// whose method never carries an exchange body. It rejects smuggled bodies,
+// body metadata, encodings, and replay headers before application dispatch.
+func ReceiveNoBody(request *http.Request, route core.HTTPRouteSemantics) (Received[core.HTTPNoBody], error) {
+	var zero Received[core.HTTPNoBody]
+	key, err := validateReceiveNoBodyCall(request, route)
+	if err != nil {
+		return zero, err
+	}
+	received := Received[core.HTTPNoBody]{Body: core.HTTPNoBody{}, IdempotencyKey: key}
+	if err := received.Validate(); err != nil {
+		return zero, err
+	}
+	return received, nil
+}
+
+func validateReceiveNoBodyCall(request *http.Request, route core.HTTPRouteSemantics) (core.HTTPIdempotencyKey, error) {
+	if request == nil {
+		return core.HTTPIdempotencyKey{}, requestError(core.ErrFoundationContract)
+	}
+	if err := route.Validate(); err != nil {
+		return core.HTTPIdempotencyKey{}, requestError(err)
+	}
+	if err := validateRequestContext(request.Context()); err != nil {
+		return core.HTTPIdempotencyKey{}, err
+	}
+	if err := validateNoBodyRequestMetadata(request, route); err != nil {
+		return core.HTTPIdempotencyKey{}, err
+	}
+	return requestIdempotencyKey(request, route)
+}
+
 func validateReceiveJSONCall(request *http.Request, route core.HTTPRouteSemantics, policy ServerPolicy) (core.HTTPIdempotencyKey, int64, error) {
 	if request == nil {
 		return core.HTTPIdempotencyKey{}, 0, requestError(core.ErrFoundationContract)
@@ -120,9 +197,8 @@ func validateRequestContext(ctx context.Context) error {
 }
 
 func validateRequestMetadata(request *http.Request, route core.HTTPRouteSemantics) error {
-	method, err := core.ParseHTTPMethod(request.Method)
-	if err != nil || method != route.Method {
-		return requestError(core.ErrFoundationContract)
+	if err := validateRequestMethod(request, route); err != nil {
+		return err
 	}
 	contentTypes := request.Header.Values(core.HTTPHeaderContentType)
 	if len(contentTypes) != 1 || contentTypes[0] != core.HTTPContentTypeJSON {
@@ -130,6 +206,30 @@ func validateRequestMetadata(request *http.Request, route core.HTTPRouteSemantic
 	}
 	if len(request.Header.Values(core.HTTPHeaderContentEncoding)) != 0 {
 		return errors.Join(core.ErrExchangeRequest, core.ErrExchangeContentType)
+	}
+	return nil
+}
+
+func validateNoBodyRequestMetadata(request *http.Request, route core.HTTPRouteSemantics) error {
+	if err := validateRequestMethod(request, route); err != nil {
+		return err
+	}
+	if request.ContentLength != 0 || request.Body != nil && request.Body != http.NoBody {
+		return requestError(core.ErrFoundationContract)
+	}
+	if len(request.Header.Values(core.HTTPHeaderContentType)) != 0 || len(request.Header.Values(core.HTTPHeaderContentEncoding)) != 0 {
+		return errors.Join(core.ErrExchangeRequest, core.ErrExchangeContentType)
+	}
+	if len(request.TransferEncoding) != 0 {
+		return requestError(core.ErrFoundationContract)
+	}
+	return nil
+}
+
+func validateRequestMethod(request *http.Request, route core.HTTPRouteSemantics) error {
+	method, err := core.ParseHTTPMethod(request.Method)
+	if err != nil || method != route.Method {
+		return requestError(core.ErrFoundationContract)
 	}
 	return nil
 }
@@ -235,10 +335,20 @@ func readRequestBody(request *http.Request, limit int64) ([]byte, error) {
 	if request.Body == nil {
 		return nil, requestError(core.ErrFoundationContract)
 	}
+	body := request.Body
+	data, readErr := readRequestBodyData(request, body, limit)
+	closeErr := body.Close()
+	if closeErr != nil {
+		return nil, errors.Join(readErr, requestError(closeErr))
+	}
+	return data, readErr
+}
+
+func readRequestBodyData(request *http.Request, body io.Reader, limit int64) ([]byte, error) {
 	if request.ContentLength > limit {
 		return nil, errors.Join(core.ErrExchangeRequest, core.ErrExchangeBodyLimit)
 	}
-	data, err := readBounded(request.Context(), request.Body, limit, bodyReadRequest)
+	data, err := readBounded(request.Context(), body, limit, bodyReadRequest)
 	if err != nil {
 		return nil, err
 	}
@@ -332,6 +442,9 @@ func (s *boundedReadState) finishRead(count int, readErr error) (bool, error) {
 	}
 	if errors.Is(readErr, io.EOF) {
 		return true, nil
+	}
+	if _, ok := errors.AsType[*http.MaxBytesError](readErr); ok {
+		return false, bodyReadLimitError(s.Phase)
 	}
 	return false, bodyReadError(s.Phase, readErr)
 }
