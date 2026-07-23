@@ -382,8 +382,10 @@ type FuzzArtifact struct {
 	Bytes  uint64         `json:"bytes"`
 }
 
+const FuzzArtifactMinimumBytes uint64 = 1
+
 func (a FuzzArtifact) Validate() error {
-	if a.Bytes == 0 {
+	if a.Bytes < FuzzArtifactMinimumBytes {
 		return fmt.Errorf(ErrFmtFuzzEvidence, ErrContract)
 	}
 	if err := a.Digest.Validate(); err != nil {

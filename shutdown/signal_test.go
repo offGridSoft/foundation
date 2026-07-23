@@ -170,6 +170,33 @@ func TestWatchSecondSignalRunsBoundedTypedForceAction(t *testing.T) {
 	<-controller.Done()
 }
 
+func TestWatchSecondSignalReleasesOperatingSystemDefaultsBeforeForceAction(t *testing.T) {
+	t.Parallel()
+
+	signals := make(chan os.Signal, 2)
+	released := make(chan struct{})
+	controller, err := newController(WatchRequest{
+		Parent:  t.Context(),
+		Signals: signals,
+		Policy:  forceSignalPolicy(time.Second),
+		Force: func(context.Context, ForceRequest) error {
+			<-released
+			return nil
+		},
+	}, func() { close(released) })
+	if err != nil {
+		t.Fatalf("newController() error = %v, want nil", err)
+	}
+	signals <- firstSupportedOperatingSystemSignal()
+	<-controller.Context().Done()
+	signals <- secondSupportedOperatingSystemSignal()
+	result := <-controller.Forced()
+	if result.Outcome != ForceOutcomeCompleted || result.Err != nil {
+		t.Fatalf("force result = %+v, want completed after signal defaults were restored", result)
+	}
+	<-controller.Done()
+}
+
 func TestWatchGraceExpiryRunsForceActionWithoutTriggerSignal(t *testing.T) {
 	t.Parallel()
 

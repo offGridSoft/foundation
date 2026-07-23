@@ -304,6 +304,11 @@ func (c *Controller) waitForEscalation(request WatchRequest, first SignalKind) {
 				continue
 			}
 			if request.Policy.SecondSignal == SecondSignalForce {
+				// The second signal has exhausted the graceful contract.
+				// Restore operating-system defaults before force work begins so
+				// every later signal remains an immediate operator escape hatch,
+				// even while the bounded force action is still running.
+				c.release()
 				c.force(request, ForceRequest{Reason: ForceReasonSecondSignal, FirstSignal: first, TriggerSignal: kind})
 			}
 			return
