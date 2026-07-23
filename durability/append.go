@@ -179,7 +179,7 @@ func syncAppendParent(target core.AbsoluteFilePath) error {
 	if err != nil {
 		return err
 	}
-	if err := SyncDirectory(directory); err != nil {
+	if err := CommitDirectory(directory); err != nil {
 		return fmt.Errorf(core.ErrFmtDurableAppendSync, err)
 	}
 	return nil

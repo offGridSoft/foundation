@@ -122,7 +122,7 @@ func syncRootDirectory(root *os.Root, path string) error {
 	if statErr != nil || !info.IsDir() {
 		return errors.Join(core.ErrDurabilityContract, statErr, directory.Close())
 	}
-	syncErr := FullSync(directory)
+	syncErr := CommitFile(directory)
 	return errors.Join(syncErr, directory.Close())
 }
 
@@ -137,7 +137,8 @@ func requireDirectory(path string) error {
 	return nil
 }
 
-func SyncDirectory(path core.AbsoluteDirectoryPath) error {
+// CommitDirectory makes completed entry changes durable for one directory.
+func CommitDirectory(path core.AbsoluteDirectoryPath) error {
 	if err := path.Validate(); err != nil {
 		return errors.Join(core.ErrDurabilityContract, err)
 	}
@@ -148,7 +149,7 @@ func SyncDirectory(path core.AbsoluteDirectoryPath) error {
 	if err != nil {
 		return fmt.Errorf("open durable directory: %w", err)
 	}
-	syncErr := FullSync(directory)
+	syncErr := CommitFile(directory)
 	closeErr := directory.Close()
 	return errors.Join(syncErr, closeErr)
 }

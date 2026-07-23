@@ -148,7 +148,7 @@ func SendBounded[Target RequestTarget](ctx context.Context, client Client, reque
 	if err != nil {
 		return zero, requestError(err)
 	}
-	httpResponse, err := configuredHTTPClient(client.HTTP, policy.Redirect).Do(httpRequest) // #nosec G704 -- typed target validation and redirect policy own the destination.
+	httpResponse, err := configuredHTTPClient(client.http, policy.Redirect).Do(httpRequest) // #nosec G704 -- typed target validation and redirect policy own the destination.
 	if err != nil {
 		return zero, classifyHTTPDoError[core.HTTPNoBody](ctx, httpResponse, err, 1).Err
 	}
@@ -309,7 +309,7 @@ func SendStream[Target RequestTarget](ctx context.Context, client Client, reques
 	}
 	httpRequest.ContentLength = length
 	applyRawHeaders(httpRequest, request.Headers)
-	httpResponse, err := configuredHTTPClient(client.HTTP, policy.Redirect).Do(httpRequest) // #nosec G704 -- typed target validation and redirect policy own the destination.
+	httpResponse, err := configuredHTTPClient(client.http, policy.Redirect).Do(httpRequest) // #nosec G704 -- typed target validation and redirect policy own the destination.
 	if err != nil {
 		return zero, classifyHTTPDoError[core.HTTPNoBody](ctx, httpResponse, err, 1).Err
 	}
@@ -410,7 +410,7 @@ func ReceiveStream[Target RequestTarget](ctx context.Context, client Client, req
 	if request.ExpectedResponseContentType != core.HTTPMediaTypeUnknown {
 		httpRequest.Header.Set(core.HTTPHeaderAccept, request.ExpectedResponseContentType.String())
 	}
-	httpResponse, err := configuredHTTPClient(client.HTTP, policy.Redirect).Do(httpRequest) // #nosec G704 -- typed target validation and redirect policy own the destination.
+	httpResponse, err := configuredHTTPClient(client.http, policy.Redirect).Do(httpRequest) // #nosec G704 -- typed target validation and redirect policy own the destination.
 	if err != nil {
 		return zero, classifyHTTPDoError[core.HTTPNoBody](ctx, httpResponse, err, 1).Err
 	}

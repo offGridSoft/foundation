@@ -53,19 +53,19 @@ func TestFullSyncRealFileKindsAndInvalidHandles(t *testing.T) {
 			if !tc.wantError {
 				t.Cleanup(func() { _ = file.Close() })
 			}
-			err = FullSync(file)
+			err = CommitFile(file)
 			if tc.wantError && err == nil {
-				t.Fatalf("FullSync() error = nil, want typed handle failure")
+				t.Fatalf("CommitFile() error = nil, want typed handle failure")
 			}
 			if !tc.wantError && err != nil {
 				var pathErr *os.PathError
 				if tc.name != "p05_directory" || !errors.As(err, &pathErr) {
-					t.Fatalf("FullSync() error = %v, want nil (or typed directory limitation)", err)
+					t.Fatalf("CommitFile() error = %v, want nil (or typed directory limitation)", err)
 				}
 			}
 		})
 	}
-	if err := FullSync(nil); !errors.Is(err, os.ErrInvalid) {
-		t.Fatalf("FullSync(nil) error = %v, want os.ErrInvalid", err)
+	if err := CommitFile(nil); !errors.Is(err, os.ErrInvalid) {
+		t.Fatalf("CommitFile(nil) error = %v, want os.ErrInvalid", err)
 	}
 }

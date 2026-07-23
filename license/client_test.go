@@ -462,7 +462,6 @@ func TestRetryLoopRetriesThenAcceptsEnvelope(t *testing.T) {
 	client := Client[BugCheckIn, BugCheckInResponse]{
 		HTTP:     server.Client(),
 		Endpoint: endpoint,
-		Jitter:   func() float64 { return 1 },
 		Backoff:  checkInTestBackoff(3),
 		Keyring:  core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}},
 	}
@@ -506,7 +505,6 @@ func TestWitnessClientRetryThenAcceptsSubscriptionEnvelope(t *testing.T) {
 	client := Client[WitnessCheckIn, WitnessCheckInResponse]{
 		HTTP:     server.Client(),
 		Endpoint: endpoint,
-		Jitter:   func() float64 { return 1 },
 		Backoff:  checkInTestBackoff(2),
 		Keyring:  core.SigningKeyring{Keys: []core.SigningPublicKey{{ID: keyID, PublicKey: publicKey}}},
 	}
@@ -541,7 +539,6 @@ func TestRetryExhaustionCarriesServerRetryAfter(t *testing.T) {
 	client := Client[BugCheckIn, BugCheckInResponse]{
 		HTTP:     server.Client(),
 		Endpoint: endpoint,
-		Jitter:   func() float64 { return 1 },
 		Backoff:  checkInTestBackoff(1),
 		Keyring:  testClientKeyring(t),
 	}
@@ -572,7 +569,6 @@ func TestRetryExhaustedTransportErrorCarriesLicenseIdentity(t *testing.T) {
 	client := Client[BugCheckIn, BugCheckInResponse]{
 		HTTP:     &http.Client{Transport: failingRoundTripper{}},
 		Endpoint: endpoint,
-		Jitter:   func() float64 { return 1 },
 		Backoff:  checkInTestBackoff(1),
 		Keyring:  testClientKeyring(t),
 	}

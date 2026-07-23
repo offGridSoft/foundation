@@ -19,10 +19,7 @@ func TestPlanStepPanicPreservesPanicValueDiagnostics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseStepID() error = %v", err)
 	}
-	plan := Plan{
-		Policy: testPlanPolicy(time.Second, time.Second),
-		Steps:  []Step{{ID: id, Run: func(context.Context) error { panic("disk handle wedged") }}},
-	}
+	plan := mustTestPlan(t, testPlanPolicy(time.Second, time.Second), Step{ID: id, Run: func(context.Context) error { panic("disk handle wedged") }})
 	report, runErr := plan.Run(t.Context())
 	if !errors.Is(runErr, core.ErrShutdownStepPanic) {
 		t.Fatalf("Plan.Run() error = %v, want ErrShutdownStepPanic identity", runErr)
@@ -70,12 +67,9 @@ func TestPlanStepSpoofedPanicIdentityCannotClaimRecoveredState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseStepID() error = %v", err)
 	}
-	plan := Plan{
-		Policy: testPlanPolicy(time.Second, time.Second),
-		Steps: []Step{{ID: id, Run: func(context.Context) error {
-			return fmt.Errorf("cleanup wrapper: %w", core.ErrShutdownStepPanic)
-		}}},
-	}
+	plan := mustTestPlan(t, testPlanPolicy(time.Second, time.Second), Step{ID: id, Run: func(context.Context) error {
+		return fmt.Errorf("cleanup wrapper: %w", core.ErrShutdownStepPanic)
+	}})
 	report, runErr := plan.Run(t.Context())
 	if !errors.Is(runErr, core.ErrShutdownStepPanic) || !errors.Is(runErr, core.ErrShutdownStepFailure) {
 		t.Fatalf("Plan.Run(spoofed identity) error = %v, want original identity under ErrShutdownStepFailure", runErr)
@@ -113,7 +107,7 @@ func TestPanicCaptureSurvivesPanickingFormatterAndBoundsHostileText(t *testing.T
 	t.Parallel()
 
 	id, _ := ParseStepID("hostile-panic-value")
-	plan := Plan{Policy: testPlanPolicy(time.Second, time.Second), Steps: []Step{{ID: id, Run: func(context.Context) error { panic(panickingPanicStringer{}) }}}}
+	plan := mustTestPlan(t, testPlanPolicy(time.Second, time.Second), Step{ID: id, Run: func(context.Context) error { panic(panickingPanicStringer{}) }})
 	report, err := plan.Run(t.Context())
 	var panicErr StepPanicError
 	if !errors.Is(err, core.ErrShutdownStepPanic) || !errors.As(report.Results[0].Err, &panicErr) || panicErr.Validate() != nil {

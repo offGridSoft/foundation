@@ -1,8 +1,11 @@
 package core
 
 const (
-	DurableStagePattern    = ".foundation-stage-*"
-	DurableCopyBufferBytes = 32 << 10
+	DurableStagePrefix         = ".foundation-stage-"
+	DurableStagePattern        = DurableStagePrefix + "*"
+	DurableStageTokenBytes     = 16
+	DurableStageCreateAttempts = 32
+	DurableCopyBufferBytes     = 32 << 10
 
 	ErrFmtDurableAppendRequest = "durability.AppendRequest: %w"
 	ErrFmtDurableAppendOpen    = "open durable append target: %w"

@@ -115,7 +115,11 @@ func (c TimestampClient) postTimestampQuery(ctx context.Context, query []byte) (
 		ResponseBodyLimit: core.NewByteCount(RFC3161DERMaximumBytes),
 		Redirect:          core.HTTPRedirectReject,
 	}
-	response, err := exchange.SendBounded(ctx, exchange.Client{HTTP: c.HTTP}, request, policy)
+	exchangeClient, err := exchange.NewClient(c.HTTP)
+	if err != nil {
+		return nil, TimestampHTTPError{Cause: err}
+	}
+	response, err := exchange.SendBounded(ctx, exchangeClient, request, policy)
 	if err != nil {
 		return nil, TimestampHTTPError{StatusCode: response.Status.Int(), Cause: err}
 	}

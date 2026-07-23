@@ -35,8 +35,8 @@ func TestEnsureDirectoryRealFilesystemHostileTable(t *testing.T) {
 	if err != nil || !info.IsDir() || info.Mode().Perm() != 0o700 {
 		t.Fatalf("target stat = (%v,%v), want directory mode 0700", info, err)
 	}
-	if err := SyncDirectory(target); err != nil {
-		t.Fatalf("SyncDirectory(real directory) error = %v, want nil", err)
+	if err := CommitDirectory(target); err != nil {
+		t.Fatalf("CommitDirectory(real directory) error = %v, want nil", err)
 	}
 
 	fileCollision := filepath.Join(rootText, "file")
@@ -47,8 +47,8 @@ func TestEnsureDirectoryRealFilesystemHostileTable(t *testing.T) {
 	if err := EnsureDirectory(t.Context(), DirectoryRequest{Root: root, Target: collision, Mode: 0o700}); !errors.Is(err, core.ErrDurabilityContract) {
 		t.Fatalf("EnsureDirectory(file collision) error = %v, want ErrDurabilityContract", err)
 	}
-	if err := SyncDirectory(collision); !errors.Is(err, core.ErrDurabilityContract) {
-		t.Fatalf("SyncDirectory(file) error = %v, want ErrDurabilityContract", err)
+	if err := CommitDirectory(collision); !errors.Is(err, core.ErrDurabilityContract) {
+		t.Fatalf("CommitDirectory(file) error = %v, want ErrDurabilityContract", err)
 	}
 }
 

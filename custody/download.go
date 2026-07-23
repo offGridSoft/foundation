@@ -392,8 +392,12 @@ func (c Client) DownloadArtifact(ctx context.Context, target DownloadTarget, dst
 	}
 	requestContext, cancel := context.WithTimeout(ctx, CustodyTransferHTTPBudget)
 	defer cancel()
+	exchangeClient, err := exchange.NewClient(c.HTTP)
+	if err != nil {
+		return err
+	}
 	hasher := sha256.New()
-	response, err := exchange.ReceiveStream(requestContext, exchange.Client{HTTP: c.HTTP}, exchange.StreamDownloadRequest[DownloadURL]{
+	response, err := exchange.ReceiveStream(requestContext, exchangeClient, exchange.StreamDownloadRequest[DownloadURL]{
 		Target:            target.URL,
 		Destination:       io.MultiWriter(dst, hasher),
 		ResponseBodyLimit: target.Size,

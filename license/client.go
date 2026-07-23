@@ -68,7 +68,6 @@ type CheckInPayload interface {
 
 type Client[P CheckInPayload, R CheckInResponseBody] struct {
 	HTTP     *http.Client
-	Jitter   func() float64
 	Endpoint core.APIEndpoint
 	APIKey   APICallKey
 	Keyring  core.SigningKeyring
@@ -115,9 +114,13 @@ func (c Client[P, R]) Do(ctx context.Context, input P) (R, error) {
 	}
 	requestContext, cancel := context.WithTimeout(ctx, CheckInBudget)
 	defer cancel()
+	exchangeClient, err := exchange.NewClient(c.HTTP)
+	if err != nil {
+		return zero, transportError(err)
+	}
 	response, err := exchange.SendJSON[P, R](
 		requestContext,
-		c.exchangeClient(),
+		exchangeClient,
 		c.exchangeRequest(input, idempotencyKey),
 		c.exchangePolicy(),
 	)
@@ -148,14 +151,6 @@ func (c Client[P, R]) exchangeRequest(input P, key core.HTTPIdempotencyKey) exch
 	}
 }
 
-func (c Client[P, R]) exchangeClient() exchange.Client {
-	client := exchange.Client{HTTP: c.HTTP}
-	if c.Jitter != nil {
-		client.Jitter = checkInJitter(c.Jitter)
-	}
-	return client
-}
-
 func (c Client[P, R]) exchangePolicy() exchange.ClientPolicy {
 	backoff := c.backoffPolicy()
 	retry := core.DefaultHTTPRetryPolicy()
@@ -176,10 +171,6 @@ func (c Client[P, R]) backoffPolicy() core.BackoffPolicy {
 	}
 	return c.Backoff
 }
-
-type checkInJitter func() float64
-
-func (j checkInJitter) Fraction() float64 { return j() }
 
 func checkInExchangeError[R core.Validatable](response exchange.Response[R], cause error) error {
 	if exhausted, ok := errors.AsType[exchange.RetryExhaustedError](cause); ok {

@@ -170,7 +170,7 @@ type operatingFile struct {
 }
 
 func (f operatingFile) SyncStable() error {
-	return FullSync(f.File)
+	return CommitFile(f.File)
 }
 
 func (operatingSystem) CreateTemp(directory, pattern string) (stageFile, error) {
@@ -187,7 +187,7 @@ func (operatingSystem) Rename(oldPath, newPath string) error {
 	return os.Rename(oldPath, newPath)
 }
 func (operatingSystem) SyncParent(path core.AbsoluteDirectoryPath) error {
-	return SyncDirectory(path)
+	return CommitDirectory(path)
 }
 
 type Stage struct {

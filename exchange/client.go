@@ -18,27 +18,39 @@ import (
 
 const redirectMaximumHops = 10
 
-type Clock interface {
+type clock interface {
 	Now() core.UnixNanoTime
 }
 
-type JitterSource interface {
+type jitterSource interface {
 	Fraction() float64
 }
 
-type Waiter interface {
+type waiter interface {
 	Wait(context.Context, core.NanosecondsDuration) error
 }
 
 type Client struct {
-	HTTP   *http.Client
-	Clock  Clock
-	Jitter JitterSource
-	Waiter Waiter
+	http   *http.Client
+	clock  clock
+	jitter jitterSource
+	waiter waiter
+}
+
+func NewClient(httpClient *http.Client) (Client, error) {
+	return newClient(httpClient, nil, nil, nil)
+}
+
+func newClient(httpClient *http.Client, clock clock, jitter jitterSource, waiter waiter) (Client, error) {
+	client := Client{http: httpClient, clock: clock, jitter: jitter, waiter: waiter}
+	if err := client.Validate(); err != nil {
+		return Client{}, err
+	}
+	return client, nil
 }
 
 func (c Client) Validate() error {
-	if c.HTTP == nil {
+	if c.http == nil {
 		return responseError(core.ErrExchangeContract)
 	}
 	return nil
@@ -285,7 +297,7 @@ func sendAttempt[RequestBody, ResponseBody core.Validatable](input sendAttemptIn
 	if err != nil {
 		return attemptResult[ResponseBody]{Err: requestError(err)}
 	}
-	httpClient := configuredHTTPClient(input.Client.HTTP, input.Policy.Redirect)
+	httpClient := configuredHTTPClient(input.Client.http, input.Policy.Redirect)
 	httpResponse, err := httpClient.Do(httpRequest) // #nosec G704 -- endpoint and redirect destinations are validated typed contracts.
 	if err != nil {
 		return classifyHTTPDoError[ResponseBody](input.Parent, httpResponse, err, input.Attempt)
@@ -643,23 +655,23 @@ func (timerWaiter) Wait(ctx context.Context, delay core.NanosecondsDuration) err
 	}
 }
 
-func clientClock(client Client) Clock {
-	if client.Clock != nil {
-		return client.Clock
+func clientClock(client Client) clock {
+	if client.clock != nil {
+		return client.clock
 	}
 	return systemClock{}
 }
 
-func clientJitter(client Client) JitterSource {
-	if client.Jitter != nil {
-		return client.Jitter
+func clientJitter(client Client) jitterSource {
+	if client.jitter != nil {
+		return client.jitter
 	}
 	return cryptoJitter{}
 }
 
-func clientWaiter(client Client) Waiter {
-	if client.Waiter != nil {
-		return client.Waiter
+func clientWaiter(client Client) waiter {
+	if client.waiter != nil {
+		return client.waiter
 	}
 	return timerWaiter{}
 }

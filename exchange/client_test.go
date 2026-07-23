@@ -89,7 +89,7 @@ func TestSendJSONClientServerLayerTriad(t *testing.T) {
 		defer server.Close()
 
 		waiter := &recordingWaiter{}
-		client := Client{HTTP: server.Client(), Clock: fixedClock{now: core.UnixNanoTimeFromInt64(1)}, Jitter: fixedJitter{fraction: 1}, Waiter: waiter}
+		client := mustTestClientRuntime(t, server.Client(), fixedClock{now: core.UnixNanoTimeFromInt64(1)}, fixedJitter{fraction: 1}, waiter)
 		request := idempotentClientRequest(t, server.URL)
 		got, gotErr := SendJSON[receiveFixture, responseFixture](context.Background(), client, request, clientTestPolicy(3))
 		if gotErr != nil {
@@ -135,7 +135,7 @@ func TestSendJSONClientServerLayerTriad(t *testing.T) {
 			Semantics:      core.HTTPRequestSemantics{Method: core.HTTPMethodPost, Replay: core.HTTPReplaySingleAttempt},
 			ExpectedStatus: core.HTTPStatusOK,
 		}
-		client := Client{HTTP: server.Client(), Clock: fixedClock{now: core.UnixNanoTimeFromInt64(1)}, Jitter: fixedJitter{fraction: 1}, Waiter: &recordingWaiter{}}
+		client := mustTestClientRuntime(t, server.Client(), fixedClock{now: core.UnixNanoTimeFromInt64(1)}, fixedJitter{fraction: 1}, &recordingWaiter{})
 		got, gotErr := SendJSON[receiveFixture, responseFixture](context.Background(), client, request, clientTestPolicy(4))
 		if !errors.Is(gotErr, core.ErrExchangeResponse) || errors.Is(gotErr, core.ErrExchangeRetryExhausted) {
 			t.Fatalf("SendJSON() error = %v, want terminal response without retry exhaustion", gotErr)
@@ -156,7 +156,7 @@ func TestSendJSONClientServerLayerTriad(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		client := Client{HTTP: server.Client()}
+		client := mustTestClient(t, server.Client())
 		got, gotErr := SendJSON[receiveFixture, responseFixture](ctx, client, idempotentClientRequest(t, server.URL), clientTestPolicy(3))
 		if !errors.Is(gotErr, core.ErrExchangeCancelled) {
 			t.Fatalf("SendJSON() error = %v, want %v", gotErr, core.ErrExchangeCancelled)

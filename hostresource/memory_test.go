@@ -40,22 +40,22 @@ func TestMemoryAssessmentHostileBoundaryTable(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := NewMemoryAssessment(tc.snapshot, tc.limit)
+			got, err := newMemoryAssessment(tc.snapshot, tc.limit)
 			if tc.wantState == MemoryPressureUnknown {
 				if !errors.Is(err, tc.wantError) {
-					t.Fatalf("NewMemoryAssessment() error = %v, want errors.Is %v", err, tc.wantError)
+					t.Fatalf("newMemoryAssessment() error = %v, want errors.Is %v", err, tc.wantError)
 				}
 				return
 			}
 			if err != nil || got.State != tc.wantState || got.Validate() != nil {
-				t.Fatalf("NewMemoryAssessment() = (%+v,%v), want state %d and valid", got, err, tc.wantState)
+				t.Fatalf("newMemoryAssessment() = (%+v,%v), want state %d and valid", got, err, tc.wantState)
 			}
-			checkErr := CheckMemoryLimit(got)
+			checkErr := memoryAssessmentError(got)
 			if tc.wantError == nil && checkErr != nil {
-				t.Fatalf("CheckMemoryLimit() error = %v, want nil", checkErr)
+				t.Fatalf("memoryAssessmentError() error = %v, want nil", checkErr)
 			}
 			if tc.wantError != nil && !errors.Is(checkErr, tc.wantError) {
-				t.Fatalf("CheckMemoryLimit() error = %v, want %v", checkErr, tc.wantError)
+				t.Fatalf("memoryAssessmentError() error = %v, want %v", checkErr, tc.wantError)
 			}
 		})
 	}
@@ -82,9 +82,13 @@ func TestMemoryEnumsSnapshotsAndImpossibleStates(t *testing.T) {
 	if !errors.Is(impossible.Validate(), core.ErrHostResourceContract) {
 		t.Fatalf("impossible MemoryAssessment.Validate() error = %v, want ErrHostResourceContract", impossible.Validate())
 	}
-	snapshot, err := ReadMemorySnapshot()
+	snapshot, err := readMemorySnapshot()
 	if err != nil || snapshot.Validate() != nil {
-		t.Fatalf("ReadMemorySnapshot() = (%+v,%v), want valid host observation", snapshot, err)
+		t.Fatalf("readMemorySnapshot() = (%+v,%v), want valid host observation", snapshot, err)
+	}
+	assessment, assessErr := AssessMemory(MemoryAssessmentRequest{Limit: MemoryLimit{LimitBytes: math.MaxInt64, TriggerPercent: 100}})
+	if assessErr != nil || assessment.Validate() != nil {
+		t.Fatalf("AssessMemory(real runtime) = (%+v,%v), want valid healthy assessment", assessment, assessErr)
 	}
 }
 

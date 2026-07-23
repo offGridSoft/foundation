@@ -58,7 +58,37 @@ type DiskAssessment struct {
 	State    DiskPressureState
 }
 
-func NewDiskAssessment(capacity DiskCapacity, policy DiskPressurePolicy) (DiskAssessment, error) {
+type DiskAssessmentRequest struct {
+	Path   core.AbsoluteDirectoryPath
+	Policy DiskPressurePolicy
+}
+
+func (r DiskAssessmentRequest) Validate() error {
+	if err := r.Path.Validate(); err != nil {
+		return err
+	}
+	return r.Policy.Validate()
+}
+
+func AssessDisk(ctx context.Context, request DiskAssessmentRequest) (DiskAssessment, error) {
+	if err := contextcheck.Validate(ctx); err != nil {
+		return DiskAssessment{}, err
+	}
+	if err := request.Validate(); err != nil {
+		return DiskAssessment{}, err
+	}
+	capacity, err := probeDiskCapacity(request.Path)
+	if err != nil {
+		return DiskAssessment{}, err
+	}
+	assessment, err := newDiskAssessment(capacity, request.Policy)
+	if err != nil {
+		return DiskAssessment{}, err
+	}
+	return assessment, diskAssessmentError(assessment)
+}
+
+func newDiskAssessment(capacity DiskCapacity, policy DiskPressurePolicy) (DiskAssessment, error) {
 	if err := capacity.Validate(); err != nil {
 		return DiskAssessment{}, err
 	}
@@ -85,14 +115,14 @@ func (a DiskAssessment) Validate() error {
 	if err := a.State.Validate(); err != nil {
 		return err
 	}
-	expected, err := NewDiskAssessmentState(a.Capacity, a.Policy)
+	expected, err := newDiskAssessmentState(a.Capacity, a.Policy)
 	if err != nil || expected != a.State {
 		return core.ErrHostResourceContract
 	}
 	return nil
 }
 
-func NewDiskAssessmentState(capacity DiskCapacity, policy DiskPressurePolicy) (DiskPressureState, error) {
+func newDiskAssessmentState(capacity DiskCapacity, policy DiskPressurePolicy) (DiskPressureState, error) {
 	if err := capacity.Validate(); err != nil {
 		return DiskPressureUnknown, err
 	}
@@ -108,7 +138,7 @@ func NewDiskAssessmentState(capacity DiskCapacity, policy DiskPressurePolicy) (D
 	return DiskPressureHealthy, nil
 }
 
-func CheckDiskFloor(assessment DiskAssessment) error {
+func diskAssessmentError(assessment DiskAssessment) error {
 	if err := assessment.Validate(); err != nil {
 		return err
 	}
@@ -118,10 +148,7 @@ func CheckDiskFloor(assessment DiskAssessment) error {
 	return nil
 }
 
-func ProbeDisk(ctx context.Context, path core.AbsoluteDirectoryPath) (DiskCapacity, error) {
-	if err := contextcheck.Validate(ctx); err != nil {
-		return DiskCapacity{}, err
-	}
+func probeDiskCapacity(path core.AbsoluteDirectoryPath) (DiskCapacity, error) {
 	if err := path.Validate(); err != nil {
 		return DiskCapacity{}, err
 	}

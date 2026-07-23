@@ -102,8 +102,12 @@ func (c ReleaseDataClient) Fetch(ctx context.Context, request ReleaseDataRequest
 		},
 		ExpectedStatus: core.HTTPStatusOK,
 	}
+	exchangeClient, err := exchange.NewClient(c.HTTP)
+	if err != nil {
+		return ReleaseDataResponse{}, DeployHTTPError{Cause: err}
+	}
 	exchangeResponse, err := exchange.SendJSON[ReleaseDataRequest, ReleaseDataResponse](
-		requestContext, exchange.Client{HTTP: c.HTTP}, exchangeRequest, releaseAPIClientPolicy(),
+		requestContext, exchangeClient, exchangeRequest, releaseAPIClientPolicy(),
 	)
 	response, err := deployExchangeResult(exchangeResponse, err)
 	if err != nil {

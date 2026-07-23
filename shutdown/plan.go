@@ -3,6 +3,7 @@ package shutdown
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"github.com/offGridSoft/foundation/v2026/core"
 )
@@ -43,23 +44,78 @@ func (p PlanPolicy) Validate() error {
 }
 
 type Plan struct {
-	Steps  []Step
-	Policy PlanPolicy
+	steps  []Step
+	policy PlanPolicy
+	mu     sync.Mutex
+	state  planState
 }
 
-func (p Plan) Validate() error {
-	if err := p.Policy.Validate(); err != nil {
-		return err
+type planState uint8
+
+const (
+	planStateUnknown planState = iota
+	planStateOpen
+	planStateRunning
+	planStateComplete
+)
+
+func NewPlan(policy PlanPolicy) (*Plan, error) {
+	if err := policy.Validate(); err != nil {
+		return nil, err
 	}
-	if len(p.Steps) == 0 || len(p.Steps) > core.ShutdownMaximumSteps {
+	return &Plan{
+		steps:  make([]Step, 0, core.ShutdownMaximumSteps),
+		policy: policy,
+		state:  planStateOpen,
+	}, nil
+}
+
+func (p *Plan) Register(step Step) error {
+	if p == nil {
 		return core.ErrShutdownContract
 	}
-	for index, step := range p.Steps {
+	if err := step.Validate(); err != nil {
+		return err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.state != planStateOpen || len(p.steps) >= core.ShutdownMaximumSteps {
+		return core.ErrShutdownContract
+	}
+	for _, registered := range p.steps {
+		if registered.ID == step.ID {
+			return core.ErrShutdownContract
+		}
+	}
+	p.steps = append(p.steps, step)
+	return nil
+}
+
+func (p *Plan) Validate() error {
+	if p == nil {
+		return core.ErrShutdownContract
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.validateLocked()
+}
+
+func (p *Plan) validateLocked() error {
+	if err := p.policy.Validate(); err != nil {
+		return err
+	}
+	if p.state == planStateUnknown || p.state > planStateComplete {
+		return core.ErrShutdownContract
+	}
+	if len(p.steps) == 0 || len(p.steps) > core.ShutdownMaximumSteps {
+		return core.ErrShutdownContract
+	}
+	for index, step := range p.steps {
 		if err := step.Validate(); err != nil {
 			return err
 		}
 		for prior := range index {
-			if p.Steps[prior].ID == step.ID {
+			if p.steps[prior].ID == step.ID {
 				return core.ErrShutdownContract
 			}
 		}
@@ -165,23 +221,49 @@ func (r Report) Error() error {
 	return resultErr
 }
 
-func (p Plan) Run(parent context.Context) (Report, error) {
+func (p *Plan) Run(parent context.Context) (Report, error) {
 	if parent == nil {
 		return Report{}, core.ErrNilContext
 	}
-	if err := p.Validate(); err != nil {
+	steps, policy, err := p.beginRun()
+	if err != nil {
 		return Report{}, err
 	}
-	root, cancel := context.WithTimeout(context.WithoutCancel(parent), p.Policy.TotalBudget.Duration())
+	defer p.completeRun()
+	root, cancel := context.WithTimeout(context.WithoutCancel(parent), policy.TotalBudget.Duration())
 	defer cancel()
-	report := Report{Results: make([]StepResult, 0, len(p.Steps))}
-	for index := len(p.Steps) - 1; index >= 0; index-- {
-		report.Results = append(report.Results, runStep(root, p.Policy.StepBudget, p.Steps[index]))
+	report := Report{Results: make([]StepResult, 0, len(steps))}
+	for index := len(steps) - 1; index >= 0; index-- {
+		report.Results = append(report.Results, runStep(root, policy.StepBudget, steps[index]))
 	}
 	if err := report.Validate(); err != nil {
 		return Report{}, err
 	}
 	return report, report.Error()
+}
+
+func (p *Plan) beginRun() ([]Step, PlanPolicy, error) {
+	if p == nil {
+		return nil, PlanPolicy{}, core.ErrShutdownContract
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.state != planStateOpen {
+		return nil, PlanPolicy{}, core.ErrShutdownContract
+	}
+	if err := p.validateLocked(); err != nil {
+		return nil, PlanPolicy{}, err
+	}
+	p.state = planStateRunning
+	steps := make([]Step, len(p.steps))
+	copy(steps, p.steps)
+	return steps, p.policy, nil
+}
+
+func (p *Plan) completeRun() {
+	p.mu.Lock()
+	p.state = planStateComplete
+	p.mu.Unlock()
 }
 
 func runStep(root context.Context, budget core.NanosecondsDuration, step Step) StepResult {

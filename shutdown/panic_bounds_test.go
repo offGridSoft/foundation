@@ -70,7 +70,7 @@ func TestPlanStepPanicWithAstralRunePayloadClassifiesPanicked(t *testing.T) {
 		t.Fatalf("ParseStepID() error = %v, want nil", err)
 	}
 	payload := strings.Repeat("\U0001F600", 600)
-	plan := Plan{Policy: testPlanPolicy(time.Second, time.Second), Steps: []Step{{ID: id, Run: func(context.Context) error { panic(payload) }}}}
+	plan := mustTestPlan(t, testPlanPolicy(time.Second, time.Second), Step{ID: id, Run: func(context.Context) error { panic(payload) }})
 	report, runErr := plan.Run(t.Context())
 	if !errors.Is(runErr, core.ErrShutdownStepPanic) {
 		t.Fatalf("Plan.Run(astral panic) error = %v, want %v", runErr, core.ErrShutdownStepPanic)

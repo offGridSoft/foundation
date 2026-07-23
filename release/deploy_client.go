@@ -146,7 +146,11 @@ func deployPost[Request core.HTTPIdempotentBody, Response core.Validatable](
 		Semantics:      core.HTTPRequestSemantics{Method: core.HTTPMethodPost, Replay: core.HTTPReplayIdempotent, IdempotencyKey: key},
 		ExpectedStatus: core.HTTPStatusOK,
 	}
-	response, err := exchange.SendJSON[Request, Response](requestContext, exchange.Client{HTTP: httpClient}, exchangeRequest, releaseAPIClientPolicy())
+	exchangeClient, err := exchange.NewClient(httpClient)
+	if err != nil {
+		return zero, DeployHTTPError{Cause: err}
+	}
+	response, err := exchange.SendJSON[Request, Response](requestContext, exchangeClient, exchangeRequest, releaseAPIClientPolicy())
 	return deployExchangeResult(response, err)
 }
 
@@ -166,7 +170,11 @@ func deployGet[Response core.Validatable](
 		Semantics:      core.HTTPRequestSemantics{Method: core.HTTPMethodGet, Replay: core.HTTPReplaySafe},
 		ExpectedStatus: core.HTTPStatusOK,
 	}
-	response, err := exchange.SendJSON[core.HTTPNoBody, Response](requestContext, exchange.Client{HTTP: httpClient}, exchangeRequest, releaseAPIClientPolicy())
+	exchangeClient, err := exchange.NewClient(httpClient)
+	if err != nil {
+		return zero, DeployHTTPError{Cause: err}
+	}
+	response, err := exchange.SendJSON[core.HTTPNoBody, Response](requestContext, exchangeClient, exchangeRequest, releaseAPIClientPolicy())
 	return deployExchangeResult(response, err)
 }
 

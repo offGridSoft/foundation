@@ -21,14 +21,11 @@ func TestPlanRunsLIFOContinuesAndPreservesEveryFailure(t *testing.T) {
 	first, _ := ParseStepID("first")
 	second, _ := ParseStepID("second")
 	third, _ := ParseStepID("third")
-	plan := Plan{
-		Policy: testPlanPolicy(time.Second, 3*time.Second),
-		Steps: []Step{
-			{ID: first, Run: func(context.Context) error { order <- first; return errFirstCleanup }},
-			{ID: second, Run: func(context.Context) error { order <- second; return nil }},
-			{ID: third, Run: func(context.Context) error { order <- third; return errSecondCleanup }},
-		},
-	}
+	plan := mustTestPlan(t, testPlanPolicy(time.Second, 3*time.Second),
+		Step{ID: first, Run: func(context.Context) error { order <- first; return errFirstCleanup }},
+		Step{ID: second, Run: func(context.Context) error { order <- second; return nil }},
+		Step{ID: third, Run: func(context.Context) error { order <- third; return errSecondCleanup }},
+	)
 	report, err := plan.Run(t.Context())
 	if !errors.Is(err, errFirstCleanup) || !errors.Is(err, errSecondCleanup) || !errors.Is(err, core.ErrShutdownStepFailure) {
 		t.Fatalf("Plan.Run() error = %v, want both causes and ErrShutdownStepFailure", err)
@@ -51,13 +48,13 @@ func TestPlanDetachesCancelledParentForCleanup(t *testing.T) {
 	cancel()
 	observed := make(chan struct{}, 1)
 	id, _ := ParseStepID("detached")
-	plan := Plan{Policy: testPlanPolicy(time.Second, time.Second), Steps: []Step{{ID: id, Run: func(ctx context.Context) error {
+	plan := mustTestPlan(t, testPlanPolicy(time.Second, time.Second), Step{ID: id, Run: func(ctx context.Context) error {
 		if ctx.Err() != nil || ctx.Value(shutdownContextKey(1)) != "preserved" {
 			return core.ErrShutdownContract
 		}
 		observed <- struct{}{}
 		return nil
-	}}}}
+	}})
 	report, err := plan.Run(parent)
 	if err != nil || report.Results[0].Outcome != StepOutcomeCompleted || len(observed) != 1 {
 		t.Fatalf("Plan.Run(cancelled parent) = (%+v,%v), observed=%d; want completed detached cleanup", report, err, len(observed))
@@ -71,14 +68,11 @@ func TestPlanBoundsTimeoutPanicAndContinuesHostileTable(t *testing.T) {
 	panicked, _ := ParseStepID("panicked")
 	continued, _ := ParseStepID("continued")
 	didContinue := make(chan struct{}, 1)
-	plan := Plan{
-		Policy: testPlanPolicy(20*time.Millisecond, 200*time.Millisecond),
-		Steps: []Step{
-			{ID: continued, Run: func(context.Context) error { didContinue <- struct{}{}; return nil }},
-			{ID: timedOut, Run: func(ctx context.Context) error { <-ctx.Done(); return context.Cause(ctx) }},
-			{ID: panicked, Run: func(context.Context) error { panic("hostile cleanup panic") }},
-		},
-	}
+	plan := mustTestPlan(t, testPlanPolicy(20*time.Millisecond, 200*time.Millisecond),
+		Step{ID: continued, Run: func(context.Context) error { didContinue <- struct{}{}; return nil }},
+		Step{ID: timedOut, Run: func(ctx context.Context) error { <-ctx.Done(); return context.Cause(ctx) }},
+		Step{ID: panicked, Run: func(context.Context) error { panic("hostile cleanup panic") }},
+	)
 	report, err := plan.Run(t.Context())
 	if !errors.Is(err, core.ErrShutdownStepPanic) || !errors.Is(err, core.ErrShutdownStepTimeout) || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Plan.Run() error = %v, want panic, timeout, and deadline identities", err)
@@ -96,13 +90,10 @@ func TestPlanTotalBudgetBoundsRemainingSteps(t *testing.T) {
 
 	first, _ := ParseStepID("first")
 	second, _ := ParseStepID("second")
-	plan := Plan{
-		Policy: testPlanPolicy(20*time.Millisecond, 20*time.Millisecond),
-		Steps: []Step{
-			{ID: first, Run: func(context.Context) error { return nil }},
-			{ID: second, Run: func(ctx context.Context) error { <-ctx.Done(); return context.Cause(ctx) }},
-		},
-	}
+	plan := mustTestPlan(t, testPlanPolicy(20*time.Millisecond, 20*time.Millisecond),
+		Step{ID: first, Run: func(context.Context) error { return nil }},
+		Step{ID: second, Run: func(ctx context.Context) error { <-ctx.Done(); return context.Cause(ctx) }},
+	)
 	report, err := plan.Run(t.Context())
 	if !errors.Is(err, core.ErrShutdownTotalTimeout) || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Plan.Run(total exhausted) error = %v, want total timeout and deadline", err)
@@ -126,26 +117,53 @@ func TestPlanValidationRejectsEveryInvalidBoundary(t *testing.T) {
 		}
 		tooMany[index] = Step{ID: id, Run: validStep.Run}
 	}
-	cases := []Plan{
+	policyCases := []PlanPolicy{
 		{},
-		{Policy: validPolicy},
-		{Policy: PlanPolicy{StepBudget: core.NewNanosecondsDuration(time.Second), TotalBudget: core.NewNanosecondsDuration(time.Millisecond)}, Steps: []Step{validStep}},
-		{Policy: PlanPolicy{TotalBudget: core.NewNanosecondsDuration(time.Second)}, Steps: []Step{validStep}},
-		{Policy: PlanPolicy{StepBudget: core.NewNanosecondsDuration(time.Second)}, Steps: []Step{validStep}},
-		{Policy: PlanPolicy{StepBudget: core.NanosecondsDurationFromInt64(-1), TotalBudget: core.NewNanosecondsDuration(time.Second)}, Steps: []Step{validStep}},
-		{Policy: validPolicy, Steps: []Step{{ID: validID}}},
-		{Policy: validPolicy, Steps: []Step{{ID: "", Run: validStep.Run}}},
-		{Policy: validPolicy, Steps: []Step{validStep, validStep}},
-		{Policy: validPolicy, Steps: tooMany},
+		{StepBudget: core.NewNanosecondsDuration(time.Second), TotalBudget: core.NewNanosecondsDuration(time.Millisecond)},
+		{TotalBudget: core.NewNanosecondsDuration(time.Second)},
+		{StepBudget: core.NewNanosecondsDuration(time.Second)},
+		{StepBudget: core.NanosecondsDurationFromInt64(-1), TotalBudget: core.NewNanosecondsDuration(time.Second)},
 	}
-	for index, plan := range cases {
-		if err := plan.Validate(); !errors.Is(err, core.ErrShutdownContract) {
-			t.Fatalf("invalid plan %d Validate() error = %v, want ErrShutdownContract", index, err)
+	for index, policy := range policyCases {
+		if plan, err := NewPlan(policy); plan != nil || !errors.Is(err, core.ErrShutdownContract) {
+			t.Fatalf("NewPlan(invalid policy %d) = (%v,%v), want nil/ErrShutdownContract", index, plan, err)
 		}
 	}
+	plan, err := NewPlan(validPolicy)
+	if err != nil {
+		t.Fatalf("NewPlan(valid) error = %v, want nil", err)
+	}
+	if err := plan.Validate(); !errors.Is(err, core.ErrShutdownContract) {
+		t.Fatalf("empty Plan.Validate() error = %v, want ErrShutdownContract", err)
+	}
+	for index, step := range append([]Step{{ID: validID}, {ID: "", Run: validStep.Run}}, tooMany[:core.ShutdownMaximumSteps]...) {
+		registerErr := plan.Register(step)
+		if index < 2 {
+			if !errors.Is(registerErr, core.ErrShutdownContract) {
+				t.Fatalf("Plan.Register(invalid step %d) error = %v, want ErrShutdownContract", index, registerErr)
+			}
+			continue
+		}
+		if registerErr != nil {
+			t.Fatalf("Plan.Register(valid step %d) error = %v, want nil", index, registerErr)
+		}
+	}
+	if err := plan.Register(tooMany[core.ShutdownMaximumSteps]); !errors.Is(err, core.ErrShutdownContract) {
+		t.Fatalf("Plan.Register(over maximum) error = %v, want ErrShutdownContract", err)
+	}
 	var nilContext context.Context
-	if _, err := (Plan{Policy: validPolicy, Steps: []Step{validStep}}).Run(nilContext); !errors.Is(err, core.ErrNilContext) {
+	nilRunPlan := mustTestPlan(t, validPolicy, validStep)
+	if _, err := nilRunPlan.Run(nilContext); !errors.Is(err, core.ErrNilContext) {
 		t.Fatalf("Plan.Run(nil) error = %v, want ErrNilContext", err)
+	}
+	if _, err := nilRunPlan.Run(t.Context()); err != nil {
+		t.Fatalf("Plan.Run(after nil context) error = %v, want nil", err)
+	}
+	if err := nilRunPlan.Register(Step{ID: validID, Run: validStep.Run}); !errors.Is(err, core.ErrShutdownContract) {
+		t.Fatalf("Plan.Register(after run) error = %v, want ErrShutdownContract", err)
+	}
+	if _, err := nilRunPlan.Run(t.Context()); !errors.Is(err, core.ErrShutdownContract) {
+		t.Fatalf("Plan.Run(second) error = %v, want ErrShutdownContract", err)
 	}
 }
 
@@ -174,4 +192,18 @@ type shutdownContextKey uint8
 
 func testPlanPolicy(step, total time.Duration) PlanPolicy {
 	return PlanPolicy{StepBudget: core.NewNanosecondsDuration(step), TotalBudget: core.NewNanosecondsDuration(total)}
+}
+
+func mustTestPlan(t testing.TB, policy PlanPolicy, steps ...Step) *Plan {
+	t.Helper()
+	plan, err := NewPlan(policy)
+	if err != nil {
+		t.Fatalf("NewPlan() error = %v, want nil", err)
+	}
+	for index, step := range steps {
+		if err := plan.Register(step); err != nil {
+			t.Fatalf("Plan.Register(step %d) error = %v, want nil", index, err)
+		}
+	}
+	return plan
 }

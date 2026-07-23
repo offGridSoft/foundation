@@ -46,7 +46,11 @@ func (c SnapshotClient) Snapshot(ctx context.Context, project ProjectID) (Projec
 		Semantics:      core.HTTPRequestSemantics{Method: core.HTTPMethodGet, Replay: core.HTTPReplaySafe},
 		ExpectedStatus: core.HTTPStatusOK,
 	}
-	response, err := exchange.SendJSON[core.HTTPNoBody, ProjectSnapshot](ctx, exchange.Client{HTTP: c.HTTP}, request, snapshotClientPolicy())
+	exchangeClient, err := exchange.NewClient(c.HTTP)
+	if err != nil {
+		return ProjectSnapshot{}, err
+	}
+	response, err := exchange.SendJSON[core.HTTPNoBody, ProjectSnapshot](ctx, exchangeClient, request, snapshotClientPolicy())
 	if err != nil {
 		return ProjectSnapshot{}, snapshotExchangeError(response, err)
 	}

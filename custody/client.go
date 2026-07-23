@@ -233,8 +233,12 @@ func (c Client) UploadArtifact(ctx context.Context, input UploadArtifactInput) (
 	}
 	requestContext, cancel := context.WithTimeout(ctx, CustodyTransferHTTPBudget)
 	defer cancel()
+	exchangeClient, err := exchange.NewClient(c.HTTP)
+	if err != nil {
+		return UploadedObject{}, err
+	}
 	hasher := sha256.New()
-	response, err := exchange.SendStream(requestContext, exchange.Client{HTTP: c.HTTP}, exchange.StreamUploadRequest[core.SignedUploadURL]{
+	response, err := exchange.SendStream(requestContext, exchangeClient, exchange.StreamUploadRequest[core.SignedUploadURL]{
 		Target:         input.Target.URL,
 		Body:           io.TeeReader(input.Body, hasher),
 		ContentLength:  core.NewByteLength(input.Artifact.Size.Uint64()),
@@ -322,6 +326,10 @@ func custodyPost[Request core.HTTPIdempotentBody, Response core.Validatable](
 	}
 	requestContext, cancel := context.WithTimeout(ctx, CustodyAPIHTTPBudget)
 	defer cancel()
+	exchangeClient, err := exchange.NewClient(httpClient)
+	if err != nil {
+		return zero, CustodyHTTPError{Cause: err}
+	}
 	exchangeRequest := exchange.Request[Request]{
 		Body: &request, Endpoint: endpoint,
 		Semantics: core.HTTPRequestSemantics{
@@ -330,7 +338,7 @@ func custodyPost[Request core.HTTPIdempotentBody, Response core.Validatable](
 		ExpectedStatus: core.HTTPStatusOK,
 	}
 	exchangeResponse, err := exchange.SendJSON[Request, Response](
-		requestContext, exchange.Client{HTTP: httpClient}, exchangeRequest, custodyAPIClientPolicy(),
+		requestContext, exchangeClient, exchangeRequest, custodyAPIClientPolicy(),
 	)
 	if err != nil {
 		return zero, custodyExchangeError(exchangeResponse, err)

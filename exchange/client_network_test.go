@@ -106,7 +106,7 @@ func TestSendJSONRealNetworkFailureTable(t *testing.T) {
 			request.ExpectedStatus = tc.acceptedStatus
 			policy := clientTestPolicy(2)
 			policy.Redirect = tc.redirect
-			client := Client{HTTP: server.Client(), Clock: fixedClock{now: core.UnixNanoTimeFromInt64(1)}, Jitter: fixedJitter{fraction: 1}, Waiter: &recordingWaiter{}}
+			client := mustTestClientRuntime(t, server.Client(), fixedClock{now: core.UnixNanoTimeFromInt64(1)}, fixedJitter{fraction: 1}, &recordingWaiter{})
 			got, gotErr := SendJSON[receiveFixture, responseFixture](context.Background(), client, request, policy)
 			if !errors.Is(gotErr, tc.wantErr) {
 				t.Fatalf("SendJSON() error = %v, want %v", gotErr, tc.wantErr)

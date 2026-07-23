@@ -102,6 +102,82 @@ func TestEnsureDirectorySymlinkComponentsCannotEscapeRoot(t *testing.T) {
 	})
 }
 
+func TestContentStageRejectsSymlinkedReadWriteBoundaries(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		setup                func(*testing.T, string, string) (ContentStageRequest, core.AbsoluteFilePath)
+		name                 string
+		wantConstructorError bool
+	}{
+		{name: "staging directory symlink to outside is rejected before file creation", wantConstructorError: true, setup: func(t *testing.T, root, outside string) (ContentStageRequest, core.AbsoluteFilePath) {
+			stage := filepath.Join(root, "stage")
+			if err := os.Symlink(outside, stage); err != nil {
+				t.Fatalf("Symlink(stage) error = %v", err)
+			}
+			return contentStageRequest(root, stage), core.AbsoluteFilePath(filepath.Join(root, "target"))
+		}},
+		{name: "target parent symlink to outside is rejected before activation", setup: func(t *testing.T, root, outside string) (ContentStageRequest, core.AbsoluteFilePath) {
+			stage := filepath.Join(root, "stage")
+			if err := os.Mkdir(stage, 0o700); err != nil {
+				t.Fatalf("Mkdir(stage) error = %v", err)
+			}
+			link := filepath.Join(root, "objects")
+			if err := os.Symlink(outside, link); err != nil {
+				t.Fatalf("Symlink(target parent) error = %v", err)
+			}
+			return contentStageRequest(root, stage), core.AbsoluteFilePath(filepath.Join(link, "object"))
+		}},
+		{name: "intermediate target symlink inside root is rejected as an informal path alias", setup: func(t *testing.T, root, _ string) (ContentStageRequest, core.AbsoluteFilePath) {
+			stage := filepath.Join(root, "stage")
+			realTarget := filepath.Join(root, "real")
+			for _, directory := range []string{stage, realTarget} {
+				if err := os.Mkdir(directory, 0o700); err != nil {
+					t.Fatalf("Mkdir(%q) error = %v", directory, err)
+				}
+			}
+			link := filepath.Join(root, "alias")
+			if err := os.Symlink("real", link); err != nil {
+				t.Fatalf("Symlink(in-root alias) error = %v", err)
+			}
+			return contentStageRequest(root, stage), core.AbsoluteFilePath(filepath.Join(link, "object"))
+		}},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			outside := t.TempDir()
+			request, target := testCase.setup(t, root, outside)
+			stage, err := NewContentStage(t.Context(), request)
+			if testCase.wantConstructorError {
+				if stage != nil || !errors.Is(err, core.ErrDurabilityContract) {
+					t.Fatalf("NewContentStage() = (%v,%v), want nil/ErrDurabilityContract", stage, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("NewContentStage() error = %v, want nil before target validation", err)
+			}
+			if _, err := stage.Write([]byte("must stay contained")); err != nil {
+				t.Fatalf("Write() error = %v, want nil", err)
+			}
+			result, commitErr := stage.Commit(t.Context(), target)
+			if !errors.Is(commitErr, core.ErrDurabilityContract) ||
+				result.Activation != ActivationNotActivated ||
+				result.Temporary != TemporaryRetained {
+				t.Fatalf("Commit(symlink target) = (%+v,%v), want retained/ErrDurabilityContract", result, commitErr)
+			}
+			if abortErr := stage.Abort(); abortErr != nil {
+				t.Fatalf("Abort() error = %v, want nil", abortErr)
+			}
+			if _, statErr := os.Stat(filepath.Join(outside, "object")); !errors.Is(statErr, os.ErrNotExist) {
+				t.Fatalf("Stat(outside object) error = %v, want not-exist proving no escape", statErr)
+			}
+		})
+	}
+}
+
 func TestReadBoundedRejectsNonRegularFilesWithoutHanging(t *testing.T) {
 	t.Parallel()
 

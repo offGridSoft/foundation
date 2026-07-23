@@ -48,13 +48,13 @@ func TestMemoryLimitTriggerBytesExhaustiveCeilingParity(t *testing.T) {
 				t.Fatalf("TriggerBytes(limit=%d,percent=%d) = %d, want within (0,%d]", limit, percent, got, limit)
 			}
 			previous = got
-			assessment, err := NewMemoryAssessment(MemorySnapshot{ManagedBytes: got}, memoryLimit)
+			assessment, err := newMemoryAssessment(MemorySnapshot{ManagedBytes: got}, memoryLimit)
 			if err != nil || assessment.State != MemoryPressureReached {
-				t.Fatalf("NewMemoryAssessment(at trigger %d) = (%+v,%v), want reached", got, assessment, err)
+				t.Fatalf("newMemoryAssessment(at trigger %d) = (%+v,%v), want reached", got, assessment, err)
 			}
-			below, err := NewMemoryAssessment(MemorySnapshot{ManagedBytes: got - 1}, memoryLimit)
+			below, err := newMemoryAssessment(MemorySnapshot{ManagedBytes: got - 1}, memoryLimit)
 			if err != nil || below.State != MemoryPressureHealthy {
-				t.Fatalf("NewMemoryAssessment(one below trigger %d) = (%+v,%v), want healthy", got, below, err)
+				t.Fatalf("newMemoryAssessment(one below trigger %d) = (%+v,%v), want healthy", got, below, err)
 			}
 		}
 	}

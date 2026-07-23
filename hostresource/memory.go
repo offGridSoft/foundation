@@ -19,7 +19,7 @@ func (s MemorySnapshot) Validate() error {
 	return nil
 }
 
-func ReadMemorySnapshot() (MemorySnapshot, error) {
+func readMemorySnapshot() (MemorySnapshot, error) {
 	var stats runtime.MemStats
 	runtime.ReadMemStats(&stats)
 	managed := stats.Sys
@@ -75,7 +75,30 @@ type MemoryAssessment struct {
 	State    MemoryPressureState
 }
 
-func NewMemoryAssessment(snapshot MemorySnapshot, limit MemoryLimit) (MemoryAssessment, error) {
+type MemoryAssessmentRequest struct {
+	Limit MemoryLimit
+}
+
+func (r MemoryAssessmentRequest) Validate() error {
+	return r.Limit.Validate()
+}
+
+func AssessMemory(request MemoryAssessmentRequest) (MemoryAssessment, error) {
+	if err := request.Validate(); err != nil {
+		return MemoryAssessment{}, err
+	}
+	snapshot, err := readMemorySnapshot()
+	if err != nil {
+		return MemoryAssessment{}, err
+	}
+	assessment, err := newMemoryAssessment(snapshot, request.Limit)
+	if err != nil {
+		return MemoryAssessment{}, err
+	}
+	return assessment, memoryAssessmentError(assessment)
+}
+
+func newMemoryAssessment(snapshot MemorySnapshot, limit MemoryLimit) (MemoryAssessment, error) {
 	if err := snapshot.Validate(); err != nil {
 		return MemoryAssessment{}, err
 	}
@@ -91,7 +114,7 @@ func NewMemoryAssessment(snapshot MemorySnapshot, limit MemoryLimit) (MemoryAsse
 }
 
 func (a MemoryAssessment) Validate() error {
-	expected, err := NewMemoryAssessment(a.Snapshot, a.Limit)
+	expected, err := newMemoryAssessment(a.Snapshot, a.Limit)
 	if err != nil {
 		return err
 	}
@@ -104,7 +127,7 @@ func (a MemoryAssessment) Validate() error {
 	return nil
 }
 
-func CheckMemoryLimit(assessment MemoryAssessment) error {
+func memoryAssessmentError(assessment MemoryAssessment) error {
 	if err := assessment.Validate(); err != nil {
 		return err
 	}

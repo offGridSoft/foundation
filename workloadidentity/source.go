@@ -69,7 +69,11 @@ func (s Source) Token(ctx context.Context) (Token, error) {
 		ResponseBodyLimit: core.NewByteCount(TokenMaxBytes),
 		Redirect:          core.HTTPRedirectReject,
 	}
-	response, err := exchange.SendBounded(requestContext, exchange.Client{HTTP: s.HTTP}, request, policy)
+	exchangeClient, err := exchange.NewClient(s.HTTP)
+	if err != nil {
+		return Token{}, wrap(ErrFmtSource, err)
+	}
+	response, err := exchange.SendBounded(requestContext, exchangeClient, request, policy)
 	if err != nil {
 		return Token{}, wrap(ErrFmtSource, err)
 	}

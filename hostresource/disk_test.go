@@ -42,22 +42,22 @@ func TestDiskAssessmentHostileBoundaryTable(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := NewDiskAssessment(tc.capacity, tc.policy)
+			got, err := newDiskAssessment(tc.capacity, tc.policy)
 			if tc.wantState == DiskPressureUnknown {
 				if !errors.Is(err, tc.wantError) {
-					t.Fatalf("NewDiskAssessment() error = %v, want errors.Is %v", err, tc.wantError)
+					t.Fatalf("newDiskAssessment() error = %v, want errors.Is %v", err, tc.wantError)
 				}
 				return
 			}
 			if err != nil || got.State != tc.wantState {
-				t.Fatalf("NewDiskAssessment() = (%+v, %v), want state %d and nil", got, err, tc.wantState)
+				t.Fatalf("newDiskAssessment() = (%+v, %v), want state %d and nil", got, err, tc.wantState)
 			}
-			checkErr := CheckDiskFloor(got)
+			checkErr := diskAssessmentError(got)
 			if tc.wantError == nil && checkErr != nil {
-				t.Fatalf("CheckDiskFloor() error = %v, want nil", checkErr)
+				t.Fatalf("diskAssessmentError() error = %v, want nil", checkErr)
 			}
 			if tc.wantError != nil && !errors.Is(checkErr, tc.wantError) {
-				t.Fatalf("CheckDiskFloor() error = %v, want errors.Is %v", checkErr, tc.wantError)
+				t.Fatalf("diskAssessmentError() error = %v, want errors.Is %v", checkErr, tc.wantError)
 			}
 		})
 	}
@@ -91,36 +91,36 @@ func TestDiskEnumsAndImpossibleAssessmentsAreRejected(t *testing.T) {
 	}
 }
 
-func TestProbeDiskRealVolumeAndIngressFailures(t *testing.T) {
+func TestAssessDiskRealVolumeAndIngressFailures(t *testing.T) {
 	t.Parallel()
 
 	dir, err := core.ParseAbsoluteDirectoryPath(t.TempDir())
 	if err != nil {
 		t.Fatalf("ParseAbsoluteDirectoryPath(temp) error = %v, want nil", err)
 	}
-	capacity, err := ProbeDisk(t.Context(), dir)
-	if err != nil || capacity.FreeBytes == 0 || capacity.TotalBytes < capacity.FreeBytes || capacity.Validate() != nil {
-		t.Fatalf("ProbeDisk(real temp volume) = (%+v, %v), want valid positive capacity", capacity, err)
+	assessment, err := AssessDisk(t.Context(), DiskAssessmentRequest{Path: dir})
+	if err != nil || assessment.Capacity.FreeBytes == 0 || assessment.Capacity.TotalBytes < assessment.Capacity.FreeBytes || assessment.Validate() != nil {
+		t.Fatalf("AssessDisk(real temp volume) = (%+v, %v), want valid disabled assessment", assessment, err)
 	}
 
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := ProbeDisk(cancelled, dir); !errors.Is(err, context.Canceled) {
-		t.Fatalf("ProbeDisk(cancelled) error = %v, want context.Canceled", err)
+	if _, err := AssessDisk(cancelled, DiskAssessmentRequest{Path: dir}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("AssessDisk(cancelled) error = %v, want context.Canceled", err)
 	}
 	var nilContext context.Context
-	if _, err := ProbeDisk(nilContext, dir); !errors.Is(err, core.ErrNilContext) {
-		t.Fatalf("ProbeDisk(nil) error = %v, want ErrNilContext", err)
+	if _, err := AssessDisk(nilContext, DiskAssessmentRequest{Path: dir}); !errors.Is(err, core.ErrNilContext) {
+		t.Fatalf("AssessDisk(nil) error = %v, want ErrNilContext", err)
 	}
-	if _, err := ProbeDisk(t.Context(), core.AbsoluteDirectoryPath("relative")); !errors.Is(err, core.ErrFilesystemContract) {
-		t.Fatalf("ProbeDisk(relative) error = %v, want ErrFilesystemContract", err)
+	if _, err := AssessDisk(t.Context(), DiskAssessmentRequest{Path: "relative"}); !errors.Is(err, core.ErrFilesystemContract) {
+		t.Fatalf("AssessDisk(relative) error = %v, want ErrFilesystemContract", err)
 	}
 	missing, err := core.ParseAbsoluteDirectoryPath(filepath.Join(t.TempDir(), "missing"))
 	if err != nil {
 		t.Fatalf("ParseAbsoluteDirectoryPath(missing) error = %v, want nil", err)
 	}
-	if _, err := ProbeDisk(t.Context(), missing); !errors.Is(err, fs.ErrNotExist) {
-		t.Fatalf("ProbeDisk(missing) error = %v, want fs.ErrNotExist", err)
+	if _, err := AssessDisk(t.Context(), DiskAssessmentRequest{Path: missing}); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("AssessDisk(missing) error = %v, want fs.ErrNotExist", err)
 	}
 }
 

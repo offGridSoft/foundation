@@ -10,6 +10,38 @@ import (
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
+func TestClientConstructionClosesRetryImplementationSurface(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		http      *http.Client
+		name      string
+		wantError bool
+	}{
+		{name: "default client is accepted as the complete public dependency", http: http.DefaultClient},
+		{name: "dedicated zero-value HTTP client is accepted", http: &http.Client{}},
+		{name: "nil HTTP client is rejected at construction", wantError: true},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			client, err := NewClient(testCase.http)
+			if testCase.wantError {
+				if client != (Client{}) || !errors.Is(err, core.ErrExchangeResponse) {
+					t.Fatalf("NewClient() = (%+v,%v), want zero/ErrExchangeResponse", client, err)
+				}
+				return
+			}
+			if err != nil || client.Validate() != nil {
+				t.Fatalf("NewClient() = (%+v,%v), Validate=%v; want valid/nil", client, err, client.Validate())
+			}
+		})
+	}
+	if err := (Client{}).Validate(); !errors.Is(err, core.ErrExchangeResponse) {
+		t.Fatalf("zero Client.Validate() error = %v, want ErrExchangeResponse", err)
+	}
+}
+
 func TestClientPolicyValidateHostileBoundaryTable(t *testing.T) {
 	t.Parallel()
 

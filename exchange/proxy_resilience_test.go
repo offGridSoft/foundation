@@ -55,7 +55,7 @@ func TestSendJSONRetryableStatusWithNonProtocolBodyRetriesThroughProxy(t *testin
 			server := httptest.NewServer(proxyThenOriginHandler(t, tc.behavior, tc.status, tc.proxyResponses, &requests))
 			defer server.Close()
 
-			client := Client{HTTP: server.Client(), Clock: fixedClock{now: core.UnixNanoTimeFromInt64(1)}, Jitter: fixedJitter{fraction: 1}, Waiter: &recordingWaiter{}}
+			client := mustTestClientRuntime(t, server.Client(), fixedClock{now: core.UnixNanoTimeFromInt64(1)}, fixedJitter{fraction: 1}, &recordingWaiter{})
 			got, gotErr := SendJSON[receiveFixture, responseFixture](context.Background(), client, idempotentClientRequest(t, server.URL), clientTestPolicy(tc.maxAttempts))
 			if !errors.Is(gotErr, tc.wantErr) {
 				t.Fatalf("SendJSON() error = %v, want %v", gotErr, tc.wantErr)
@@ -125,7 +125,7 @@ func TestSendStreamEarlyServerRejectionPreservesStatusError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseAPIEndpoint() error = %v, want nil", err)
 	}
-	client := Client{HTTP: &http.Client{Transport: earlyRejectTransport{bodyBytesToRead: 2, status: http.StatusForbidden}}}
+	client := mustTestClient(t, &http.Client{Transport: earlyRejectTransport{bodyBytesToRead: 2, status: http.StatusForbidden}})
 	_, gotErr := SendStream(t.Context(), client, StreamUploadRequest[core.APIEndpoint]{
 		Target: endpoint, Body: strings.NewReader("artifact"), ContentLength: core.NewByteLength(8),
 		Semantics:      core.HTTPRequestSemantics{Method: core.HTTPMethodPut, Replay: core.HTTPReplaySingleAttempt},
