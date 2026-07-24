@@ -66,6 +66,7 @@ var (
 	ErrShutdownSignalSourceClosed      = fmt.Errorf("shutdown signal source closed: %w", ErrShutdownContract)
 	ErrShutdownSignalReceived          = fmt.Errorf("shutdown signal received: %w", ErrShutdownContract)
 	ErrShutdownForcePanic              = fmt.Errorf("shutdown force action panicked: %w", ErrShutdownContract)
+	ErrTemporalContract                = fmt.Errorf("temporal contract violation: %w", ErrFoundationContract)
 	ErrPeachfuzzContributionRegression = fmt.Errorf("peachfuzz contribution regression: %w", ErrFoundationContract)
 	ErrNilContext                      = fmt.Errorf("nil context: %w", ErrFoundationContract)
 	ErrNumericOverflow                 = fmt.Errorf("numeric overflow: %w", ErrFoundationContract)
