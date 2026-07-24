@@ -48,30 +48,39 @@ private wrappers, or informal conventions.
 Dependencies point from a consumer to the capability it uses. They never point
 from a reusable capability toward a caller.
 
-`core` is the sole shared-contract marketplace. Every production Foundation
-package may import `core`; sibling Foundation packages MUST NOT import one
-another. When two packages need the same genuinely universal fact, that fact
-moves to a focused `core` file as a typed value, enum, error identity, constant,
-or validation rule. `core` MUST NOT become a dumping ground for package-local
-mechanics or product meaning.
+`core` is the sole shared-contract marketplace. Every production package may
+import `core`. A package MAY import another primitive to use the capability
+that primitive owns; the dependency points from user to provider and never
+back toward the user. Packages MUST NOT import one another merely to share
+rules, constants, paths, errors, or vocabulary. When two packages need the
+same genuinely universal fact, that fact moves to a focused `core` file as a
+typed value, enum, error identity, constant, or validation rule. `core` MUST
+NOT become a dumping ground for package-local mechanics or product meaning.
 
-Capability composition occurs at the outer composition root through narrow
-interfaces and explicit adapters. One sibling does not import another merely
-because both participate in a workflow. A Foundation package MUST NOT:
+Cross-capability orchestration occurs at the outer composition root through
+narrow interfaces and explicit adapters. Direct primitive imports are reserved
+for actually using the provider's narrow capability, such as a bounded I/O
+primitive using context-state classification. A Foundation provider MUST NOT:
 
-- import a sibling Foundation package;
 - import or name a consumer module;
 - branch on caller, product, distribution, tenant, route, or deployment;
 - own a consumer payload, policy, endpoint, schedule, or business error;
 - accept a caller-kind enum or registration hook that recreates caller
   awareness indirectly;
-- copy a consumer constant to avoid an import.
+- copy a consumer or sibling constant to avoid the correct core owner;
+- create an import cycle or a back-edge from provider to user.
 
 The same rule applies recursively above Foundation: a reusable framework does
 not know its distributions, and a distribution does not teach lower layers
 about its products. Every layer may use the socket below it but may not teach
 that socket who is plugged in. “May use, must not know” is a
 dependency-direction contract, not merely an import-cycle rule.
+
+Structural resemblance alone does not make two facts shared. Domain ordering
+stays domain-owned when its vocabulary carries different meaning, such as
+temporal before/after versus currency less/greater. A genuinely identical
+third-domain contract triggers a core-admission review rather than another
+automatic copy.
 
 ## 3. Primitive families
 
@@ -81,7 +90,7 @@ Foundation's target primitive families are:
 | --- | --- | --- |
 | Shared contracts | `core` | Paths, HTTP semantics, identifiers, hashes, schemas, canonical encoding, and stable errors |
 | Time | `temporal` | Instants, durations, aggregate nanoseconds, humanization, and persistence projections |
-| Units | `units` | Byte extents, byte limits, money, and checked unit arithmetic |
+| Currency | `currency` | Currency codes, exact monetary amounts, and checked arithmetic |
 | Context state | `contextstate` | Context ingress and closed cancellation/deadline classification |
 | Transmission | `exchange` | Typed JSON, bounded-body, and streaming HTTP transmit/receive |
 | Durability | `durability` | Rooted directories, bounded reads and writes, staging, atomic activation, synchronization, append, and removal |
@@ -96,7 +105,7 @@ The remaining admitted packages are narrowly scoped product-neutral support
 packages. Product protocols live with the product that owns their meaning and
 import Foundation primitives.
 
-`temporal`, `units`, `objectstore`, `garble`, and `probe` are target packages.
+`temporal`, `currency`, `objectstore`, `garble`, and `probe` are target packages.
 Their current mechanics are present but scattered across existing packages.
 They MUST be specified before code moves. Product-owned contracts encountered
 during consolidation move out of Foundation rather than becoming new
@@ -119,8 +128,8 @@ The target names are intentional:
 - core is the universally shared deterministic vocabulary;
 - temporal avoids colliding with Go's standard `time` package while naming the
   instant/duration domain;
-- units groups non-temporal measured values without erasing their distinct
-  types;
+- currency owns monetary value and currency without becoming a miscellaneous
+  measurement drawer;
 - keygen is the established, narrow Unix-style name for key generation;
 - garble owns Garble-specific derivation rather than leaking it through generic
   key or release packages;
@@ -222,7 +231,7 @@ The intended review vocabulary is:
 | Concern | Stable consumer intent |
 | --- | --- |
 | Time | Construct, validate, compare, humanize, and project typed nanosecond values |
-| Units | Construct, validate, and perform checked arithmetic on typed measurements |
+| Currency | Construct, validate, parse, project, and perform checked arithmetic on typed monetary amounts |
 | Context | Validate ingress and classify terminal state |
 | Transmission | Transmit and receive typed JSON, bounded bytes, or streams |
 | Durability | Ensure, read, write, append, and remove through explicit lifecycle contracts |
@@ -310,24 +319,27 @@ timestamp is query/display convenience only. Firestore or PostgreSQL shape is
 never the in-memory domain type, and database limitations MUST NOT weaken the
 nanosecond source of truth.
 
-## 8. Units model
+## 8. Currency and byte-unit model
 
-Units are distinct types even when they share an integer representation.
+Units are distinct types even when they share an integer representation, but
+their package owner follows the shared-contract admission rule.
 
-- `units.ByteCount` is a required positive allocation or limit.
-- `units.ByteLength` is an exact non-negative extent; zero is valid.
-- `units.Money` binds exact minor units to a compiler-owned currency.
+- `core.ByteCount` is a required positive allocation or limit shared by
+  multiple Foundation capabilities.
+- `core.ByteLength` is an exact non-negative extent shared by multiple
+  Foundation capabilities; zero is valid.
+- `currency.Amount` binds exact signed minor units to a compiler-owned code.
 
 Unit arithmetic MUST detect overflow and underflow. Conversion to signed
 standard-library sizes MUST be checked.
 
-The current `core.MoneyPennies` does not identify a currency and is therefore a
-migration source, not the final universal money contract. Floating-point values
-MUST NOT represent stored or transmitted money.
+The retired unsigned, currency-free core money type has no compatibility alias
+or replacement spelling. Floating-point values MUST NOT represent stored or
+transmitted money.
 
-`units` owns the closed `Currency` enum because the domain exists to define
-`units.Money`. Each supported currency owns its ISO token and minor-unit
-exponent. `Money` stores private currency and minor-unit state.
+`currency` owns the closed `Code` enum because the domain exists to define
+`currency.Amount`. Each supported code owns its ISO token and minor-unit
+exponent. `Amount` stores private code and minor-unit state.
 
 Arithmetic between different currencies MUST fail with a stable typed currency
 mismatch identity. Construction, arithmetic, humanization, JSON, and

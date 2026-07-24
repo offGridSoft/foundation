@@ -6,27 +6,28 @@ import (
 	"time"
 
 	"github.com/offGridSoft/foundation/v2026/core"
+	"github.com/offGridSoft/foundation/v2026/currency"
 )
 
-const testPaidOfferPennies = uint64(1)
+const testPaidOfferMinorUnits = int64(1)
 
 func TestOfferCatalogHostileTable(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name        string
 		offer       Offer
-		wantPrice   uint64
+		wantPrice   int64
 		wantProduct core.Product
 		wantPeriod  BillingPeriod
 		wantCode    OfferCode
 	}{
-		{name: "bug standard is monthly", offer: mustSeatOfferForTest(t, SeatPlanStandard), wantProduct: core.ProductBug, wantPeriod: BillingPeriodMonthly, wantPrice: testPaidOfferPennies, wantCode: OfferBugStandard},
-		{name: "bug enterprise is monthly", offer: mustSeatOfferForTest(t, SeatPlanEnterprise), wantProduct: core.ProductBug, wantPeriod: BillingPeriodMonthly, wantPrice: testPaidOfferPennies, wantCode: OfferBugEnterprise},
-		{name: "bug enterprise offline is prepaid one to five years", offer: mustSeatOfferForTest(t, SeatPlanEnterpriseOffline), wantProduct: core.ProductBug, wantPeriod: BillingPeriodPrepaidYears, wantPrice: testPaidOfferPennies, wantCode: OfferBugEnterpriseOffline},
+		{name: "bug standard is monthly", offer: mustSeatOfferForTest(t, SeatPlanStandard), wantProduct: core.ProductBug, wantPeriod: BillingPeriodMonthly, wantPrice: testPaidOfferMinorUnits, wantCode: OfferBugStandard},
+		{name: "bug enterprise is monthly", offer: mustSeatOfferForTest(t, SeatPlanEnterprise), wantProduct: core.ProductBug, wantPeriod: BillingPeriodMonthly, wantPrice: testPaidOfferMinorUnits, wantCode: OfferBugEnterprise},
+		{name: "bug enterprise offline is prepaid one to five years", offer: mustSeatOfferForTest(t, SeatPlanEnterpriseOffline), wantProduct: core.ProductBug, wantPeriod: BillingPeriodPrepaidYears, wantPrice: testPaidOfferMinorUnits, wantCode: OfferBugEnterpriseOffline},
 		{name: "bug oss keeps a separate zero-price identity", offer: mustSeatOfferForTest(t, SeatPlanOSS), wantProduct: core.ProductBug, wantPeriod: BillingPeriodMonthly, wantPrice: 0, wantCode: OfferBugOSS},
-		{name: "witness bronze is monthly", offer: mustSubscriptionOfferForTest(t, SubscriptionPlanBronze), wantProduct: core.ProductWitness, wantPeriod: BillingPeriodMonthly, wantPrice: testPaidOfferPennies, wantCode: OfferWitnessBronze},
-		{name: "witness silver is monthly", offer: mustSubscriptionOfferForTest(t, SubscriptionPlanSilver), wantProduct: core.ProductWitness, wantPeriod: BillingPeriodMonthly, wantPrice: testPaidOfferPennies, wantCode: OfferWitnessSilver},
-		{name: "witness gold is monthly", offer: mustSubscriptionOfferForTest(t, SubscriptionPlanGold), wantProduct: core.ProductWitness, wantPeriod: BillingPeriodMonthly, wantPrice: testPaidOfferPennies, wantCode: OfferWitnessGold},
+		{name: "witness bronze is monthly", offer: mustSubscriptionOfferForTest(t, SubscriptionPlanBronze), wantProduct: core.ProductWitness, wantPeriod: BillingPeriodMonthly, wantPrice: testPaidOfferMinorUnits, wantCode: OfferWitnessBronze},
+		{name: "witness silver is monthly", offer: mustSubscriptionOfferForTest(t, SubscriptionPlanSilver), wantProduct: core.ProductWitness, wantPeriod: BillingPeriodMonthly, wantPrice: testPaidOfferMinorUnits, wantCode: OfferWitnessSilver},
+		{name: "witness gold is monthly", offer: mustSubscriptionOfferForTest(t, SubscriptionPlanGold), wantProduct: core.ProductWitness, wantPeriod: BillingPeriodMonthly, wantPrice: testPaidOfferMinorUnits, wantCode: OfferWitnessGold},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -39,8 +40,10 @@ func TestOfferCatalogHostileTable(t *testing.T) {
 			if tc.offer.BillingPeriod != tc.wantPeriod {
 				t.Fatalf("BillingPeriod = %s, want %s", tc.offer.BillingPeriod, tc.wantPeriod)
 			}
-			if got := tc.offer.PricePennies.Uint64(); got != tc.wantPrice {
-				t.Fatalf("PricePennies = %d, want %d", got, tc.wantPrice)
+			gotPrice, priceErr := tc.offer.Price.MinorUnits()
+			gotCurrency, currencyErr := tc.offer.Price.Code()
+			if priceErr != nil || currencyErr != nil || gotPrice != tc.wantPrice || gotCurrency != currency.CodeCAD {
+				t.Fatalf("Price = (%s,%d,%v,%v), want (CAD,%d,nil,nil)", gotCurrency, gotPrice, currencyErr, priceErr, tc.wantPrice)
 			}
 			if tc.offer.Code != tc.wantCode {
 				t.Fatalf("Code = %s, want %s", tc.offer.Code, tc.wantCode)
@@ -57,11 +60,13 @@ func TestOfferRejectsPolicyDriftHostileTable(t *testing.T) {
 	}{
 		{name: "unknown offer code rejected", mutate: func(_ *testing.T, o *Offer) { o.Code = offerCodeInvalid }},
 		{name: "wrong product rejected", mutate: func(_ *testing.T, o *Offer) { o.Product = core.ProductWitness }},
-		{name: "paid offer rejects zero price", mutate: func(_ *testing.T, o *Offer) { o.PricePennies = core.NewMoneyPennies(0) }},
+		{name: "paid offer rejects zero price", mutate: func(_ *testing.T, o *Offer) { o.Price = testOfferAmount(0) }},
 		{name: "oss offer rejects nonzero price", mutate: func(t *testing.T, o *Offer) {
 			*o = mustSeatOfferForTest(t, SeatPlanOSS)
-			o.PricePennies = core.NewMoneyPennies(testPaidOfferPennies)
+			o.Price = testOfferAmount(testPaidOfferMinorUnits)
 		}},
+		{name: "offer rejects unknown currency", mutate: func(_ *testing.T, o *Offer) { o.Price = currency.Amount{} }},
+		{name: "paid offer rejects negative price", mutate: func(_ *testing.T, o *Offer) { o.Price = testOfferAmount(-1) }},
 		{name: "invalid billing period rejected", mutate: func(_ *testing.T, o *Offer) { o.BillingPeriod = billingPeriodInvalid }},
 		{name: "negative write grace rejected", mutate: func(_ *testing.T, o *Offer) { o.WriteGrace = core.NanosecondsDurationFromInt64(-1) }},
 		{name: "check-in after check-in by rejected", mutate: func(_ *testing.T, o *Offer) { o.CheckInAfter = core.NewNanosecondsDuration(36 * 24 * time.Hour) }},
@@ -372,9 +377,9 @@ func TestBuildLeaseWindowRejectsBadTermsHostileTable(t *testing.T) {
 
 func mustSeatOfferForTest(t *testing.T, plan SeatPlan) Offer {
 	t.Helper()
-	price := core.NewMoneyPennies(testPaidOfferPennies)
+	price := testOfferAmount(testPaidOfferMinorUnits)
 	if plan == SeatPlanOSS {
-		price = core.NewMoneyPennies(0)
+		price = testOfferAmount(0)
 	}
 	offer, err := OfferForSeatPlan(plan, price)
 	return mustOffer(t, offer, err)
@@ -382,8 +387,16 @@ func mustSeatOfferForTest(t *testing.T, plan SeatPlan) Offer {
 
 func mustSubscriptionOfferForTest(t *testing.T, plan SubscriptionPlan) Offer {
 	t.Helper()
-	offer, err := OfferForSubscriptionPlan(plan, core.NewMoneyPennies(testPaidOfferPennies))
+	offer, err := OfferForSubscriptionPlan(plan, testOfferAmount(testPaidOfferMinorUnits))
 	return mustOffer(t, offer, err)
+}
+
+func testOfferAmount(minorUnits int64) currency.Amount {
+	amount, err := currency.New(currency.CodeCAD, minorUnits)
+	if err != nil {
+		panic(err)
+	}
+	return amount
 }
 
 func mustOffer(t *testing.T, offer Offer, err error) Offer {

@@ -1,6 +1,6 @@
 # Temporal Package Specification
 
-Status: Implementation candidate for review
+Status: Reviewed implementation; consumer migration pending
 Package: `github.com/offGridSoft/foundation/v2026/temporal`
 
 ## 1. Purpose

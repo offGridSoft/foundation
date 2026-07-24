@@ -67,6 +67,10 @@ var (
 	ErrShutdownSignalReceived          = fmt.Errorf("shutdown signal received: %w", ErrShutdownContract)
 	ErrShutdownForcePanic              = fmt.Errorf("shutdown force action panicked: %w", ErrShutdownContract)
 	ErrTemporalContract                = fmt.Errorf("temporal contract violation: %w", ErrFoundationContract)
+	ErrCurrencyContract                = fmt.Errorf("currency contract violation: %w", ErrFoundationContract)
+	ErrCurrencyMismatch                = fmt.Errorf("currency mismatch: %w", ErrCurrencyContract)
+	ErrCurrencyOverflow                = fmt.Errorf("currency arithmetic overflow: %w", ErrCurrencyContract)
+	ErrCurrencyDecimal                 = fmt.Errorf("currency decimal rejected: %w", ErrCurrencyContract)
 	ErrPeachfuzzContributionRegression = fmt.Errorf("peachfuzz contribution regression: %w", ErrFoundationContract)
 	ErrNilContext                      = fmt.Errorf("nil context: %w", ErrFoundationContract)
 	ErrNumericOverflow                 = fmt.Errorf("numeric overflow: %w", ErrFoundationContract)
@@ -126,7 +130,6 @@ const (
 	ErrFmtHTTPRetryPolicy       = "core.HTTPRetryPolicy: %w"
 	ErrFmtUnixNanoTime          = "core.UnixNanoTime: %w"
 	ErrFmtNanosecondsDuration   = "core.NanosecondsDuration: %w"
-	ErrFmtMoneyPennies          = "core.MoneyPennies: %w"
 	ErrFmtJSONFieldName         = "core.JSON.FieldName: %w"
 	ErrFmtJSONTrailingValue     = "core.JSON.TrailingValue: %w"
 	ErrFmtJSONDuplicateField    = "core.JSON.DuplicateField: %w"

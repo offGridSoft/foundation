@@ -57,8 +57,10 @@ The current package contains several proven implementations whose final owner
 is more precise:
 
 - `UnixNanoTime` and `NanosecondsDuration` move to `temporal`;
-- `ByteCount`, `ByteLength`, and `MoneyPennies` move or are replaced in
-  `units`;
+- `ByteCount` and `ByteLength` remain universal shared contracts because
+  multiple capability packages require the same byte vocabulary;
+- monetary values belong to `currency.Amount`; core owns only their genuinely
+  shared error identities;
 - Garble custody material moves to `garble`;
 - storage provider and signed-transfer values move to `objectstore`;
 - every product-specific contract moves out of Foundation to its owning

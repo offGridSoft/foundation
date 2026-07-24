@@ -2,10 +2,12 @@ package license
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/offGridSoft/foundation/v2026/core"
+	"github.com/offGridSoft/foundation/v2026/currency"
 )
 
 const (
@@ -188,7 +190,7 @@ func (c *OfferCode) UnmarshalJSON(data []byte) error {
 }
 
 type Offer struct {
-	PricePennies        core.MoneyPennies        `json:"price_pennies"`
+	Price               currency.Amount          `json:"price"`
 	LeaseDuration       core.NanosecondsDuration `json:"lease_duration_ns"`
 	CheckInAfter        core.NanosecondsDuration `json:"check_in_after_ns"`
 	CheckInBy           core.NanosecondsDuration `json:"check_in_by_ns"`
@@ -211,7 +213,7 @@ func (o Offer) Validate() error {
 	return validateOfferPrepaidYears(o)
 }
 
-func OfferForSeatPlan(plan SeatPlan, price core.MoneyPennies) (Offer, error) {
+func OfferForSeatPlan(plan SeatPlan, price currency.Amount) (Offer, error) {
 	switch plan {
 	case SeatPlanStandard:
 		return bugStandardOffer(price), nil
@@ -226,7 +228,7 @@ func OfferForSeatPlan(plan SeatPlan, price core.MoneyPennies) (Offer, error) {
 	}
 }
 
-func OfferForSubscriptionPlan(plan SubscriptionPlan, price core.MoneyPennies) (Offer, error) {
+func OfferForSubscriptionPlan(plan SubscriptionPlan, price currency.Amount) (Offer, error) {
 	switch plan {
 	case SubscriptionPlanBronze:
 		return witnessOffer(OfferWitnessBronze, price), nil
@@ -239,15 +241,15 @@ func OfferForSubscriptionPlan(plan SubscriptionPlan, price core.MoneyPennies) (O
 	}
 }
 
-func bugStandardOffer(price core.MoneyPennies) Offer {
+func bugStandardOffer(price currency.Amount) Offer {
 	return connectedOffer(OfferBugStandard, core.ProductBug, price)
 }
 
-func bugEnterpriseOffer(price core.MoneyPennies) Offer {
+func bugEnterpriseOffer(price currency.Amount) Offer {
 	return connectedOffer(OfferBugEnterprise, core.ProductBug, price)
 }
 
-func bugEnterpriseOfflineOffer(price core.MoneyPennies) Offer {
+func bugEnterpriseOfflineOffer(price currency.Amount) Offer {
 	offer := connectedOffer(OfferBugEnterpriseOffline, core.ProductBug, price)
 	offer.BillingPeriod = BillingPeriodPrepaidYears
 	offer.LeaseDuration = core.NewNanosecondsDuration(BugOfflineCheckInByDuration)
@@ -259,19 +261,19 @@ func bugEnterpriseOfflineOffer(price core.MoneyPennies) Offer {
 	return offer
 }
 
-func bugOSSOffer(price core.MoneyPennies) Offer {
+func bugOSSOffer(price currency.Amount) Offer {
 	return connectedOffer(OfferBugOSS, core.ProductBug, price)
 }
 
-func witnessOffer(code OfferCode, price core.MoneyPennies) Offer {
+func witnessOffer(code OfferCode, price currency.Amount) Offer {
 	return connectedOffer(code, core.ProductWitness, price)
 }
 
-func connectedOffer(code OfferCode, product core.Product, price core.MoneyPennies) Offer {
+func connectedOffer(code OfferCode, product core.Product, price currency.Amount) Offer {
 	return Offer{
 		Code:          code,
 		Product:       product,
-		PricePennies:  price,
+		Price:         price,
 		BillingPeriod: BillingPeriodMonthly,
 		LeaseDuration: core.NewNanosecondsDuration(ConnectedCheckInByDuration),
 		CheckInAfter:  core.NewNanosecondsDuration(ConnectedCheckInAfterDuration),
@@ -293,11 +295,15 @@ func validateOfferIdentity(o Offer) error {
 	if !offerProductMatches(o.Code, o.Product) {
 		return fmt.Errorf(ErrFmtOffer, core.ErrLicenseContract)
 	}
+	minorUnits, err := o.Price.MinorUnits()
+	if err != nil {
+		return fmt.Errorf(ErrFmtOffer, errors.Join(core.ErrLicenseContract, err))
+	}
 	if o.Code == OfferBugOSS {
-		if !o.PricePennies.IsZero() {
+		if minorUnits != 0 {
 			return fmt.Errorf(ErrFmtOffer, core.ErrLicenseContract)
 		}
-	} else if !o.PricePennies.IsPositive() {
+	} else if minorUnits <= 0 {
 		return fmt.Errorf(ErrFmtOffer, core.ErrLicenseContract)
 	}
 	return nil

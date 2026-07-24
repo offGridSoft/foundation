@@ -422,9 +422,9 @@ func testSubscriptionLeaseWindow(t *testing.T, plan SubscriptionPlan, prepaidYea
 }
 
 func mustSeatOffer(plan SeatPlan) Offer {
-	price := core.NewMoneyPennies(testPaidOfferPennies)
+	price := testOfferAmount(testPaidOfferMinorUnits)
 	if plan == SeatPlanOSS {
-		price = core.NewMoneyPennies(0)
+		price = testOfferAmount(0)
 	}
 	offer, err := OfferForSeatPlan(plan, price)
 	if err != nil {
@@ -434,7 +434,7 @@ func mustSeatOffer(plan SeatPlan) Offer {
 }
 
 func mustSubscriptionOffer(plan SubscriptionPlan) Offer {
-	offer, err := OfferForSubscriptionPlan(plan, core.NewMoneyPennies(testPaidOfferPennies))
+	offer, err := OfferForSubscriptionPlan(plan, testOfferAmount(testPaidOfferMinorUnits))
 	if err != nil {
 		panic(err)
 	}

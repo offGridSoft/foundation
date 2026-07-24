@@ -11,8 +11,8 @@ obligations.
 | Package | Code status | Spec status | Responsibility |
 | --- | --- | --- | --- |
 | [`core`](../../core/SPEC.md) | Exists; ownership cleanup pending | Draft reviewed; comments resolved | Canonical shared contracts and stable errors |
-| [`temporal`](../../temporal/SPEC.md) | Permanent primitive implemented; consumer migration pending | Implementation candidate for review | Nanosecond instants, durations, aggregates, and projections |
-| `units` | Target; code currently in `core` | Not written | Byte and money units with checked arithmetic |
+| [`temporal`](../../temporal/SPEC.md) | Permanent primitive implemented; consumer migration pending | Reviewed implementation | Nanosecond instants, durations, aggregates, and projections |
+| [`currency`](../../currency/SPEC.md) | Permanent primitive implemented; live adapter conformance pending | Reviewed implementation | Currency codes, exact monetary amounts, and checked arithmetic |
 | `contextstate` | Target rename of `contextcheck` | Not written | Context boundary and terminal state |
 | `exchange` | Exists under permanent name | Not written | Typed HTTP transmission and reception |
 | `objectstore` | Target; code currently scattered | Not written | Signed, verified, streaming object transfer |

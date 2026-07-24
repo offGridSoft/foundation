@@ -9,19 +9,21 @@ import (
 	"github.com/offGridSoft/foundation/v2026/core"
 )
 
+type gateHostileCase struct {
+	name          string
+	input         GateInput[SeatLeaseBody]
+	wantRemaining time.Duration
+	wantOutcome   GateOutcome
+	wantReason    GateReason
+	wantState     LeaseState
+	wantInputErr  bool
+}
+
 func TestGateHostileTable(t *testing.T) {
 	t.Parallel()
 	now := testTime(1782302400000000000)
 	lease := gateLease(now)
-	for _, tc := range []struct {
-		name          string
-		input         GateInput[SeatLeaseBody]
-		wantRemaining time.Duration
-		wantOutcome   GateOutcome
-		wantReason    GateReason
-		wantState     LeaseState
-		wantInputErr  bool
-	}{
+	for _, tc := range []gateHostileCase{
 		{
 			name:         "zero value fails closed before lease trust",
 			input:        GateInput[SeatLeaseBody]{},
@@ -144,26 +146,40 @@ func TestGateHostileTable(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			inputErr := tc.input.Validate()
-			if tc.wantInputErr {
-				var typed GateInputError
-				if !errors.As(inputErr, &typed) || typed.Reason != tc.wantReason || !errors.Is(inputErr, core.ErrLicenseContract) {
-					t.Fatalf("GateInput.Validate() error = %v, want GateInputError reason=%s", inputErr, tc.wantReason)
-				}
-			} else if inputErr != nil {
-				t.Fatalf("GateInput.Validate() error = %v", inputErr)
-			}
-			got := Gate(tc.input)
-			if err := got.Validate(); err != nil {
-				t.Fatalf("GateDecision.Validate() error = %v", err)
-			}
-			if got.Reason.Outcome() != tc.wantOutcome || got.Reason != tc.wantReason || got.State != tc.wantState {
-				t.Fatalf("Gate = %+v, want outcome=%s reason=%s state=%s", got, tc.wantOutcome, tc.wantReason, tc.wantState)
-			}
-			if got.Remaining != tc.wantRemaining {
-				t.Fatalf("Remaining = %s, want %s", got.Remaining, tc.wantRemaining)
-			}
+			proveGateHostileCase(t, tc)
 		})
+	}
+}
+
+func proveGateHostileCase(t *testing.T, tc gateHostileCase) {
+	t.Helper()
+
+	proveGateInputResult(t, tc)
+	got := Gate(tc.input)
+	if err := got.Validate(); err != nil {
+		t.Fatalf("GateDecision.Validate() error = %v", err)
+	}
+	if got.Reason.Outcome() != tc.wantOutcome || got.Reason != tc.wantReason || got.State != tc.wantState {
+		t.Fatalf("Gate = %+v, want outcome=%s reason=%s state=%s", got, tc.wantOutcome, tc.wantReason, tc.wantState)
+	}
+	if got.Remaining != tc.wantRemaining {
+		t.Fatalf("Remaining = %s, want %s", got.Remaining, tc.wantRemaining)
+	}
+}
+
+func proveGateInputResult(t *testing.T, tc gateHostileCase) {
+	t.Helper()
+
+	inputErr := tc.input.Validate()
+	if !tc.wantInputErr {
+		if inputErr != nil {
+			t.Fatalf("GateInput.Validate() error = %v", inputErr)
+		}
+		return
+	}
+	var typed GateInputError
+	if !errors.As(inputErr, &typed) || typed.Reason != tc.wantReason || !errors.Is(inputErr, core.ErrLicenseContract) {
+		t.Fatalf("GateInput.Validate() error = %v, want GateInputError reason=%s", inputErr, tc.wantReason)
 	}
 }
 
@@ -248,7 +264,7 @@ func gateLease(now core.UnixNanoTime) SeatLeaseBody {
 }
 
 func mustGateSeatOffer() Offer {
-	offer, err := OfferForSeatPlan(SeatPlanStandard, core.NewMoneyPennies(testPaidOfferPennies))
+	offer, err := OfferForSeatPlan(SeatPlanStandard, testOfferAmount(testPaidOfferMinorUnits))
 	if err != nil {
 		panic(err)
 	}

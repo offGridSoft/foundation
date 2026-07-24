@@ -132,87 +132,6 @@ func TestNanosecondsDurationHostileTable(t *testing.T) {
 	}
 }
 
-func TestMoneyPenniesHostileTable(t *testing.T) {
-	t.Parallel()
-	for _, raw := range []string{`"100"`, `1.5`, `+1`, `01`, `-1`, `{}`, `null`, ``} {
-		t.Run(raw, func(t *testing.T) {
-			t.Parallel()
-			value := NewMoneyPennies(5)
-			if err := value.UnmarshalJSON([]byte(raw)); !errors.Is(err, ErrFoundationContract) {
-				t.Fatalf("MoneyPennies.UnmarshalJSON(%s) error = %v, want ErrFoundationContract", raw, err)
-			}
-			if value.Uint64() != 5 {
-				t.Fatalf("failed unmarshal mutated MoneyPennies = %d, want 5", value.Uint64())
-			}
-		})
-	}
-
-	for _, amount := range []MoneyPennies{NewMoneyPennies(0), NewMoneyPennies(1), NewMoneyPennies(100)} {
-		data, err := json.Marshal(amount)
-		if err != nil {
-			t.Fatalf("MoneyPennies(%d).MarshalJSON() = %v", amount.Uint64(), err)
-		}
-		var decoded MoneyPennies
-		if err := json.Unmarshal(data, &decoded); err != nil {
-			t.Fatalf("MoneyPennies round trip %s: %v", data, err)
-		}
-		if decoded != amount {
-			t.Fatalf("MoneyPennies round trip = %d, want %d", decoded.Uint64(), amount.Uint64())
-		}
-	}
-
-}
-
-func TestMoneyPenniesArithmeticHostileTable(t *testing.T) {
-	t.Parallel()
-	sum, err := NewMoneyPennies(40).Add(NewMoneyPennies(2))
-	if err != nil {
-		t.Fatalf("MoneyPennies.Add valid: %v", err)
-	}
-	if sum.Uint64() != 42 {
-		t.Fatalf("MoneyPennies.Add = %d, want 42", sum.Uint64())
-	}
-	diff, err := NewMoneyPennies(40).Sub(NewMoneyPennies(2))
-	if err != nil {
-		t.Fatalf("MoneyPennies.Sub valid: %v", err)
-	}
-	if diff.Uint64() != 38 {
-		t.Fatalf("MoneyPennies.Sub = %d, want 38", diff.Uint64())
-	}
-	product, err := NewMoneyPennies(25).MulQuantity(4)
-	if err != nil {
-		t.Fatalf("MoneyPennies.MulQuantity valid: %v", err)
-	}
-	if product.Uint64() != 100 {
-		t.Fatalf("MoneyPennies.MulQuantity = %d, want 100", product.Uint64())
-	}
-
-	for _, tc := range []struct {
-		run  func() error
-		name string
-	}{
-		{name: "add overflow", run: func() error {
-			_, err := NewMoneyPennies(math.MaxUint64).Add(NewMoneyPennies(1))
-			return err
-		}},
-		{name: "sub underflow", run: func() error {
-			_, err := NewMoneyPennies(1).Sub(NewMoneyPennies(2))
-			return err
-		}},
-		{name: "mul overflow", run: func() error {
-			_, err := NewMoneyPennies(math.MaxUint64).MulQuantity(2)
-			return err
-		}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			if err := tc.run(); !errors.Is(err, ErrFoundationContract) {
-				t.Fatalf("%s error = %v, want ErrFoundationContract", tc.name, err)
-			}
-		})
-	}
-}
-
 func TestSHA256HexHostileTable(t *testing.T) {
 	t.Parallel()
 	constructed := NewSHA256Hex(sha256.Sum256([]byte("foundation")))
@@ -1284,7 +1203,7 @@ func TestDecodeStrictJSONRejectsResourceExhaustionShapes(t *testing.T) {
 func TestSpecializedContractIdentitiesPreserveRootClassification(t *testing.T) {
 	t.Parallel()
 
-	identities := []error{ErrLicenseContract, ErrCustodyContract, ErrReleaseContract, ErrJSONContract, ErrContextContract, ErrNilContext}
+	identities := []error{ErrLicenseContract, ErrCustodyContract, ErrReleaseContract, ErrJSONContract, ErrContextContract, ErrCurrencyContract, ErrNilContext}
 	for _, identity := range identities {
 		if !errors.Is(identity, ErrFoundationContract) {
 			t.Fatalf("errors.Is(%v, ErrFoundationContract) = false", identity)
